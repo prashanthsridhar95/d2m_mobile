@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher background -- D2MAccents.Parent gold (#D4A24E), the
+     closest thing to a single brand color across the app's 3 flow palettes
+     (see ui/theme/Color.kt). Swap this and ic_launcher_foreground.xml for
+     real branded artwork before shipping; this exists only so the app has
+     a valid mipmap/ic_launcher resource for AndroidManifest.xml to link
+     against (AAPT fails the build entirely without one). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#D4A24E"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>
