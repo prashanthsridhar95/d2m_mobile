@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose owns all real theming (see ui/theme). This is just the pre-Compose
+         window background/splash shell Android needs before the first frame draws. -->
+    <style name="Theme.D2M" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

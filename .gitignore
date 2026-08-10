@@ -1,0 +1,35 @@
+## Gradle / Kotlin / Android
+.gradle/
+build/
+*/build/
+.kotlin/
+local.properties
+captures/
+.cxx/
+
+## Android Studio / IntelliJ
+.idea/
+*.iml
+.navigation/
+*.hprof
+
+## Firebase (never commit your real config -- see README)
+google-services.json
+GoogleService-Info.plist
+
+## Xcode / iOS
+iosApp/**/xcuserdata/
+iosApp/**/*.xcworkspace/xcuserdata/
+iosApp/**/DerivedData/
+iosApp/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+iosApp/**/*.xcodeproj/xcuserdata/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## SQLDelight generated
+**/generated/
+
+## OS
+.DS_Store
+Thumbs.db

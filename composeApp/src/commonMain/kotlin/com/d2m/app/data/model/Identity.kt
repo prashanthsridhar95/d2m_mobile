@@ -1,0 +1,245 @@
+package com.d2m.app.data.model
+
+import kotlinx.serialization.Serializable
+
+/**
+ * Mirrors app/schemas.py + app/models/identity.py in d2m_core_engine, field for
+ * field. No client-side validation is added beyond what the backend itself
+ * enforces (mostly none -- ExtendedBioDataIn in particular is deliberately
+ * permissive, see that class's own doc comment below), matching the backend's
+ * own "the frontend decides who's allowed to call this" posture (there is no
+ * server-side RBAC today -- see IdentityStore's doc comment for how this
+ * client authenticates, i.e. doesn't).
+ */
+
+@Serializable
+data class SponsorCreateRequest(
+    val name: String,
+    val contactInfo: String,
+    val relationshipToChild: String? = null,
+    val ownReligion: String,
+    val ownCasteCommunity: String,
+    val acceptReligions: List<String>,
+    val hardCasteCommunity: Boolean,
+    val minAge: Int,
+    val maxAge: Int,
+    val acceptLocations: List<String> = emptyList(),
+    val maritalStatusFilter: List<String> = emptyList(),
+    val rankedCommunityList: List<String> = emptyList(),
+    val childName: String,
+    val childGender: String,
+    val childSeekingGender: String,
+    val childDob: String,
+    val childTob: String,
+    val childBirthPlace: String,
+    val childBirthLat: Double,
+    val childBirthLon: Double,
+    val childBirthTzOffsetHours: Double,
+)
+
+@Serializable
+data class SponsorCreateResponse(
+    val sponsorId: String,
+    val inviteToken: String,
+    val inviteExpiresAt: String,
+)
+
+@Serializable
+data class SponsorProfileOut(
+    val sponsorId: String,
+    val name: String,
+    val contactInfo: String,
+    val createdAt: String,
+)
+
+@Serializable
+data class InviteRedeemRequest(
+    val token: String,
+    val name: String,
+    val contactInfo: String,
+    val gender: String,
+    val seekingGender: String,
+    val maritalStatus: String,
+    val location: String,
+)
+
+@Serializable
+data class InviteRedeemResponse(
+    val primaryId: String,
+    val sponsorId: String,
+)
+
+@Serializable
+data class ChildPreferencesRequest(
+    val minAge: Int,
+    val maxAge: Int,
+    val minHeightCm: Int? = null,
+    val maxHeightCm: Int? = null,
+    val educationPref: List<String> = emptyList(),
+    val professionPref: List<String> = emptyList(),
+    val hobbies: List<String> = emptyList(),
+    val hobbiesPref: List<String> = emptyList(),
+    val lifestyleTags: List<String> = emptyList(),
+    val relationshipGoal: String,
+)
+
+@Serializable
+data class ChildPreferencesResponse(
+    val primaryId: String,
+    val profileCompleted: Boolean,
+)
+
+@Serializable
+data class PrimaryProfileOut(
+    val primaryId: String,
+    val name: String,
+    val contactInfo: String,
+    val gender: String,
+    val seekingGender: String,
+    val maritalStatus: String,
+    val location: String,
+    val profileCompleted: Boolean,
+    // Round-2 addition: shown as locked/disabled fields in Basic data --
+    // already fed at onboarding, never editable post-hoc (see
+    // PrimaryBasicDataIn -- these two are deliberately absent from it).
+    val dob: String? = null,
+    val tob: String? = null,
+)
+
+@Serializable
+data class PrimaryBasicDataIn(
+    val name: String,
+    val contactInfo: String,
+    val gender: String,
+    val seekingGender: String,
+    val maritalStatus: String,
+    val location: String,
+)
+
+@Serializable
+data class PrimaryBasicDataOut(
+    val primaryId: String,
+    val name: String,
+    val contactInfo: String,
+    val gender: String,
+    val seekingGender: String,
+    val maritalStatus: String,
+    val location: String,
+)
+
+@Serializable
+data class PrimarySponsorOut(
+    val sponsorId: String,
+)
+
+@Serializable
+data class LocationPreferenceIn(
+    val acceptLocations: List<String>,
+    val locationIsHardFilter: Boolean,
+)
+
+@Serializable
+data class LocationPreferenceOut(
+    val sponsorId: String,
+    val acceptLocations: List<String>,
+    val locationIsHardFilter: Boolean,
+)
+
+@Serializable
+data class PhotoOut(
+    val photoId: String,
+    val url: String,
+    val sortOrder: Int,
+)
+
+/**
+ * Mirrors ExtendedBioData / ExtendedBioDataIn / ExtendedBioDataOut exactly,
+ * round-2 field set (see d2m_core_engine's own migration c5e9a3f7b1d4):
+ * monthly income (amount+currency) instead of an annual-income band, four
+ * sibling counts instead of a free-text summary, mother_tongue/complexion/
+ * sect/gothram/other_languages backed by closed picklists (app/taxonomy.py,
+ * mirrored client-side in ui/components/Taxonomy.kt), profile_managed_by
+ * removed entirely. Every field nullable, matching ExtendedBioDataIn's
+ * deliberately permissive validation (there is none -- this endpoint doubles
+ * as an import/transcription tool, per that schema's own backend doc comment).
+ */
+@Serializable
+data class ExtendedBioDataIn(
+    // Basic & personal
+    val heightCm: Int? = null,
+    val complexion: String? = null,
+    val motherTongue: String? = null,
+    val otherLanguages: List<String>? = null,
+    val bodyType: String? = null,
+    // Religious & astrological
+    val religion: String? = null,
+    val casteCommunity: String? = null,
+    val sect: String? = null,
+    val gothram: String? = null,
+    val horoscopeMatchPreference: String? = null,
+    // Education & career
+    val highestEducation: String? = null,
+    val institution: String? = null,
+    val occupationTitle: String? = null,
+    val employer: String? = null,
+    val employmentSector: String? = null,
+    val monthlyIncomeAmount: Int? = null,
+    val monthlyIncomeCurrency: String? = null,
+    // Family background
+    val fatherName: String? = null,
+    val fatherOccupation: String? = null,
+    val motherName: String? = null,
+    val motherOccupation: String? = null,
+    val elderBrothersCount: Int? = null,
+    val youngerBrothersCount: Int? = null,
+    val elderSistersCount: Int? = null,
+    val youngerSistersCount: Int? = null,
+    val nativity: String? = null,
+    val familyType: String? = null,
+    val familyValues: String? = null,
+    val financialStatus: String? = null,
+    // Location & contact
+    val citizenshipStatus: String? = null,
+)
+
+@Serializable
+data class ExtendedBioDataOut(
+    val primaryId: String,
+    val heightCm: Int? = null,
+    val complexion: String? = null,
+    val motherTongue: String? = null,
+    val otherLanguages: List<String>? = null,
+    val bodyType: String? = null,
+    val religion: String? = null,
+    val casteCommunity: String? = null,
+    val sect: String? = null,
+    val gothram: String? = null,
+    val horoscopeMatchPreference: String? = null,
+    val highestEducation: String? = null,
+    val institution: String? = null,
+    val occupationTitle: String? = null,
+    val employer: String? = null,
+    val employmentSector: String? = null,
+    val monthlyIncomeAmount: Int? = null,
+    val monthlyIncomeCurrency: String? = null,
+    val fatherName: String? = null,
+    val fatherOccupation: String? = null,
+    val motherName: String? = null,
+    val motherOccupation: String? = null,
+    val elderBrothersCount: Int? = null,
+    val youngerBrothersCount: Int? = null,
+    val elderSistersCount: Int? = null,
+    val youngerSistersCount: Int? = null,
+    val nativity: String? = null,
+    val familyType: String? = null,
+    val familyValues: String? = null,
+    val financialStatus: String? = null,
+    val citizenshipStatus: String? = null,
+    val updatedAt: String? = null,
+)
+
+/** Generic FastAPI error body shape: `{"detail": ...}`. */
+@Serializable
+data class ApiErrorBody(
+    val detail: String? = null,
+)
