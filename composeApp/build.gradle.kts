@@ -90,7 +90,18 @@ kotlin {
                 // actually initialize -- see README.md's Phase 3 section.
                 // Safe to keep on the classpath without one; PlatformPushInitializer
                 // catches init failures rather than crashing the app.
-                implementation(platform(libs.firebase.bom))
+                //
+                // Written as a literal coordinate (not the libs.firebase.bom
+                // catalog accessor) deliberately: this project's version
+                // catalog previously had a `[versions]` key and a
+                // `[libraries]` key both literally named "firebase-bom",
+                // which produced a broken generated accessor here (Gradle
+                // error: "Cannot convert ... map(valueof(DependencyValueSource))"
+                // from platform(libs.firebase.bom)). The alias collision is
+                // fixed in libs.versions.toml too (renamed to
+                // firebase-bom-version), but this call stays a literal to
+                // not depend on that accessor working correctly again.
+                implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
                 implementation(libs.firebase.messaging)
             }
         }
