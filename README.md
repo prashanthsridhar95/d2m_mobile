@@ -42,16 +42,38 @@ has been written and reviewed by hand for structural/type correctness, but
 none of it has been compiled, run, or tested end-to-end. Before relying on
 this:
 
-1. Open in Android Studio (or IntelliJ with the KMP plugin), let Gradle sync,
+1. **Finish the Gradle wrapper.** `gradle/wrapper/gradle-wrapper.properties`,
+   `gradlew`, and `gradlew.bat` are committed (pinned to Gradle 8.7, the
+   minimum AGP 8.5.2 requires), but `gradle/wrapper/gradle-wrapper.jar` --
+   a small binary bootstrap jar -- could not be added from this sandbox (no
+   network access, and it's binary so it can't be hand-authored safely). In
+   a terminal with network access, run this once from the repo root:
+   ```
+   gradle wrapper --gradle-version 8.7
+   ```
+   (any locally installed Gradle works to run this -- it just regenerates
+   the jar to match the properties file already here; `brew install gradle`
+   first if you don't have one). If you don't want to install anything,
+   Android Studio's own "Sync Project with Gradle Files" will usually offer
+   to create the missing wrapper jar itself the first time you open this
+   project -- accept that prompt if you see it.
+2. **Check the Gradle JDK.** AGP 8.5.2 requires JDK 17+ to *run* Gradle
+   itself (separate from the app's own `sourceCompatibility`, which targets
+   JVM 11 bytecode). In Android Studio: Settings/Preferences > Build,
+   Execution, Deployment > Build Tools > Gradle > "Gradle JDK" -- set it to
+   17 or newer. Running AGP 8.5 under an older Gradle JDK is a common cause
+   of opaque `Unable to load class ...` sync errors like
+   `DefaultArtifactPublicationSet`.
+3. Open in Android Studio (or IntelliJ with the KMP plugin), let Gradle sync,
    and fix whatever the compiler actually flags -- treat this as a
    thoroughly-drafted first pass, not a verified build.
-2. Point `ApiConfig`/`HttpEngine.*.kt` at a running `d2m_core_engine` instance
+4. Point `ApiConfig`/`HttpEngine.*.kt` at a running `d2m_core_engine` instance
    (defaults: `http://10.0.2.2:8000` for the Android emulator, which maps to
    the host machine's `127.0.0.1:8000`; iOS simulator uses `127.0.0.1:8000`
    directly).
-3. Run `./gradlew :composeApp:testDebugUnitTest` (Android target) once Gradle
+5. Run `./gradlew :composeApp:testDebugUnitTest` (Android target) once Gradle
    can actually resolve dependencies, to exercise the Phase 5 test suite.
-4. For iOS, see `iosApp/README.md` -- the `.xcodeproj` itself isn't included
+6. For iOS, see `iosApp/README.md` -- the `.xcodeproj` itself isn't included
    (see that file for why, and the 3-step process to generate one).
 
 ## Security: messaging encryption is a stub
