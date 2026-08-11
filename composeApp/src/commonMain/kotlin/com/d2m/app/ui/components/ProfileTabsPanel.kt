@@ -1,15 +1,11 @@
 package com.d2m.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -23,9 +19,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.ChartOut
@@ -55,33 +48,38 @@ import org.koin.compose.koinInject
  * don't have an imported extended bio, and not every chart is computed) --
  * shown as a quiet empty state, not an error banner, same convention as web.
  *
- * Both fetches now run eagerly on mount (not chart-on-tab-open as before)
- * -- matching web's useCandidateProfile hook, which fetches chart/photos/
- * extendedBio unconditionally the moment a candidateId is known, not
- * lazily per tab. That's also load-bearing for the fixed-height behavior
- * below: pinning the panel's height to the Chart tab's size only works if
- * the chart is already known regardless of which tab happens to be open.
+ * Both fetches run eagerly on mount (not chart-on-tab-open) -- matching
+ * web's useCandidateProfile hook, which fetches chart/photos/extendedBio
+ * unconditionally the moment a candidateId is known, not lazily per tab.
  *
- * Fixed body height, baseline = Chart tab (reported directly: "in web,
- * right pane height is fixed & content change based on tab selection...
- * why nothing is followed as per web?") -- ProfileTabsPanel.jsx's own
- * docstring: "switching tabs changes height. I want the height of the
- * chart tab to be baseline for both tabs." This used to just let each
- * tab's Column size itself naturally, so the whole card visibly grew or
- * shrank on every tab switch. Compose has no ResizeObserver equivalent, so
- * this does the same thing manually: an invisible copy of the Chart tab's
- * content is always laid out (Modifier.alpha(0f) -- still measured, just
- * not painted) so its natural height is captured via onSizeChanged the
- * moment chart data resolves, then that height is applied to whichever
- * tab is actually visible. Bio data is wrapped in its own vertical scroll
- * so it can't overflow that fixed height once pinned -- same as
- * ProfileTabsPanel.jsx's own `overflowY: "auto"` on the tab body.
+ * Fixed body height was tried and reverted (crashed on device): web's
+ * ProfileTabsPanel.jsx pins its height to the Chart tab's natural size and
+ * scrolls Bio data internally within that fixed box ("switching tabs
+ * changes height. I want the height of the chart tab to be baseline for
+ * both tabs"). The direct Compose port of that -- measure the Chart tab's
+ * height, apply it via Modifier.height(...), give the Bio data Column its
+ * own Modifier.verticalScroll() to fit inside it -- crashed with
+ * "Vertically scrollable component was measured with an infinity maximum
+ * height constraints" the moment this panel opened. Root cause: both call
+ * sites (DiscoveryScreen, ProfileDetailScreen) are themselves one
+ * full-page Modifier.verticalScroll() Column already -- web's page isn't
+ * structured that way (the panel sits in a non-scrolling flex layout, with
+ * a *different* div owning page-level overflow), so nesting a second
+ * vertically-scrollable region inside this panel is safe there but not
+ * here. Compose explicitly disallows a scrollable measured with an
+ * unbounded max-height constraint, which is exactly what an outer
+ * full-page verticalScroll Column hands to the very first frame's worth of
+ * children before this panel's own height has been measured. Rather than
+ * fight that with a custom two-pass layout, each tab here just sizes to
+ * its own natural content height (like before) -- the page underneath is
+ * already one continuous scroll region, so a resizing panel reads as
+ * normal content reflow rather than a jarring layout shift the way it
+ * would inside web's fixed-viewport page.
  */
 @Composable
 fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
-    val density = LocalDensity.current
 
     var tab by remember(candidateId) { mutableStateOf(0) }
     var bio by remember(candidateId) { mutableStateOf<ExtendedBioDataOut?>(null) }
@@ -89,7 +87,6 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
     var chart by remember(candidateId) { mutableStateOf<ChartOut?>(null) }
     var chartNotComputed by remember(candidateId) { mutableStateOf(false) }
     var chartLoaded by remember(candidateId) { mutableStateOf(false) }
-    var bodyHeightPx by remember(candidateId) { mutableStateOf(0) }
 
     LaunchedEffect(candidateId) {
         bio = runCatching { identityRepo.getExtendedBio(candidateId) }.getOrNull()
@@ -115,32 +112,10 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bio data") })
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Chart") })
             }
-
-            Box {
-                if (chartLoaded) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .alpha(0f)
-                            .onSizeChanged { bodyHeightPx = it.height },
-                    ) {
-                        ChartTab(chart, chartNotComputed, chartLoaded)
-                    }
-                }
-
-                val bodyModifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (bodyHeightPx > 0) Modifier.height(with(density) { bodyHeightPx.toDp() }) else Modifier)
-                    .padding(16.dp)
-
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 when (tab) {
-                    0 -> Column(modifier = bodyModifier.verticalScroll(rememberScrollState())) {
-                        BioDataTab(bio, bioLoaded)
-                    }
-                    else -> Box(modifier = bodyModifier) {
-                        ChartTab(chart, chartNotComputed, chartLoaded)
-                    }
+                    0 -> BioDataTab(bio, bioLoaded)
+                    else -> ChartTab(chart, chartNotComputed, chartLoaded)
                 }
             }
         }
