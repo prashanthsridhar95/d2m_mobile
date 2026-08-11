@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adaptive icon (API 26+, which matches this project's minSdk = 26, so no
      legacy per-density raster mipmap fallback is needed). AndroidManifest.xml
-     references android:icon="@mipmap/ic_launcher" -- this file is what makes
-     that resource actually exist; AAPT fails resource linking (and the whole
+     references android:icon="@mipmap/ic_launcher"; this file is what makes
+     that resource actually exist. AAPT fails resource linking (and the whole
      build) without it. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />

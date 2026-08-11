@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Placeholder launcher foreground -- a simple white diamond (echoing the
+<!-- Placeholder launcher foreground: a simple white diamond (echoing the
      app's astrology-chart diamond-grid motif, see
      ui/components/AstrologyChartView.kt), sized within the 66dp adaptive-icon
      safe zone centered in the 108dp canvas. Swap for real branded artwork
-     before shipping -- see ic_launcher_background.xml's doc comment. -->
+     before shipping, see ic_launcher_background.xml's doc comment. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

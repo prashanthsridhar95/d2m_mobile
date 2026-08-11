@@ -45,7 +45,7 @@
 	<string>D2M needs photo library access to choose a profile photo.</string>
 	<!-- Claim-link deep link: matches Routes.CLAIM_DEEPLINK_HTTPS / _SCHEME
 	     (D2MNavGraph.kt). The https:// universal link additionally requires
-	     an apple-app-site-association file hosted at d2m.app -- not created
+	     an apple-app-site-association file hosted at d2m.app, not created
 	     here since it's a server-side artifact, not app source; the d2m://
 	     custom scheme below works without it for local testing. -->
 	<key>CFBundleURLTypes</key>
