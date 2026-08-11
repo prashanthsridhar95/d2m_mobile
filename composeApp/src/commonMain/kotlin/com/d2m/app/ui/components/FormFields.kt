@@ -3,6 +3,7 @@ package com.d2m.app.ui.components
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MenuAnchorType
@@ -68,8 +69,7 @@ fun D2MSelectField(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled).fillMaxWidth(),
         )
-        ExposedDropdownMenuDefaults.exposedDropdownMenuAnchorType(true)
-        androidx.compose.material3.ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(text = { Text(placeholderWhenEmpty) }, onClick = { onValueChange(""); expanded = false })
             options.forEach { opt ->
                 DropdownMenuItem(text = { Text(optionLabel(opt)) }, onClick = { onValueChange(opt); expanded = false })

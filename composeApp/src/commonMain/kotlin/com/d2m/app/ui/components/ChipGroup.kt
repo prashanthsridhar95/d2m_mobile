@@ -2,9 +2,9 @@ package com.d2m.app.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.spacedBy
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +21,7 @@ import com.d2m.app.ui.theme.mutedText
  * `disabled` shows-but-doesn't-toggle, same "locked, still visible" contract
  * as ChildProfileDialog's permission-gated view on web.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun D2MChipGroup(
     label: String?,

@@ -77,7 +77,8 @@ class ApiClient(
      * manually retry -- a second 429 still surfaces as a real error rather
      * than retrying indefinitely.
      */
-    private suspend inline fun <T> withRateLimitRetry(block: () -> T): T =
+    @PublishedApi
+    internal suspend inline fun <T> withRateLimitRetry(block: () -> T): T =
         try {
             block()
         } catch (e: ApiError) {

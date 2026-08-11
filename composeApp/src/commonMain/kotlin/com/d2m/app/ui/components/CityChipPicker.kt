@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +35,7 @@ import kotlinx.coroutines.delay
  * label" simplification the web component's own doc comment describes),
  * used for accept_locations across onboarding/preferences screens.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CityChipPicker(
     label: String,

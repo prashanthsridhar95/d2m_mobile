@@ -27,7 +27,13 @@ class PushTokenRegistrar(
     }
 }
 
-/** Platform entry point -- requests permission + kicks off token retrieval, wiring the result into PushTokenRegistrar.registerCurrentToken. */
-expect class PlatformPushInitializer {
+/**
+ * Platform entry point -- requests permission + kicks off token retrieval, wiring the result into PushTokenRegistrar.registerCurrentToken.
+ * Constructor is written explicitly (empty parens) rather than left implicit --
+ * AppModule.kt's `single { PlatformPushInitializer() }` failed to compile
+ * against an implicit expect constructor ("does not have default
+ * constructor"), which this makes unambiguous for both actuals.
+ */
+expect class PlatformPushInitializer() {
     fun initialize()
 }
