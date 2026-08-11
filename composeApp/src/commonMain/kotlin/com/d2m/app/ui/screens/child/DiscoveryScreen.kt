@@ -129,7 +129,7 @@ fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
                             Column {
                                 AsyncImage(
                                     model = current.photoUrl?.let(apiClient::resolveMediaUrl),
-                                    contentDescription = current.name,
+                                    contentDescription = current.candidateName,
                                     modifier = Modifier.fillMaxWidth().weight(1f).aspectRatio(0.8f),
                                 )
                                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
