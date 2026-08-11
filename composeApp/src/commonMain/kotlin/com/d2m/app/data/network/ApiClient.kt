@@ -65,7 +65,7 @@ class ApiClient(
         install(WebSockets)
     }
 
-    private fun url(path: String) = baseUrl.trimEnd('/') + path
+    fun url(path: String) = baseUrl.trimEnd('/') + path
 
     /**
      * Backoff for 429s -- the backend's rate limiter (app/rate_limit.py) is a
