@@ -1,15 +1,22 @@
 package com.d2m.app.ui.screens.child
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,7 +27,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.ThreadOut
@@ -49,6 +58,22 @@ import kotlinx.coroutines.launch
  * screen is wired end-to-end and will "just work" for real once a real
  * CryptoProvider is swapped into the DI module, rather than needing this
  * screen rebuilt later.
+ *
+ * Layout bug fix (reported with screenshots -- the detail pane's empty-state
+ * text was rendering one word per line in a near-zero-width strip on the
+ * far right): this used to be a permanent side-by-side Row(list.width(300dp),
+ * detail.weight(1f)) -- a two-pane master-detail layout straight-ported from
+ * web without noticing that web itself only shows that layout above a
+ * 720px viewport (MatchesScreen.jsx's `isNarrow` check collapses to a
+ * single pane below that, "same fix as ParentMessagesScreen.jsx's identical
+ * fixed-320px-sidebar issue"). A phone screen is always narrower than that,
+ * so the fixed 300dp list column left the weight(1f) detail column with
+ * only tens of dp of remaining width -- not a rendering bug so much as the
+ * tablet/desktop layout being asked to fit somewhere it structurally can't.
+ * Now mirrors web's own narrow-mode branch unconditionally: the thread list
+ * fills the screen until a match is selected, then the conversation replaces
+ * it full-width with a back button, same single-pane-at-a-time pattern as
+ * any phone messaging app (and as web itself falls back to below 720px).
  */
 @Composable
 fun MatchesScreen() {
@@ -83,57 +108,98 @@ fun MatchesScreen() {
     }
 
     D2MTheme(flow = D2MFlow.CHILD) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.width(300.dp).padding(12.dp)) {
+        val t = selected
+        if (t == null) {
+            // Thread list, full width -- default pane.
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text("Matches", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 when {
                     loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                     error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
                     threads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
-                        items(threads) { t ->
-                            Card(onClick = { selected = t }, modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(t.otherParticipantName, fontWeight = FontWeight.Bold)
-                                    D2MBadge(threadStatusLabel(t.status), threadStatusTone(t.status))
-                                }
-                            }
+                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                        items(threads) { thread ->
+                            ThreadRow(thread = thread, onClick = { selected = thread })
                         }
                     }
                 }
             }
+        } else {
+            // Conversation, full width -- replaces the list entirely (back
+            // button returns to it), same as web's isNarrow branch.
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                ) {
+                    IconButton(onClick = { selected = null }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                        ThreadHeader(
+                            thread = t,
+                            onGoSerious = {
+                                val pid = primaryId ?: return@ThreadHeader
+                                scope.launch { runCatching { seriousModeRepo.requestSeriousMode(pid, t.threadId, pid) }; refresh() }
+                            },
+                            onRevoke = {
+                                val pid = primaryId ?: return@ThreadHeader
+                                scope.launch { runCatching { seriousModeRepo.revoke(pid, t.threadId) }; refresh() }
+                            },
+                            onUnmatch = {
+                                val pid = primaryId ?: return@ThreadHeader
+                                scope.launch { runCatching { seriousModeRepo.unmatch(pid, t.threadId) }; refresh(); selected = null }
+                            },
+                            onAcceptSeriousRequest = {
+                                val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
+                                val pid = primaryId ?: return@ThreadHeader
+                                scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "accept") }; refresh() }
+                            },
+                            onDeclineSeriousRequest = {
+                                val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
+                                val pid = primaryId ?: return@ThreadHeader
+                                scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "decline") }; refresh() }
+                            },
+                        )
+                    }
+                }
+                ChatPane(peerId = t.otherParticipantId, peerName = t.otherParticipantName, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+            }
+        }
+    }
+}
 
-            Column(modifier = Modifier.weight(1f).padding(12.dp)) {
-                val t = selected
-                if (t == null) {
-                    D2MEmptyState("Select a match", "Pick a conversation from the list to open it.")
-                } else {
-                    ThreadHeader(
-                        thread = t,
-                        onGoSerious = {
-                            val pid = primaryId ?: return@ThreadHeader
-                            scope.launch { runCatching { seriousModeRepo.requestSeriousMode(pid, t.threadId, pid) }; refresh() }
-                        },
-                        onRevoke = {
-                            val pid = primaryId ?: return@ThreadHeader
-                            scope.launch { runCatching { seriousModeRepo.revoke(pid, t.threadId) }; refresh() }
-                        },
-                        onUnmatch = {
-                            val pid = primaryId ?: return@ThreadHeader
-                            scope.launch { runCatching { seriousModeRepo.unmatch(pid, t.threadId) }; refresh(); selected = null }
-                        },
-                        onAcceptSeriousRequest = {
-                            val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
-                            val pid = primaryId ?: return@ThreadHeader
-                            scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "accept") }; refresh() }
-                        },
-                        onDeclineSeriousRequest = {
-                            val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
-                            val pid = primaryId ?: return@ThreadHeader
-                            scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "decline") }; refresh() }
-                        },
-                    )
-                    ChatPane(peerId = t.otherParticipantId, peerName = t.otherParticipantName, modifier = Modifier.weight(1f))
+/**
+ * One row in the thread list -- a gradient avatar placeholder (same visual
+ * idea as web's `linear-gradient(135deg,#DCEEEA,#FBEAD2)` circle, which this
+ * platform had no equivalent of at all) plus name and status, in a tappable
+ * row rather than a boxed Card so a long list doesn't turn into a stack of
+ * competing card borders.
+ */
+@Composable
+private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(
+                    Brush.linearGradient(colors = listOf(mutedText(0.15f), mutedText(0.28f))),
+                    CircleShape,
+                ),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(thread.otherParticipantName, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
+                if (thread.pendingSeriousModeRequestId != null) {
+                    D2MBadge("Serious Mode pending", D2MBadgeTone.INFO)
                 }
             }
         }
