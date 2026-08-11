@@ -67,10 +67,15 @@ this:
 3. Open in Android Studio (or IntelliJ with the KMP plugin), let Gradle sync,
    and fix whatever the compiler actually flags -- treat this as a
    thoroughly-drafted first pass, not a verified build.
-4. Point `ApiConfig`/`HttpEngine.*.kt` at a running `d2m_core_engine` instance
-   (defaults: `http://10.0.2.2:8000` for the Android emulator, which maps to
-   the host machine's `127.0.0.1:8000`; iOS simulator uses `127.0.0.1:8000`
-   directly).
+4. By default the app points at the real `d2m_core_engine`/`messaging-framework`
+   deployments behind Cloudflare Tunnels (`api.prashanthsridhar.com`,
+   `chat.prashanthsridhar.com`), same pattern as the web app's
+   `app.prashanthsridhar.com`. To point at a backend running on your own
+   laptop instead, edit `HttpEngine.android.kt`/`HttpEngine.ios.kt`'s
+   `resolveDefaultBaseUrl()` and `MessagingRepository.kt`'s
+   `MessagingConfig` -- each has a doc comment with the local-dev values
+   (`10.0.2.2:8000` for the Android emulator, `127.0.0.1:8000` for the iOS
+   simulator, `:4000` for messaging-framework).
 5. Run `./gradlew :composeApp:testDebugUnitTest` (Android target) once Gradle
    can actually resolve dependencies, to exercise the Phase 5 test suite.
 6. For iOS, see `iosApp/README.md` -- the `.xcodeproj` itself isn't included

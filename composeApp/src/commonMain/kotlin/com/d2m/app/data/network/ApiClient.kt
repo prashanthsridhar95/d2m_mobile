@@ -161,11 +161,12 @@ class ApiClient(
 data class ApiErrorBodyDto(val detail: String? = null)
 
 object ApiConfig {
-    // Overridden per-build-flavor once real hosting exists (see plan §7) --
-    // today this is the same "point at your laptop's dev server" story the
-    // web app has (VITE_API_BASE_URL), just resolved per-platform since a
-    // physical device/simulator can't reach `127.0.0.1` and mean "the host
-    // machine" the way a browser on that same machine can.
+    // Defaults to the real d2m_core_engine deployment behind a Cloudflare
+    // Tunnel (api.prashanthsridhar.com), same pattern as the web app's
+    // app.prashanthsridhar.com. See resolveDefaultBaseUrl()'s per-platform
+    // doc comment (HttpEngine.android.kt / HttpEngine.ios.kt) for the
+    // local-laptop-dev override values, and plan §7 for the still-open
+    // per-build-flavor/env-based config gap this will eventually replace.
     val DEFAULT_BASE_URL: String = resolveDefaultBaseUrl()
 }
 

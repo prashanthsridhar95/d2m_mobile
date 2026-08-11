@@ -5,8 +5,13 @@ import io.ktor.client.engine.darwin.Darwin
 
 actual fun httpEngine(): HttpClient = HttpClient(Darwin)
 
-// The iOS simulator (unlike the Android emulator) shares the host's loopback
-// interface directly, so `localhost` reaches a dev backend running on the
-// same Mac with no NAT alias needed. A physical iPhone still needs the
-// host's real LAN IP, same caveat as the Android actual's doc comment.
-actual fun resolveDefaultBaseUrl(): String = "http://127.0.0.1:8000"
+// Points at the real d2m_core_engine deployment behind a Cloudflare Tunnel,
+// same pattern as the web app's app.prashanthsridhar.com frontend tunnel --
+// see HttpEngine.android.kt's doc comment. Works unchanged on the simulator
+// or a physical iPhone on any network.
+//
+// For local-only dev against a laptop-hosted backend instead, swap this for
+// "http://127.0.0.1:8000" (the iOS simulator shares the host's loopback
+// interface directly, unlike the Android emulator) or the host's real LAN
+// IP for a physical device.
+actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"

@@ -35,7 +35,11 @@ import kotlin.uuid.Uuid
  * d2m_core_engine (own Postgres/Redis, own port -- default :4000 in dev,
  * matching D2M_Messaging_Integration_Plan.md §4's VITE_MSG_SERVER_URL/
  * VITE_MSG_WS_URL env vars) -- see MessagingConfig below for the equivalent
- * mobile config point.
+ * mobile config point. MessagingConfig's defaults point at the
+ * chat.prashanthsridhar.com Cloudflare Tunnel, same pattern as ApiConfig's
+ * api.prashanthsridhar.com default in ApiClient.kt -- swap both fields for
+ * ws://127.0.0.1:4000 / http://127.0.0.1:4000 (with the platform-appropriate
+ * host per HttpEngine.*.kt's doc comments) for local-only dev instead.
  */
 data class ChatMessage(
     val id: String,
@@ -47,8 +51,8 @@ data class ChatMessage(
 )
 
 object MessagingConfig {
-    var httpBaseUrl: String = "http://127.0.0.1:4000"
-    var wsBaseUrl: String = "ws://127.0.0.1:4000"
+    var httpBaseUrl: String = "https://chat.prashanthsridhar.com"
+    var wsBaseUrl: String = "wss://chat.prashanthsridhar.com"
 }
 
 class MessagingRepository(
