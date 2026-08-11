@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,8 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +60,7 @@ import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -87,6 +93,31 @@ import org.koin.compose.koinInject
  * threadId) -- MatchesScreen on this platform doesn't yet accept a
  * preselected thread argument, so this just opens the Matches tab and lets
  * the user pick, same as "View matches" always did.
+ *
+ * Settings gear (top-right, next to the greeting): moved here on request
+ * ("Remove settings from bottom nav & move it to home - show an icon in
+ * top right") -- see AppScaffold.kt's doc comment, ChildTabs no longer
+ * includes a Settings entry at all.
+ *
+ * Loading behavior (reported directly -- a blocking "Loading" screen was
+ * showing on every single visit to Home, not just the first): this used to
+ * gate the ENTIRE screen behind one `loading` boolean that got reset to
+ * `true` at the top of every LaunchedEffect run, which fires on every fresh
+ * composition -- and since this composable's plain `remember` state doesn't
+ * survive navigating to another bottom-tab and back (Compose disposes it,
+ * bottom-nav's saveState/restoreState only preserves the NAVIGATION
+ * backstack, not this screen's own local state), that was really "every
+ * time you open Home." The actual network layer was rarely the bottleneck
+ * -- ApiCache is one app-wide singleton (see di/AppModule.kt), so a
+ * revisit within its TTL is normally a fast in-memory hit already -- the
+ * visible stall was purely the UI blocking on a single all-or-nothing
+ * `loading` flag instead of rendering what's already known and filling in
+ * the rest as it arrives. Replaced with per-section `*Loaded` flags: the
+ * greeting/hero/list shell renders immediately every time, each section
+ * shows a shimmer skeleton only until ITS OWN data resolves (near-instant
+ * on a warm cache), and there is no more full-screen "Loading…" text at
+ * all -- refreshing now genuinely happens in the background the way a
+ * revisit should feel.
  */
 @Composable
 fun ChildHomeScreen(
@@ -94,6 +125,7 @@ fun ChildHomeScreen(
     onOpenDiscover: () -> Unit,
     onOpenMatches: () -> Unit,
     onOpenChildProfileDialog: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val identityStore: IdentityStore = koinInject()
     val identityRepo: IdentityRepository = koinInject()
@@ -114,7 +146,15 @@ fun ChildHomeScreen(
     var consentRequests by remember { mutableStateOf<List<ConsentRequestOut>>(emptyList()) }
     var activeCandidatePhotoUrl by remember { mutableStateOf<String?>(null) }
 
-    var loading by remember { mutableStateOf(true) }
+    // Per-section readiness, not one global gate -- see the doc comment
+    // above. Each flips true the moment its own fetch resolves, letting
+    // the hero and the list card each show their own shimmer independently
+    // instead of the whole page waiting on the slowest of eight calls.
+    var profileLoaded by remember { mutableStateOf(false) }
+    var threadsLoaded by remember { mutableStateOf(false) }
+    var suggestionsLoaded by remember { mutableStateOf(false) }
+    var requestsLoaded by remember { mutableStateOf(false) } // received + sent + consent, together
+
     var error by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var matchBanner by remember { mutableStateOf<String?>(null) }
@@ -125,7 +165,6 @@ fun ChildHomeScreen(
 
     LaunchedEffect(primaryId) {
         if (primaryId == null) return@LaunchedEffect
-        loading = true
         error = null
         try {
             val profileDeferred = async { identityRepo.getPrimaryProfile(primaryId) }
@@ -137,24 +176,34 @@ fun ChildHomeScreen(
             val sentDeferred = async { suggestionsRepo.getSentRequests(primaryId) }
             val consentDeferred = async { runCatching { consentRepo.getConsentRequests(primaryId) }.getOrDefault(emptyList()) }
 
+            // Await order (not just launch order) doubles as the reveal
+            // order -- profile/hero data first since the greeting and hero
+            // are the first things on screen, the shared list last since
+            // its dependents (showPicks, discoverDisabled) need suggestions
+            // and sponsorStatus already resolved by the time it renders.
             profile = profileDeferred.await()
             ownPhotoUrl = photosDeferred.await().firstOrNull()?.url
+            profileLoaded = true
+
             sponsorStatus = sponsorStatusDeferred.await()
             threads = threadsDeferred.await()
-            suggestions = suggestionsDeferred.await()
-            received = receivedDeferred.await()
-            sent = sentDeferred.await()
-            consentRequests = consentDeferred.await()
+            threadsLoaded = true
 
             val active = threads.filter { it.status != "closed" }
                 .let { open -> open.find { it.status == "exclusive" } ?: open.firstOrNull() }
             activeCandidatePhotoUrl = active?.let {
                 runCatching { suggestionsRepo.getCandidate(primaryId, it.otherParticipantId).photoUrl }.getOrNull()
             }
+
+            suggestions = suggestionsDeferred.await()
+            suggestionsLoaded = true
+
+            received = receivedDeferred.await()
+            sent = sentDeferred.await()
+            consentRequests = consentDeferred.await()
+            requestsLoaded = true
         } catch (e: Exception) {
             error = friendlyError(e, "Couldn't load your home feed.")
-        } finally {
-            loading = false
         }
     }
 
@@ -190,158 +239,163 @@ fun ChildHomeScreen(
     }
 
     D2MTheme(flow = D2MFlow.CHILD) {
-        when {
-            loading -> Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Loading…", color = mutedText(0.55f))
+        val discoverDisabled = sponsorStatus?.status == "serious_exploration"
+        val openThreads = threads.filter { it.status != "closed" }
+        val activeThread = openThreads.find { it.status == "exclusive" } ?: openThreads.firstOrNull()
+        val matchedIds = openThreads.map { it.otherParticipantId }.toSet()
+        val receivedFiltered = received.filter { it.candidateId !in matchedIds }
+        val sentFiltered = sent.filter { it.candidateId !in matchedIds }
+        val pendingConsentList = consentRequests.filter { it.status == "pending" }
+        val pendingOnMe = threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
+        val showPicks = !discoverDisabled && suggestions.isNotEmpty()
+
+        val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "there"
+        val subtitle = when {
+            pendingOnMe > 0 -> "Someone's waiting on your decision in Matches 💛"
+            receivedFiltered.isNotEmpty() -> "${receivedFiltered.size} new ${if (receivedFiltered.size == 1) "person" else "people"} sent you a request 👀"
+            pendingConsentList.isNotEmpty() -> "Your Sponsor wants to see more about someone you're talking to."
+            showPicks -> "A few new profiles showed up for you today ✨"
+            else -> "You're all caught up -- nothing waiting on you right now."
+        }
+
+        val listItems = buildList {
+            if (receivedFiltered.isEmpty() && sentFiltered.isEmpty() && pendingConsentList.isEmpty()) {
+                add(HomeListItem.Empty)
+            } else {
+                receivedFiltered.forEach { add(HomeListItem.Received(it)) }
+                pendingConsentList.forEach { add(HomeListItem.ConsentAsk(it)) }
+                sentFiltered.forEach { add(HomeListItem.Sent(it)) }
             }
-            error != null -> Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                D2MErrorBanner(error!!)
+            if (showPicks) add(HomeListItem.Picks(suggestions.size))
+            add(HomeListItem.Profile)
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hey $firstName 👋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+                }
             }
-            else -> {
-                val discoverDisabled = sponsorStatus?.status == "serious_exploration"
-                val openThreads = threads.filter { it.status != "closed" }
-                val activeThread = openThreads.find { it.status == "exclusive" } ?: openThreads.firstOrNull()
-                val matchedIds = openThreads.map { it.otherParticipantId }.toSet()
-                val receivedFiltered = received.filter { it.candidateId !in matchedIds }
-                val sentFiltered = sent.filter { it.candidateId !in matchedIds }
-                val pendingConsentList = consentRequests.filter { it.status == "pending" }
-                val pendingOnMe = threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
-                val showPicks = !discoverDisabled && suggestions.isNotEmpty()
 
-                val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "there"
-                val subtitle = when {
-                    pendingOnMe > 0 -> "Someone's waiting on your decision in Matches 💛"
-                    receivedFiltered.isNotEmpty() -> "${receivedFiltered.size} new ${if (receivedFiltered.size == 1) "person" else "people"} sent you a request 👀"
-                    pendingConsentList.isNotEmpty() -> "Your Sponsor wants to see more about someone you're talking to."
-                    showPicks -> "A few new profiles showed up for you today ✨"
-                    else -> "You're all caught up -- nothing waiting on you right now."
+            if (error != null) {
+                item { D2MErrorBanner(error!!) }
+            }
+            if (actionError != null) {
+                item { D2MErrorBanner(actionError!!) }
+            }
+            if (matchBanner != null) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(D2MRadius.md))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .padding(16.dp),
+                    ) {
+                        Text("🎉 $matchBanner", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    }
                 }
+            }
 
-                val listItems = buildList {
-                    if (receivedFiltered.isEmpty() && sentFiltered.isEmpty() && pendingConsentList.isEmpty()) {
-                        add(HomeListItem.Empty)
-                    } else {
-                        receivedFiltered.forEach { add(HomeListItem.Received(it)) }
-                        pendingConsentList.forEach { add(HomeListItem.ConsentAsk(it)) }
-                        sentFiltered.forEach { add(HomeListItem.Sent(it)) }
-                    }
-                    if (showPicks) add(HomeListItem.Picks(suggestions.size))
-                    add(HomeListItem.Profile)
-                }
+            item {
+                HeroBanner(
+                    loaded = threadsLoaded,
+                    activeThread = activeThread,
+                    candidatePhotoUrl = activeCandidatePhotoUrl,
+                    discoverDisabled = discoverDisabled,
+                    apiClient = apiClient,
+                    onOpenChat = onOpenMatches,
+                    onOpenDiscover = onOpenDiscover,
+                )
+            }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    item {
-                        Column {
-                            Text("Hey $firstName 👋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
-                        }
-                    }
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(D2MRadius.lg)) {
+                    Column {
+                        if (!requestsLoaded || !suggestionsLoaded || !profileLoaded) {
+                            SkeletonHomeRow()
+                            HorizontalDivider(color = mutedText(0.1f))
+                            SkeletonHomeRow()
+                        } else {
+                            listItems.forEachIndexed { index, item ->
+                                when (item) {
+                                    HomeListItem.Empty -> HomeListRow(
+                                        avatar = { GlyphCircle("👀") },
+                                        title = "No one new yet",
+                                        subtitle = "But they will -- your profile's out there working for you.",
+                                    )
 
-                    if (actionError != null) {
-                        item { D2MErrorBanner(actionError!!) }
-                    }
-                    if (matchBanner != null) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(D2MRadius.md))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                                    .padding(16.dp),
-                            ) {
-                                Text("🎉 $matchBanner", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    item {
-                        HeroBanner(
-                            activeThread = activeThread,
-                            candidatePhotoUrl = activeCandidatePhotoUrl,
-                            discoverDisabled = discoverDisabled,
-                            apiClient = apiClient,
-                            onOpenChat = onOpenMatches,
-                            onOpenDiscover = onOpenDiscover,
-                        )
-                    }
-
-                    item {
-                        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(D2MRadius.lg)) {
-                            Column {
-                                listItems.forEachIndexed { index, item ->
-                                    when (item) {
-                                        HomeListItem.Empty -> HomeListRow(
-                                            avatar = { GlyphCircle("👀") },
-                                            title = "No one new yet",
-                                            subtitle = "But they will -- your profile's out there working for you.",
-                                        )
-
-                                        is HomeListItem.Received -> {
-                                            val busy = matchBusyId == item.s.candidateId
-                                            HomeListRow(
-                                                avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
-                                                title = item.s.candidateName,
-                                                subtitle = "Wants to match with you",
-                                                onClick = { onOpenProfile(item.s.candidateId) },
-                                                action = {
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        D2MButton("Accept", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "accept") })
-                                                        D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "reject") })
-                                                    }
-                                                },
-                                            )
-                                        }
-
-                                        is HomeListItem.ConsentAsk -> {
-                                            val busy = consentBusyId == item.r.requestId
-                                            HomeListRow(
-                                                avatar = { GlyphCircle("💛") },
-                                                title = "Your Sponsor wants to see more about ${item.r.prospectName ?: "your match"}",
-                                                action = {
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        D2MButton("Grant", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "grant") })
-                                                        D2MButton("Deny", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "deny") })
-                                                    }
-                                                },
-                                            )
-                                        }
-
-                                        is HomeListItem.Sent -> HomeListRow(
+                                    is HomeListItem.Received -> {
+                                        val busy = matchBusyId == item.s.candidateId
+                                        HomeListRow(
                                             avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
                                             title = item.s.candidateName,
-                                            subtitle = "Waiting for a response",
+                                            subtitle = "Wants to match with you",
                                             onClick = { onOpenProfile(item.s.candidateId) },
-                                        )
-
-                                        is HomeListItem.Picks -> HomeListRow(
-                                            avatar = { GlyphCircle("💌") },
-                                            title = "Today's picks",
-                                            subtitle = "${item.count} new ${if (item.count == 1) "profile" else "profiles"} worth a look",
-                                            onClick = onOpenDiscover,
-                                            action = { D2MButton("Take a look", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, onClick = onOpenDiscover) },
-                                        )
-
-                                        HomeListItem.Profile -> HomeListRow(
-                                            avatar = { PhotoCircle(ownPhotoUrl, profile?.name, 40.dp, apiClient) },
-                                            title = "How you're showing up",
-                                            subtitle = "A peek at what people see when they check you out.",
-                                            onClick = onOpenChildProfileDialog,
                                             action = {
-                                                Text(
-                                                    if (profile?.profileCompleted == true) "View & edit" else "Complete profile",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    D2MButton("Accept", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "accept") })
+                                                    D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "reject") })
+                                                }
                                             },
                                         )
                                     }
-                                    if (index != listItems.lastIndex) HorizontalDivider(color = mutedText(0.1f))
+
+                                    is HomeListItem.ConsentAsk -> {
+                                        val busy = consentBusyId == item.r.requestId
+                                        HomeListRow(
+                                            avatar = { GlyphCircle("💛") },
+                                            title = "Your Sponsor wants to see more about ${item.r.prospectName ?: "your match"}",
+                                            action = {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    D2MButton("Grant", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "grant") })
+                                                    D2MButton("Deny", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "deny") })
+                                                }
+                                            },
+                                        )
+                                    }
+
+                                    is HomeListItem.Sent -> HomeListRow(
+                                        avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
+                                        title = item.s.candidateName,
+                                        subtitle = "Waiting for a response",
+                                        onClick = { onOpenProfile(item.s.candidateId) },
+                                    )
+
+                                    is HomeListItem.Picks -> HomeListRow(
+                                        avatar = { GlyphCircle("💌") },
+                                        title = "Today's picks",
+                                        subtitle = "${item.count} new ${if (item.count == 1) "profile" else "profiles"} worth a look",
+                                        onClick = onOpenDiscover,
+                                        action = { D2MButton("Take a look", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, onClick = onOpenDiscover) },
+                                    )
+
+                                    HomeListItem.Profile -> HomeListRow(
+                                        avatar = { PhotoCircle(ownPhotoUrl, profile?.name, 40.dp, apiClient) },
+                                        title = "How you're showing up",
+                                        subtitle = "A peek at what people see when they check you out.",
+                                        onClick = onOpenChildProfileDialog,
+                                        action = {
+                                            Text(
+                                                if (profile?.profileCompleted == true) "View & edit" else "Complete profile",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        },
+                                    )
                                 }
+                                if (index != listItems.lastIndex) HorizontalDivider(color = mutedText(0.1f))
                             }
                         }
                     }
@@ -366,10 +420,13 @@ private sealed class HomeListItem {
  * status on a bottom scrim, "Open chat" floating top-right on the image
  * itself. No active thread yet gets a soft gradient invite into Discover
  * instead, sized to match rather than a smaller fallback -- mirrors
- * HomeScreen.jsx's HeroBanner exactly.
+ * HomeScreen.jsx's HeroBanner exactly. `loaded=false` (threads not
+ * resolved yet) renders a shimmer block at the same height instead of
+ * either real state, same as web's Skeleton fallback there.
  */
 @Composable
 private fun HeroBanner(
+    loaded: Boolean,
     activeThread: ThreadOut?,
     candidatePhotoUrl: String?,
     discoverDisabled: Boolean,
@@ -378,6 +435,12 @@ private fun HeroBanner(
     onOpenDiscover: () -> Unit,
 ) {
     val shape = RoundedCornerShape(D2MRadius.lg)
+
+    if (!loaded) {
+        D2MSkeleton(modifier = Modifier.fillMaxWidth(), height = 220.dp, radius = D2MRadius.lg)
+        return
+    }
+
     if (activeThread != null) {
         val resolvedPhoto = candidatePhotoUrl?.let(apiClient::resolveMediaUrl)
         val isExclusive = activeThread.status == "exclusive"
@@ -493,6 +556,23 @@ private fun HomeListRow(
             }
         }
         if (action != null) action()
+    }
+}
+
+/** Shimmer placeholder for one HomeListRow -- circle + two bars, same shape/padding as the real row. */
+@Composable
+private fun SkeletonHomeRow() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+    ) {
+        D2MSkeleton(width = 40.dp, height = 40.dp, radius = 20.dp)
+        Column(modifier = Modifier.weight(1f)) {
+            D2MSkeleton(width = 140.dp, height = 13.dp)
+            Spacer(Modifier.height(6.dp))
+            D2MSkeleton(width = 90.dp, height = 11.dp)
+        }
     }
 }
 

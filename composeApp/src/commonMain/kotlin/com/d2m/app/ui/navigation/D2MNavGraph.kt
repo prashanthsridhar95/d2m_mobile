@@ -102,6 +102,7 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
                 onOpenDiscover = { navController.navigate(Routes.DISCOVERY) },
                 onOpenMatches = { navController.navigate(Routes.MATCHES) },
                 onOpenChildProfileDialog = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
 
