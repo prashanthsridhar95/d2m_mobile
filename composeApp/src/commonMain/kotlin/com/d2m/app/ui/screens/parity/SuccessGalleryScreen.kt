@@ -58,7 +58,7 @@ fun SuccessGalleryScreen() {
                     items(entries) { e ->
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(14.dp)) {
-                                Text(e.anonymizedStory)
+                                Text(e.story)
                             }
                         }
                     }

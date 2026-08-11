@@ -83,7 +83,12 @@ class SuggestionsRepositoryTest {
                 request.url.encodedPath == "/primaries/$primaryId/suggestions/cand-1/action" -> {
                     actRequests++
                     respond(
-                        """{"candidateId":"cand-1","status":"accepted"}""",
+                        // snake_case + full required-field set to match
+                        // SuggestionActionResponse/ApiClient's Json config
+                        // (JsonNamingStrategy.SnakeCase) -- see that DTO's
+                        // doc comment for why primary_id/snooze_count/
+                        // mutual_match are required, not just candidate_id/status.
+                        """{"primary_id":"$primaryId","candidate_id":"cand-1","status":"accepted","snooze_count":0,"mutual_match":false}""",
                         HttpStatusCode.OK,
                         headersOf(HttpHeaders.ContentType, "application/json"),
                     )

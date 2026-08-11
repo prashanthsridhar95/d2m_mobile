@@ -43,7 +43,7 @@ fun BrowseTable(rows: List<BrowseCandidateOut>, onOpenProfile: (String) -> Unit)
                 // clickable Row wrapper matching the header's fixed-width columns).
                 Row(modifier = Modifier.padding(vertical = 6.dp)) {
                     listOf(
-                        c.name, c.age?.toString() ?: "--", c.city ?: "--", c.occupationTitle ?: "--",
+                        c.candidateName, c.age?.toString() ?: "--", c.city ?: "--", c.occupationTitle ?: "--",
                         c.gothram ?: "--", c.sect ?: "--", c.heightCm?.toString() ?: "--",
                         c.scores?.compositeScore?.toString() ?: "--",
                     ).forEach { cell ->

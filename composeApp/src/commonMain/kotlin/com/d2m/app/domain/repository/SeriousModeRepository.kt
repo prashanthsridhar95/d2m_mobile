@@ -21,19 +21,19 @@ class SeriousModeRepository(
     }
 
     suspend fun respond(primaryId: String, requestId: String, decision: String): SeriousModeRespondOut {
-        val r = api.respondToSeriousMode(requestId, decision)
+        val r = api.respondToSeriousMode(requestId, primaryId, decision)
         cache.invalidateKey("threads:$primaryId")
         return r
     }
 
-    suspend fun revoke(primaryId: String, threadId: String, reason: String? = null): SeriousModeRevokeOut {
-        val r = api.revokeSeriousMode(threadId, reason)
+    suspend fun revoke(primaryId: String, threadId: String): SeriousModeRevokeOut {
+        val r = api.revokeSeriousMode(threadId, primaryId)
         cache.invalidateKey("threads:$primaryId")
         return r
     }
 
-    suspend fun unmatch(primaryId: String, threadId: String, reason: String? = null): UnmatchOut {
-        val r = api.unmatch(threadId, reason)
+    suspend fun unmatch(primaryId: String, threadId: String): UnmatchOut {
+        val r = api.unmatch(threadId, primaryId)
         cache.invalidateKey("threads:$primaryId")
         return r
     }

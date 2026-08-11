@@ -44,12 +44,20 @@ data class SponsorCreateResponse(
     val inviteExpiresAt: String,
 )
 
+/**
+ * Mirrors app/schemas.py's SponsorProfileOut exactly -- previously had
+ * contactInfo/createdAt, neither of which exist on the real backend
+ * response (which has childName/childClaimed instead), and both were
+ * required, so decoding this after a "I'm a parent" login would have
+ * crashed with the same MissingFieldException class as the SuggestionOut
+ * bug this file was fixed alongside.
+ */
 @Serializable
 data class SponsorProfileOut(
     val sponsorId: String,
     val name: String,
-    val contactInfo: String,
-    val createdAt: String,
+    val childName: String? = null,
+    val childClaimed: Boolean,
 )
 
 @Serializable
@@ -87,6 +95,7 @@ data class ChildPreferencesRequest(
 data class ChildPreferencesResponse(
     val primaryId: String,
     val profileCompleted: Boolean,
+    val pipelineTriggered: Boolean,
 )
 
 @Serializable

@@ -55,7 +55,7 @@ fun MatchCard(
                 Box {
                     AsyncImage(
                         model = suggestion.photoUrl?.let(resolvePhotoUrl),
-                        contentDescription = suggestion.name,
+                        contentDescription = suggestion.candidateName,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1f).background(mutedText(0.1f), RoundedCornerShape(D2MRadius.md)),
                     )
                     if (onToggleShortlist != null) {
@@ -74,7 +74,7 @@ fun MatchCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "${suggestion.name}${suggestion.age?.let { ", $it" } ?: ""}",
+                        "${suggestion.candidateName}${suggestion.age?.let { ", $it" } ?: ""}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -96,11 +96,11 @@ fun MatchCard(
             ) {
                 AsyncImage(
                     model = suggestion.photoUrl?.let(resolvePhotoUrl),
-                    contentDescription = suggestion.name,
+                    contentDescription = suggestion.candidateName,
                     modifier = Modifier.size(56.dp).background(mutedText(0.1f), RoundedCornerShape(D2MRadius.sm)),
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("${suggestion.name}${suggestion.age?.let { ", $it" } ?: ""}", fontWeight = FontWeight.Bold)
+                    Text("${suggestion.candidateName}${suggestion.age?.let { ", $it" } ?: ""}", fontWeight = FontWeight.Bold)
                     if (suggestion.city != null) {
                         Text(suggestion.city, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f))
                     }

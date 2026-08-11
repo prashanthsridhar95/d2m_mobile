@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.BrowseCandidateOut
+import com.d2m.app.data.model.SubScoreBreakdown
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
@@ -106,9 +107,9 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                     items(all) { c ->
                         MatchCard(
                             suggestion = SuggestionOut(
-                                candidateId = c.candidateId, name = c.name, age = c.age, city = c.city,
+                                candidateId = c.candidateId, candidateName = c.candidateName, age = c.age, city = c.city,
                                 occupationTitle = c.occupationTitle, gothram = c.gothram, sect = c.sect,
-                                photoUrl = c.photoUrl, compositeScore = c.scores?.compositeScore,
+                                photoUrl = c.photoUrl, scores = c.scores ?: SubScoreBreakdown(),
                             ),
                             resolvePhotoUrl = apiClient::resolveMediaUrl,
                             onClick = { onOpenProfile(c.candidateId) },

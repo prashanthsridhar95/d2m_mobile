@@ -70,9 +70,13 @@ fun PanchangamCalendarScreen() {
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(day.date, fontWeight = FontWeight.Bold)
-                        Text("Tithi: ${day.tithi}  ·  Nakshatra: ${day.nakshatra}", color = mutedText(0.55f))
-                        Text("Yoga: ${day.yoga}  ·  Karana: ${day.karana}", color = mutedText(0.55f))
-                        day.rahuKalam?.let { Text("Rahu Kalam: $it", color = mutedText(0.45f), style = MaterialTheme.typography.labelMedium) }
+                        Text("Tithi: ${day.tithi.name}  ·  Nakshatra: ${day.nakshatra.name}", color = mutedText(0.55f))
+                        Text("Yoga: ${day.yoga.name}  ·  Karana: ${day.karana.name}", color = mutedText(0.55f))
+                        Text(
+                            "Rahu Kalam: ${day.rahuKalam.start} – ${day.rahuKalam.end}",
+                            color = mutedText(0.45f),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                     }
                 }
             }

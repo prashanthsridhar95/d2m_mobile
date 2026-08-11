@@ -99,11 +99,11 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
                     val c = candidate!!
                     AsyncImage(
                         model = c.photoUrl?.let(apiClient::resolveMediaUrl),
-                        contentDescription = c.name,
+                        contentDescription = c.candidateName,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1.2f),
                     )
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${c.name}${c.age?.let { ", $it" } ?: ""}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("${c.candidateName}${c.age?.let { ", $it" } ?: ""}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         ScoreBadge(c.compositeScore)
                     }
                     Text(listOfNotNull(c.city, c.occupationTitle).joinToString(" · "), color = mutedText(0.55f))

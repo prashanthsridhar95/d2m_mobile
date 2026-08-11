@@ -119,7 +119,7 @@ private fun SectionLabel(text: String) {
 private fun ListRow(s: SuggestionOut, subtitle: String, onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("${s.name}${s.age?.let { ", $it" } ?: ""}", fontWeight = FontWeight.Bold)
+            Text("${s.candidateName}${s.age?.let { ", $it" } ?: ""}", fontWeight = FontWeight.Bold)
             Text(subtitle, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f))
             s.compositeScore?.let { D2MBadge("$it/10", D2MBadgeTone.INFO) }
         }

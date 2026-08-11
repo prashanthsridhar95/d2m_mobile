@@ -63,6 +63,12 @@ fun ParentHomeScreen(
 
     var dashboard by remember { mutableStateOf<SponsorDashboardOut?>(null) }
     var shortlist by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
+    // SponsorDashboardOut has no top_suggestions field on the real backend
+    // (see Dashboard.kt's doc comment -- it's sponsor-safe by design, only
+    // ever exposing a count). "Suggested for you to review" sources real
+    // SuggestionOut cards from SuggestionsRepository directly instead, same
+    // call ParentBrowseScreen.kt's "matching" tab already uses.
+    var topSuggestions by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -77,6 +83,7 @@ fun ParentHomeScreen(
             dashboard = dashboardRepo.getSponsorDashboard(sponsorId)
             if (childPrimaryId != null) {
                 shortlist = suggestionsRepo.getShortlist(childPrimaryId)
+                topSuggestions = suggestionsRepo.getSuggestions(childPrimaryId)
             }
         } catch (e: Exception) {
             error = friendlyError(e, "Couldn't load your dashboard.")
@@ -99,7 +106,7 @@ fun ParentHomeScreen(
                         onClick = onOpenChildProfileDialog,
                     )
 
-                    dashboard?.childStatusLabel?.let { statusLabel ->
+                    dashboard?.childThreadStatus?.let { statusLabel ->
                         ConsentStatusCard(
                             statusLabel = statusLabel,
                             pendingCount = dashboard?.unreadNotificationCount ?: 0,
@@ -109,9 +116,9 @@ fun ParentHomeScreen(
 
                     Column {
                         Text("Suggested for you to review", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("${dashboard?.topSuggestions?.size ?: 0} suggestions", color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
+                        Text("${topSuggestions.size} suggestions", color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                            items(dashboard?.topSuggestions.orEmpty()) { s ->
+                            items(topSuggestions) { s ->
                                 MatchCard(
                                     suggestion = s,
                                     resolvePhotoUrl = apiClient::resolveMediaUrl,

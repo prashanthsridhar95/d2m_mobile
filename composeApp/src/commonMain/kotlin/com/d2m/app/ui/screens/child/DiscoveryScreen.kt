@@ -133,7 +133,7 @@ fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
                                     modifier = Modifier.fillMaxWidth().weight(1f).aspectRatio(0.8f),
                                 )
                                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("${current.name}, ${current.age ?: "--"}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                    Text("${current.candidateName}, ${current.age ?: "--"}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                                     ScoreBadge(current.compositeScore)
                                 }
                                 Text(current.city ?: "", color = mutedText(0.55f), modifier = Modifier.padding(bottom = 4.dp))

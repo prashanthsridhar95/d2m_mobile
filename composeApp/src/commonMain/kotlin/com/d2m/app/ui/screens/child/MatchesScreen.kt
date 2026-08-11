@@ -123,12 +123,12 @@ fun MatchesScreen() {
                             scope.launch { runCatching { seriousModeRepo.unmatch(pid, t.threadId) }; refresh(); selected = null }
                         },
                         onAcceptSeriousRequest = {
-                            val reqId = t.pendingSeriousModeRequest?.requestId ?: return@ThreadHeader
+                            val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
                             val pid = primaryId ?: return@ThreadHeader
                             scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "accept") }; refresh() }
                         },
                         onDeclineSeriousRequest = {
-                            val reqId = t.pendingSeriousModeRequest?.requestId ?: return@ThreadHeader
+                            val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
                             val pid = primaryId ?: return@ThreadHeader
                             scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "decline") }; refresh() }
                         },
@@ -155,12 +155,14 @@ private fun ThreadHeader(
             D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
         }
 
-        thread.pendingSeriousModeRequest?.let { req ->
-            if (req.status == "pending") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                    D2MButton("Accept Serious Mode", onClick = onAcceptSeriousRequest)
-                    D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, onClick = onDeclineSeriousRequest)
-                }
+        // Presence of the id alone means "pending" -- the backend only
+        // populates pending_serious_mode_request_id at all while a request
+        // is outstanding (see ThreadOut's doc comment), there's no separate
+        // status field to check on this flat pair of ids.
+        if (thread.pendingSeriousModeRequestId != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+                D2MButton("Accept Serious Mode", onClick = onAcceptSeriousRequest)
+                D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, onClick = onDeclineSeriousRequest)
             }
         }
 
