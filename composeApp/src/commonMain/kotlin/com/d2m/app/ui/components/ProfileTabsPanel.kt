@@ -1,12 +1,17 @@
 package com.d2m.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -18,6 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.ChartOut
@@ -46,11 +54,34 @@ import org.koin.compose.koinInject
  * either just means "nothing on file for this profile yet" (most profiles
  * don't have an imported extended bio, and not every chart is computed) --
  * shown as a quiet empty state, not an error banner, same convention as web.
+ *
+ * Both fetches now run eagerly on mount (not chart-on-tab-open as before)
+ * -- matching web's useCandidateProfile hook, which fetches chart/photos/
+ * extendedBio unconditionally the moment a candidateId is known, not
+ * lazily per tab. That's also load-bearing for the fixed-height behavior
+ * below: pinning the panel's height to the Chart tab's size only works if
+ * the chart is already known regardless of which tab happens to be open.
+ *
+ * Fixed body height, baseline = Chart tab (reported directly: "in web,
+ * right pane height is fixed & content change based on tab selection...
+ * why nothing is followed as per web?") -- ProfileTabsPanel.jsx's own
+ * docstring: "switching tabs changes height. I want the height of the
+ * chart tab to be baseline for both tabs." This used to just let each
+ * tab's Column size itself naturally, so the whole card visibly grew or
+ * shrank on every tab switch. Compose has no ResizeObserver equivalent, so
+ * this does the same thing manually: an invisible copy of the Chart tab's
+ * content is always laid out (Modifier.alpha(0f) -- still measured, just
+ * not painted) so its natural height is captured via onSizeChanged the
+ * moment chart data resolves, then that height is applied to whichever
+ * tab is actually visible. Bio data is wrapped in its own vertical scroll
+ * so it can't overflow that fixed height once pinned -- same as
+ * ProfileTabsPanel.jsx's own `overflowY: "auto"` on the tab body.
  */
 @Composable
 fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
+    val density = LocalDensity.current
 
     var tab by remember(candidateId) { mutableStateOf(0) }
     var bio by remember(candidateId) { mutableStateOf<ExtendedBioDataOut?>(null) }
@@ -58,29 +89,24 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
     var chart by remember(candidateId) { mutableStateOf<ChartOut?>(null) }
     var chartNotComputed by remember(candidateId) { mutableStateOf(false) }
     var chartLoaded by remember(candidateId) { mutableStateOf(false) }
+    var bodyHeightPx by remember(candidateId) { mutableStateOf(0) }
 
     LaunchedEffect(candidateId) {
         bio = runCatching { identityRepo.getExtendedBio(candidateId) }.getOrNull()
         bioLoaded = true
     }
 
-    // Chart is fetched lazily (only once the Chart tab is actually opened),
-    // same as ProfileDetailScreen's previous behavior -- the astrology
-    // computation blob is the heaviest of these two fetches and most people
-    // opening a profile card check Bio data first, if at all.
-    LaunchedEffect(tab, candidateId) {
-        if (tab == 1 && !chartLoaded) {
-            try {
-                chart = dashboardRepo.getChart(candidateId)
-            } catch (e: ApiError) {
-                if (e.status == 404) chartNotComputed = true
-            } catch (_: Exception) {
-                // Leave both null/false -- an unexpected error here just
-                // falls back to the same "not computed yet" copy rather
-                // than a dedicated error state for a secondary detail tab.
-            }
-            chartLoaded = true
+    LaunchedEffect(candidateId) {
+        try {
+            chart = dashboardRepo.getChart(candidateId)
+        } catch (e: ApiError) {
+            if (e.status == 404) chartNotComputed = true
+        } catch (_: Exception) {
+            // Leave both null/false -- an unexpected error here just
+            // falls back to the same "not computed yet" copy rather
+            // than a dedicated error state for a secondary detail tab.
         }
+        chartLoaded = true
     }
 
     Card(modifier = modifier, shape = RoundedCornerShape(D2MRadius.lg)) {
@@ -89,10 +115,32 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bio data") })
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Chart") })
             }
-            Column(modifier = Modifier.padding(16.dp)) {
+
+            Box {
+                if (chartLoaded) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .alpha(0f)
+                            .onSizeChanged { bodyHeightPx = it.height },
+                    ) {
+                        ChartTab(chart, chartNotComputed, chartLoaded)
+                    }
+                }
+
+                val bodyModifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (bodyHeightPx > 0) Modifier.height(with(density) { bodyHeightPx.toDp() }) else Modifier)
+                    .padding(16.dp)
+
                 when (tab) {
-                    0 -> BioDataTab(bio, bioLoaded)
-                    else -> ChartTab(chart, chartNotComputed, chartLoaded)
+                    0 -> Column(modifier = bodyModifier.verticalScroll(rememberScrollState())) {
+                        BioDataTab(bio, bioLoaded)
+                    }
+                    else -> Box(modifier = bodyModifier) {
+                        ChartTab(chart, chartNotComputed, chartLoaded)
+                    }
                 }
             }
         }
@@ -173,18 +221,33 @@ private fun BioSection(title: String, anyValues: List<Any?>, content: @Composabl
     }
 }
 
+/** label:value pair with a bottom divider -- mirrors BioRow.jsx's own `borderBottom` on every row, not just between sections. */
 @Composable
 private fun BioRow(label: String, value: String?) {
     if (value.isNullOrBlank()) return
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.45f))
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    Column {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.45f))
+            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        }
+        HorizontalDivider(color = mutedText(0.1f))
     }
 }
 
+/**
+ * D1/D9 stacked one above the other, not side by side -- AstrologyChartView
+ * defaults to `stacked = false` (side by side), which is what web does too
+ * ON A WIDE VIEWPORT, but AstrologyChart.jsx only goes side by side once it
+ * measures real room for two full-size grids plus a gap (`wrapWidth >=
+ * size*2 + GRID_GAP`) and stacks below that threshold -- exactly the
+ * "not enough room" case this panel is always in on a phone. Passing
+ * `stacked = true` explicitly here reproduces that narrow-viewport
+ * fallback unconditionally, since this platform has no bigger breakpoint
+ * where side-by-side would ever actually fit.
+ */
 @Composable
 private fun ChartTab(chart: ChartOut?, chartNotComputed: Boolean, loaded: Boolean) {
     when {
@@ -194,6 +257,7 @@ private fun ChartTab(chart: ChartOut?, chartNotComputed: Boolean, loaded: Boolea
             d1 = chart.chartJson["d1"] as? JsonObject,
             d9 = chart.chartJson["d9"] as? JsonObject,
             modifier = Modifier.fillMaxWidth(),
+            stacked = true,
         )
     }
 }
