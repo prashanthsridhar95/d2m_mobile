@@ -25,6 +25,7 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNamingStrategy
 
 /**
  * Thin wrapper over Ktor mirroring d2m_web/src/lib/apiClient.js: same base-URL
@@ -45,10 +46,20 @@ class ApiClient(
     private val engine: HttpClient,
     var baseUrl: String = ApiConfig.DEFAULT_BASE_URL,
 ) {
+    // d2m_core_engine's Pydantic schemas (app/schemas.py) are plain BaseModel
+    // subclasses with no alias_generator -- every field goes over the wire as
+    // snake_case (primary_id, contact_info, seeking_gender, ...), while every
+    // DTO in data/model/*.kt is deliberately idiomatic Kotlin camelCase with
+    // no per-field @SerialName. namingStrategy handles the conversion in one
+    // place instead of hand-annotating ~150 fields across every model file --
+    // without it, every non-nullable field silently fails to decode
+    // (MissingFieldException) because e.g. "primaryId" never matches the
+    // "primary_id" key actually present in the response body.
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
+        namingStrategy = JsonNamingStrategy.SnakeCase
     }
 
     val client: HttpClient = engine.config {

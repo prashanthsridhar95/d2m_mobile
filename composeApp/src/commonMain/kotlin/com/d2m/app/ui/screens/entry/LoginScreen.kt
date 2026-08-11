@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.D2MButton
@@ -109,7 +110,15 @@ fun LoginScreen(
                                                 identityRepo.getPrimaryProfile(idInput).name
                                             }
                                         } catch (e: Exception) {
-                                            error = "Couldn't find that id. Double check and try again."
+                                            // Was a hardcoded "couldn't find that id" for every
+                                            // exception -- indistinguishable from a real 404 in
+                                            // the UI whether the id was wrong, the network was
+                                            // down, or (as with the snake_case/camelCase mismatch
+                                            // fixed in ApiClient.kt's Json config) the response
+                                            // came back fine but failed to deserialize. Surfacing
+                                            // the real message makes that class of bug visible
+                                            // without needing a debugger attached.
+                                            error = friendlyError(e, "Couldn't find that id. Double check and try again.")
                                         } finally {
                                             loading = false
                                         }
