@@ -106,7 +106,7 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
         }
 
         composable(Routes.DISCOVERY) {
-            DiscoveryScreen(onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) })
+            DiscoveryScreen()
         }
 
         composable(Routes.MATCHES) {

@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +50,7 @@ import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MLevelPill
+import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.astrologicalCompatibility
 import com.d2m.app.ui.components.overallRating
 import com.d2m.app.ui.components.preferenceCompatibility
@@ -79,9 +83,22 @@ import kotlinx.coroutines.launch
  * compatibility.js). Restoring those closes the actual "day and night"
  * gap -- it isn't a skin/polish issue, it's that most of the card's real
  * content was never wired up on this platform.
+ *
+ * Full-profile layout fix ("stack the bio data/chart view below the
+ * current card & place the buttons below the stack -- no need to have a
+ * separate view for full profile"): "View full profile" used to navigate
+ * away to ProfileDetailScreen entirely, mirroring web's pre-rework
+ * behavior before "Both in detail page & in the child's discover page,
+ * let's have 2 panes" landed there (see DiscoveryScreen.jsx's own
+ * docstring on that change). This now embeds the same Bio data/Chart
+ * detail (D2MProfileTabsPanel, shared with ProfileDetailScreen so the two
+ * can't drift) directly on the page, stacked below the photo card, with
+ * the decision buttons moved below that stack instead of sitting directly
+ * under the photo -- no separate screen, no onOpenProfile navigation out
+ * of this screen at all anymore.
  */
 @Composable
-fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
+fun DiscoveryScreen() {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
     val apiClient = org.koin.compose.koinInject<ApiClient>()
@@ -139,7 +156,7 @@ fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
                     val astroLevel = astrologicalCompatibility(current.scores)
                     val prefLevel = preferenceCompatibility(current.scores)
 
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         if (total > 0) {
                             Text(
                                 "${seen + 1} of $total",
@@ -152,7 +169,7 @@ fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .aspectRatio(0.82f)
                                 .graphicsLayer { translationX = offsetX.value; rotationZ = offsetX.value / 40f }
                                 .pointerInput(current.candidateId) {
                                     detectDragGestures(
@@ -235,15 +252,22 @@ fun DiscoveryScreen(onOpenProfile: (String) -> Unit) {
                             }
                         }
 
+                        Text(
+                            "More about ${current.candidateName.substringBefore(" ")}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 20.dp, bottom = 10.dp),
+                        )
+                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth())
+
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             D2MButton("Pass", variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("reject") }, modifier = Modifier.weight(1f))
                             D2MButton("Snooze", variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("snooze") }, modifier = Modifier.weight(1f))
                             D2MButton("Accept", enabled = !actionInFlight, onClick = { act("accept") }, modifier = Modifier.weight(1f))
                         }
-                        D2MButton("View full profile", variant = D2MButtonVariant.GHOST, onClick = { onOpenProfile(current.candidateId) })
                     }
                 }
             }

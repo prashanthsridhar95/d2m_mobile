@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,18 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.d2m.app.data.model.ChartOut
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
-import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
-import com.d2m.app.ui.components.AstrologyChartView
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.ScoreBadge
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
@@ -55,14 +51,11 @@ import org.koin.compose.koinInject
 fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
-    val dashboardRepo: DashboardRepository = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
 
     var candidate by remember { mutableStateOf<SuggestionOut?>(null) }
-    var chart by remember { mutableStateOf<ChartOut?>(null) }
-    var tab by remember { mutableStateOf(0) } // 0 = Bio data, 1 = Chart
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var actionInFlight by remember { mutableStateOf(false) }
@@ -79,12 +72,6 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
             error = friendlyError(e, "Couldn't load this profile.")
         } finally {
             loading = false
-        }
-    }
-
-    LaunchedEffect(tab, candidateId) {
-        if (tab == 1 && chart == null) {
-            chart = runCatching { dashboardRepo.getChart(candidateId) }.getOrNull()
         }
     }
 
@@ -108,35 +95,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
                     }
                     Text(listOfNotNull(c.city, c.occupationTitle).joinToString(" · "), color = mutedText(0.55f))
 
-                    TabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 16.dp)) {
-                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bio data") })
-                        Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Chart") })
-                    }
-
-                    when (tab) {
-                        0 -> Column(modifier = Modifier.padding(top = 12.dp)) {
-                            val nakshatraLine = c.moonNakshatra?.let { n -> n + (c.moonPada?.let { p -> ", Pada $p" } ?: "") }
-                            listOf(
-                                "Gothram" to c.gothram,
-                                "Sect" to c.sect,
-                                "Nakshatra" to nakshatraLine,
-                            ).forEach { (label, value) ->
-                                if (value != null) {
-                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                        Text(label, color = mutedText(0.55f))
-                                        Text(value, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                        1 -> chart?.let {
-                            AstrologyChartView(
-                                d1 = it.chartJson["d1"]?.let { el -> el as? kotlinx.serialization.json.JsonObject },
-                                d9 = it.chartJson["d9"]?.let { el -> el as? kotlinx.serialization.json.JsonObject },
-                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            )
-                        } ?: Text("Chart not computed yet.", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
-                    }
+                    D2MProfileTabsPanel(candidateId = candidateId, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
 
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (identity.role == D2MRole.PARENT) {
