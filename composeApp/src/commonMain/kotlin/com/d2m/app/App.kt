@@ -19,6 +19,7 @@ import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
+import com.d2m.app.push.ui.rememberNotificationPermissionLauncher
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
 import com.d2m.app.ui.navigation.D2MNavGraph
@@ -54,8 +55,15 @@ fun App() {
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
 
     // Fire-once: push permission/token registration shouldn't block first
-    // paint and isn't tied to any particular screen's lifecycle.
+    // paint and isn't tied to any particular screen's lifecycle. Request the
+    // OS notification permission FIRST -- reported directly: "Notification
+    // allow is not asked on launch" (Android 13+'s POST_NOTIFICATIONS is a
+    // runtime permission; declaring it in the manifest alone never prompts
+    // anyone -- see push/ui/NotificationPermission.kt). Token fetch/
+    // registration doesn't depend on this permission and proceeds either way.
+    val requestNotificationPermission = rememberNotificationPermissionLauncher {}
     LaunchedEffect(Unit) {
+        requestNotificationPermission()
         runCatching { pushInitializer.initialize() }
     }
 
