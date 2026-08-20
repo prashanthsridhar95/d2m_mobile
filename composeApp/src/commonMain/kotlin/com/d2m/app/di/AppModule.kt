@@ -6,6 +6,9 @@ import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.data.session.createSettings
 import com.d2m.app.domain.repository.*
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.call.CallManager
+import com.d2m.app.messaging.call.WebRtcEngine
+import com.d2m.app.messaging.call.createWebRtcEngine
 import com.d2m.app.messaging.crypto.CryptoProvider
 import com.d2m.app.messaging.crypto.StubUnencryptedCryptoProvider
 import com.d2m.app.messaging.transport.MessagingWsClient
@@ -51,4 +54,13 @@ val appModule = module {
     single<CryptoProvider> { StubUnencryptedCryptoProvider() }
     single { MessagingWsClient() }
     single { MessagingRepository(get(), get(), get()) }
+
+    // Audio/video calling -- see messaging/call/CallManager.kt +
+    // WebRtcEngine.android.kt (real) / WebRtcEngine.ios.kt (not implemented
+    // yet). CallManager registers itself into MessagingRepository's
+    // callSignalHandler/sessionResetHandler at construction time, so simply
+    // resolving it once (CallLayer.kt does, at the App.kt shell level) is
+    // enough to wire calling up end-to-end.
+    single<WebRtcEngine> { createWebRtcEngine() }
+    single { CallManager(get(), get()) }
 }

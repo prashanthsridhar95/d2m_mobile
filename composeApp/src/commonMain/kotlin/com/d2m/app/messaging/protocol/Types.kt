@@ -13,9 +13,16 @@ import kotlinx.serialization.modules.subclass
  * inspects or decrypts `body`). See that file for the canonical source;
  * kept 1:1 field-for-field here rather than reshaped, so a future real
  * CryptoProvider implementation can be checked against the original TS
- * types directly. Call-signaling types (CallSignal etc.) are ported for
- * shape-completeness but nothing in this build acts on them yet -- see
- * this package's README.md for what's real vs. scaffolded.
+ * types directly.
+ *
+ * Now fully ported, including media (ChatPayload.Media/MediaMeta), replies
+ * (ReplyContext) and call signaling (ChatPayload.Call/CallSignal) -- see
+ * messaging/README.md for the current real-vs-scaffolded status of what
+ * consumes these (MessagingRepository for chat, call/CallManager.kt for
+ * signaling). `archive`/`callInvite` on MessageEnvelope are ported for wire
+ * shape-completeness (the server keys push-notification and archival
+ * behavior off them) but this build never populates `archive` itself --
+ * there is no real Archive Keypair layer here, matching the crypto stub.
  */
 
 @Serializable
@@ -49,6 +56,10 @@ data class MessageEnvelope(
     val body: String, // base64 ciphertext, opaque to the server
     val sentAt: Long,
     val ephemeral: Boolean = false,
+    // Set only on the one ephemeral envelope carrying a CallSignal.Invite --
+    // lets the server trigger an "incoming call" push without ever seeing
+    // call content. See callManager's `send` wiring.
+    val callInvite: Boolean = false,
 )
 
 // ----- WebSocket events: client -> server -----
@@ -127,12 +138,35 @@ sealed class ServerToClient {
     object Pong : ServerToClient()
 }
 
+/** Attachment description -- see MediaMeta in messaging-framework/packages/protocol. `key`/`iv` only carry real meaning once a real CryptoProvider lands; the stub provider leaves them as placeholder values (see StubUnencryptedCryptoProvider). */
+@Serializable
+data class MediaMeta(
+    val blobId: String,
+    val key: String,
+    val iv: String,
+    val mime: String,
+    val name: String,
+    val size: Long,
+    val kind: String, // "image" | "audio" | "video" | "file"
+    val duration: Int? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val thumb: String? = null,
+)
+
+@Serializable
+data class ReplyContext(val id: String, val from: String, val preview: String)
+
 /** The PLAINTEXT payload carried inside an encrypted MessageEnvelope.body -- this is what CryptoProvider encrypts/decrypts. */
 @Serializable
 sealed class ChatPayload {
     @Serializable
     @SerialName("text")
-    data class Text(val text: String, val replyToId: String? = null) : ChatPayload()
+    data class Text(val text: String, val replyTo: ReplyContext? = null) : ChatPayload()
+
+    @Serializable
+    @SerialName("media")
+    data class Media(val media: MediaMeta, val caption: String? = null, val replyTo: ReplyContext? = null) : ChatPayload()
 
     @Serializable
     @SerialName("edit")
@@ -145,11 +179,92 @@ sealed class ChatPayload {
     @Serializable
     @SerialName("reaction")
     data class Reaction(val targetId: String, val emoji: String, val action: String) : ChatPayload()
-    // "media"/"call" payloads from the source protocol are intentionally not
-    // ported yet -- media (Phase 2 of the integration plan) and calls
-    // (Phase 3) both ride on top of this same envelope once text messaging
-    // is proven out; adding them here now would be dead code with nothing
-    // to exercise it.
+
+    @Serializable
+    @SerialName("call")
+    data class Call(val call: CallSignal) : ChatPayload()
+}
+
+// ----- Call signaling -- rides the same E2E channel as chat, routed to
+// CallManager rather than rendered as a message. Direct port of CallSignal
+// in messaging-framework/packages/protocol/src/index.ts. -----
+
+@Serializable
+data class SdpDescription(val type: String, val sdp: String? = null) // "offer" | "answer" | "pranswer" | "rollback"
+
+@Serializable
+data class IceCandidateData(
+    val candidate: String,
+    val sdpMid: String? = null,
+    val sdpMLineIndex: Int? = null,
+    val usernameFragment: String? = null,
+)
+
+// msid (local MediaStream id) -> role, plus which roles are actively sending.
+@Serializable
+data class VideoMeta(val roles: Map<String, String> = emptyMap(), val sending: List<String> = emptyList())
+
+@Serializable
+sealed class CallSignal {
+    abstract val callId: String
+
+    @Serializable
+    @SerialName("invite")
+    data class Invite(
+        override val callId: String,
+        val media: String, // "audio" | "video"
+        val sdp: SdpDescription,
+        val video: VideoMeta? = null,
+        val mic: Boolean? = null,
+    ) : CallSignal()
+
+    @Serializable
+    @SerialName("ringing")
+    data class Ringing(override val callId: String) : CallSignal()
+
+    @Serializable
+    @SerialName("accept")
+    data class Accept(
+        override val callId: String,
+        val sdp: SdpDescription,
+        val video: VideoMeta? = null,
+        val mic: Boolean? = null,
+    ) : CallSignal()
+
+    @Serializable
+    @SerialName("decline")
+    data class Decline(override val callId: String, val reason: String? = null) : CallSignal() // "busy" | "declined"
+
+    @Serializable
+    @SerialName("ice")
+    data class Ice(override val callId: String, val candidate: IceCandidateData) : CallSignal()
+
+    @Serializable
+    @SerialName("offer")
+    data class Offer(
+        override val callId: String,
+        val sdp: SdpDescription,
+        val note: String? = null, // "upgrade" | "screen-on" | "screen-off"
+        val video: VideoMeta? = null,
+        val mic: Boolean? = null,
+    ) : CallSignal()
+
+    @Serializable
+    @SerialName("answer")
+    data class Answer(
+        override val callId: String,
+        val sdp: SdpDescription,
+        val video: VideoMeta? = null,
+        val mic: Boolean? = null,
+    ) : CallSignal()
+
+    @Serializable
+    @SerialName("media-state")
+    data class MediaState(override val callId: String, val video: VideoMeta, val mic: Boolean? = null) : CallSignal()
+
+    @Serializable
+    @SerialName("hangup")
+    data class Hangup(override val callId: String) : CallSignal()
 }
 
 val messagingProtocolJson = Json {
@@ -179,9 +294,22 @@ val messagingProtocolJson = Json {
         }
         polymorphic(ChatPayload::class) {
             subclass(ChatPayload.Text::class)
+            subclass(ChatPayload.Media::class)
             subclass(ChatPayload.Edit::class)
             subclass(ChatPayload.Delete::class)
             subclass(ChatPayload.Reaction::class)
+            subclass(ChatPayload.Call::class)
+        }
+        polymorphic(CallSignal::class) {
+            subclass(CallSignal.Invite::class)
+            subclass(CallSignal.Ringing::class)
+            subclass(CallSignal.Accept::class)
+            subclass(CallSignal.Decline::class)
+            subclass(CallSignal.Ice::class)
+            subclass(CallSignal.Offer::class)
+            subclass(CallSignal.Answer::class)
+            subclass(CallSignal.MediaState::class)
+            subclass(CallSignal.Hangup::class)
         }
     }
 }

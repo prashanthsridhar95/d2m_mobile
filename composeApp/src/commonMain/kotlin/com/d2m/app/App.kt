@@ -1,6 +1,7 @@
 package com.d2m.app
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -14,6 +15,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.push.PlatformPushInitializer
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
@@ -78,26 +80,34 @@ fun App() {
     val showBottomBar = tabs != null && tabs.any { it.route == currentRoute }
 
     D2MTheme(flow = D2MFlow.ENTRY) {
-        Scaffold(
-            bottomBar = {
-                if (showBottomBar && tabs != null) {
-                    D2MBottomBar(
-                        tabs = tabs,
-                        currentRoute = currentRoute,
-                        onTabSelected = { tab ->
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                bottomBar = {
+                    if (showBottomBar && tabs != null) {
+                        D2MBottomBar(
+                            tabs = tabs,
+                            currentRoute = currentRoute,
+                            onTabSelected = { tab ->
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                        )
+                    }
+                },
+            ) { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    D2MNavGraph(navController = navController, startDestination = startDestination)
                 }
-            },
-        ) { innerPadding ->
-            Box(modifier = Modifier.padding(innerPadding)) {
-                D2MNavGraph(navController = navController, startDestination = startDestination)
             }
+
+            // Mounted once above the whole nav tree (not per-screen) so an
+            // active call survives navigating between screens, same as
+            // d2m_web's CallLayer.jsx sitting above its router. Renders
+            // nothing while idle -- see CallLayer.kt.
+            CallLayer()
         }
     }
 }

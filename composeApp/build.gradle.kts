@@ -103,6 +103,8 @@ kotlin {
                 // not depend on that accessor working correctly again.
                 implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
                 implementation(libs.firebase.messaging)
+                // Real WebRTC (audio/video calling) -- see messaging/call/WebRtcEngine.android.kt.
+                implementation(libs.stream.webrtc.android)
             }
         }
 

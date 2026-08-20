@@ -3,6 +3,7 @@ package com.d2m.app
 import android.app.Application
 import com.d2m.app.data.session.AndroidSettingsContextHolder
 import com.d2m.app.di.appModule
+import com.d2m.app.messaging.call.AndroidWebRtcContextHolder
 import org.koin.core.context.startKoin
 
 /**
@@ -26,6 +27,7 @@ class D2MApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AndroidSettingsContextHolder.appContext = applicationContext
+        AndroidWebRtcContextHolder.appContext = applicationContext
         startKoin {
             modules(appModule)
         }

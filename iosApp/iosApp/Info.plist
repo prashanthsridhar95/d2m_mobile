@@ -43,6 +43,8 @@
 	<string>D2M needs camera access to take a profile photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>D2M needs photo library access to choose a profile photo.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>D2M needs microphone access for voice and video calls.</string>
 	<!-- Claim-link deep link: matches Routes.CLAIM_DEEPLINK_HTTPS / _SCHEME
 	     (D2MNavGraph.kt). The https:// universal link additionally requires
 	     an apple-app-site-association file hosted at d2m.app, not created

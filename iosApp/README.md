@@ -39,6 +39,10 @@ from Swift once such a bridge exists, same pattern as
 next step here since real push *send* is explicitly deferred backend-side
 (see root README) -- there's nothing to receive yet either way.
 
+## Audio/video calling
+
+Not implemented on iOS yet -- see `composeApp/src/iosMain/kotlin/com/d2m/app/messaging/call/WebRtcEngine.ios.kt`'s doc comment for exactly why (short version: it needs a real Xcode project + CocoaPods to integrate the `GoogleWebRTC` pod into, and neither exists here yet). Text messaging works fully on iOS once this folder is turned into a real Xcode project; calling will throw a clear error until that file gets a real implementation. Android has a complete, real WebRTC implementation (`stream-webrtc-android`) already.
+
 ## What's not verified
 
 Nothing in this folder has been opened in Xcode or compiled -- this sandbox
