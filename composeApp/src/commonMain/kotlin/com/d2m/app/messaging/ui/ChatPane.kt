@@ -78,15 +78,25 @@ private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "
  * reactions, typing indicator, delivered/read ticks, and audio/video call
  * buttons wired to call/CallManager.kt. Media (image attachments) render if
  * received but there's no attach button yet on either platform -- see
- * messaging/README.md.
+ * messaging/README.md. Accepts an optional `trailingActions` slot so a
+ * caller (MatchesScreen.kt) can add its own icon buttons into the same
+ * toolbar row as the call buttons, rather than rendering a second row above
+ * this one -- see that screen's "more options" menu for the intended use.
  *
  * Runs today on the explicitly non-production StubUnencryptedCryptoProvider
- * (see messaging/crypto/CryptoProvider.kt) -- a warning banner surfaces that
- * state visibly rather than silently.
+ * (see messaging/crypto/CryptoProvider.kt) -- no banner here anymore (that
+ * was reported as unwanted clutter); the caller is expected to show a lock
+ * icon next to the peer's name only once `isProductionGradeEncryption` is
+ * actually true, same as MatchesScreen.kt's ThreadHeader now does.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
+fun ChatPane(
+    peerId: String,
+    peerName: String,
+    modifier: Modifier = Modifier,
+    trailingActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+) {
     val identityStore: IdentityStore = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
     val callManager: CallManager = koinInject()
@@ -119,29 +129,15 @@ fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
     }
 
     Column(modifier = modifier) {
-        if (!messagingRepo.isProductionGradeEncryption) {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .background(mutedText(0.05f), RoundedCornerShape(D2MRadius.sm))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    "Development build -- messages aren't end-to-end encrypted yet.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = mutedText(0.5f),
-                    maxLines = 1,
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-        }
-
-        // Toolbar -- online/typing status on the left, call actions on the
-        // right as outlined circular buttons (mirrors MatchesScreen.jsx's
-        // call-button styling: a transparent 38dp circle with a hairline
-        // border, not a bare unstyled icon). The peer's name/match-status
-        // header already lives one level up in MatchesScreen.kt's own
-        // ThreadHeader -- repeating it here just to fill space was the
-        // "randomly placed" duplication reported directly.
+        // Toolbar -- one line: online/typing status on the left, then every
+        // action (audio call, video call, and whatever the caller passes
+        // via `trailingActions`, e.g. MatchesScreen's "more options" menu)
+        // together on the right as outlined circular buttons, all in the
+        // same row (previously call buttons and "more" lived in two
+        // separate rows -- reported directly, fixed here). No encryption
+        // banner text anymore -- see the lock icon next to the peer's name
+        // in MatchesScreen.kt's ThreadHeader instead, which only appears
+        // once `isProductionGradeEncryption` is actually true.
         Row(
             modifier = Modifier.fillMaxWidth().height(44.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -154,13 +150,14 @@ fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
             }
             Text(status, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f), modifier = Modifier.weight(1f))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ToolbarIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call") {
                     scope.launch { callManager.startCall(peerUsername, "audio") }
                 }
                 ToolbarIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call") {
                     scope.launch { callManager.startCall(peerUsername, "video") }
                 }
+                trailingActions()
             }
         }
         HorizontalDivider(color = mutedText(0.08f))

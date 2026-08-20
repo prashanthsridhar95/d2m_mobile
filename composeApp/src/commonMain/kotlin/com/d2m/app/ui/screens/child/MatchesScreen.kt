@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -146,34 +147,41 @@ fun MatchesScreen() {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
                     }
                     Box(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                        ThreadHeader(
+                        ThreadHeader(thread = t)
+                    }
+                }
+                ChatPane(
+                    peerId = t.otherParticipantId,
+                    peerName = t.otherParticipantName,
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    trailingActions = {
+                        MoreOptionsMenu(
                             thread = t,
                             onGoSerious = {
-                                val pid = primaryId ?: return@ThreadHeader
+                                val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch { runCatching { seriousModeRepo.requestSeriousMode(pid, t.threadId, pid) }; refresh() }
                             },
                             onRevoke = {
-                                val pid = primaryId ?: return@ThreadHeader
+                                val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch { runCatching { seriousModeRepo.revoke(pid, t.threadId) }; refresh() }
                             },
                             onUnmatch = {
-                                val pid = primaryId ?: return@ThreadHeader
+                                val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch { runCatching { seriousModeRepo.unmatch(pid, t.threadId) }; refresh(); selected = null }
                             },
                             onAcceptSeriousRequest = {
-                                val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
-                                val pid = primaryId ?: return@ThreadHeader
+                                val reqId = t.pendingSeriousModeRequestId ?: return@MoreOptionsMenu
+                                val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "accept") }; refresh() }
                             },
                             onDeclineSeriousRequest = {
-                                val reqId = t.pendingSeriousModeRequestId ?: return@ThreadHeader
-                                val pid = primaryId ?: return@ThreadHeader
+                                val reqId = t.pendingSeriousModeRequestId ?: return@MoreOptionsMenu
+                                val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "decline") }; refresh() }
                             },
                         )
-                    }
-                }
-                ChatPane(peerId = t.otherParticipantId, peerName = t.otherParticipantName, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+                    },
+                )
             }
         }
     }
@@ -210,20 +218,54 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
 }
 
 /**
- * Mirrors MatchesScreen.jsx's chat header exactly (lines ~562-639 of that
- * file): gradient squircle avatar + presence dot, name with a status
- * subtitle underneath (typing > online > match-status, same priority web
- * uses), and a "more options" (⋮) menu -- NOT inline buttons -- holding Go
- * Serious/Revoke/Unmatch, same as web keeps those out of the toolbar itself.
- * Reported directly: showing them as always-visible buttons plus a separate
- * "Matched" pill floating in the header didn't match web at all -- both are
- * fixed here. A pending Serious Mode request is the one thing web (and now
- * this) still surfaces as inline Accept/Decline buttons rather than burying
- * it in the menu, since it's a time-sensitive action on the other person,
- * not a routine setting.
+ * Mirrors MatchesScreen.jsx's chat header (lines ~562-639): gradient
+ * squircle avatar + presence dot, name with a status subtitle underneath
+ * (typing > online > match-status, web's own priority). A small lock icon
+ * appears next to the name only once messaging is actually end-to-end
+ * encrypted (`isProductionGradeEncryption`) -- today that's always false
+ * (see messaging/crypto/CryptoProvider.kt), so no lock shows and no other
+ * "not encrypted yet" text clutters the header; this is the one place that
+ * state surfaces at all now, and only in the direction of "yes, this is
+ * secure," never "no, it isn't." The "more options" menu (Go Serious/
+ * Revoke/Unmatch) moved into ChatPane's own toolbar row via
+ * `trailingActions` -- see MoreOptionsMenu below and the call site in
+ * MatchesScreen() -- so audio call/video call/more all sit in one line,
+ * instead of the menu living in a second row up here.
  */
 @Composable
-private fun ThreadHeader(
+private fun ThreadHeader(thread: ThreadOut) {
+    val messagingRepo: MessagingRepository = koinInject()
+    val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
+    val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
+    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
+
+    LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.size(40.dp)) {
+            Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+            PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (messagingRepo.isProductionGradeEncryption) {
+                    Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
+                }
+            }
+            val subtitle = when {
+                peerTyping -> "typing…"
+                peerOnline -> "Online"
+                else -> threadStatusLabel(thread.status)
+            }
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+        }
+    }
+}
+
+/** The "more options" (⋮) menu -- Go Serious/Revoke Serious Mode/Unmatch, plus a pending Serious Mode request's Accept/Decline -- passed into ChatPane's `trailingActions` so it renders in the same toolbar row as the call buttons. */
+@Composable
+private fun MoreOptionsMenu(
     thread: ThreadOut,
     onGoSerious: () -> Unit,
     onRevoke: () -> Unit,
@@ -231,47 +273,23 @@ private fun ThreadHeader(
     onAcceptSeriousRequest: () -> Unit,
     onDeclineSeriousRequest: () -> Unit,
 ) {
-    val messagingRepo: MessagingRepository = koinInject()
-    val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
-    val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
-    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
     var menuOpen by remember { mutableStateOf(false) }
-
-    LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
-
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Box(modifier = Modifier.size(40.dp)) {
-                Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
-                PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
+    Box {
+        IconButton(onClick = { menuOpen = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (thread.pendingSeriousModeRequestId != null) {
+                DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
+                DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
             }
-            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                val subtitle = when {
-                    peerTyping -> "typing…"
-                    peerOnline -> "Online"
-                    else -> threadStatusLabel(thread.status)
-                }
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+            if (thread.status == "active") {
+                DropdownMenuItem(text = { Text("Go Serious") }, onClick = { menuOpen = false; onGoSerious() })
             }
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (thread.pendingSeriousModeRequestId != null) {
-                        DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
-                        DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
-                    }
-                    if (thread.status == "active") {
-                        DropdownMenuItem(text = { Text("Go Serious") }, onClick = { menuOpen = false; onGoSerious() })
-                    }
-                    if (thread.status == "exclusive") {
-                        DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
-                    }
-                    DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
-                }
+            if (thread.status == "exclusive") {
+                DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
             }
+            DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
         }
     }
 }
