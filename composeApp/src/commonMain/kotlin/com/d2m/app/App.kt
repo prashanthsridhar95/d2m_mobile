@@ -13,9 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatUiState
+import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
@@ -51,8 +53,28 @@ fun App() {
     val identityStore: IdentityStore = koinInject()
     val pushInitializer: PlatformPushInitializer = koinInject()
     val chatUiState: ChatUiState = koinInject()
+    val messagingRepo: MessagingRepository = koinInject()
+    val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
+
+    // "Messages sent on web is received on web, but not on mobile" --
+    // root cause: MessagingRepository.start() (which opens the WebSocket)
+    // was only ever called from ChatPane.kt's DisposableEffect(peerId), i.e.
+    // only while a specific 1:1 conversation screen was actually open. Any
+    // other time -- thread list, other tabs, backgrounded -- mobile had no
+    // live socket at all, unlike d2m_web's MessagingProvider (mounted once
+    // at the shell level, above the whole route tree, specifically so it
+    // "survive[s] navigating anywhere else in the app" per that file's own
+    // doc comment). Hoisted the same way here: fires once an identity
+    // exists, and MessagingRepository.start() is already idempotent (a
+    // `started` guard that's only set once a connection attempt actually
+    // begins), so this is safe to run alongside ChatPane's own call too.
+    LaunchedEffect(identity.primaryId, identity.sponsorId) {
+        if (identity.primaryId != null || identity.sponsorId != null) {
+            runCatching { messagingRepo.start(apiClient.client) }
+        }
+    }
 
     // Fire-once: push permission/token registration shouldn't block first
     // paint and isn't tied to any particular screen's lifecycle. Request the
