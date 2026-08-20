@@ -11,7 +11,7 @@ import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.call.WebRtcEngine
 import com.d2m.app.messaging.call.createWebRtcEngine
 import com.d2m.app.messaging.crypto.CryptoProvider
-import com.d2m.app.messaging.crypto.StubUnencryptedCryptoProvider
+import com.d2m.app.messaging.crypto.createCryptoProvider
 import com.d2m.app.messaging.transport.MessagingWsClient
 import com.d2m.app.push.PushTokenRegistrar
 import org.koin.dsl.module
@@ -48,11 +48,13 @@ val appModule = module {
     single { PushTokenRegistrar(get(), get()) }
     single { com.d2m.app.push.PlatformPushInitializer() }
 
-    // Phase 6 -- see messaging/crypto/CryptoProvider.kt's doc comment: this
-    // binds the explicitly-non-production stub by default. Swap this single
-    // binding for a real Signal Protocol-backed CryptoProvider implementation
-    // before any of this carries real user content.
-    single<CryptoProvider> { StubUnencryptedCryptoProvider() }
+    // Real Signal Protocol crypto on Android (messaging/crypto/signal/ --
+    // from-spec X3DH + Double Ratchet, wire-compatible with d2m_web's
+    // crypto.ts), non-production stub still on iOS -- see
+    // createCryptoProvider.kt and messaging/crypto/signal/SignalProtocol.kt's
+    // top doc comment (including its "needs real device verification"
+    // caveat) for the full picture.
+    single<CryptoProvider> { createCryptoProvider(get(), createSettings()) }
     single { MessagingWsClient() }
     single { MessagingRepository(get(), get(), get()) }
 

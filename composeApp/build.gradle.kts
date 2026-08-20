@@ -105,6 +105,11 @@ kotlin {
                 implementation(libs.firebase.messaging)
                 // Real WebRTC (audio/video calling) -- see messaging/call/WebRtcEngine.android.kt.
                 implementation(libs.stream.webrtc.android)
+                // Real Signal Protocol crypto primitives (X25519/AES/HMAC) --
+                // see messaging/crypto/signal/CryptoPrimitives.android.kt.
+                // Permissively licensed (MIT-style) -- deliberately NOT
+                // Signal's own AGPLv3 `libsignal`, see that file's doc comment.
+                implementation(libs.bouncycastle.provider)
             }
         }
 
