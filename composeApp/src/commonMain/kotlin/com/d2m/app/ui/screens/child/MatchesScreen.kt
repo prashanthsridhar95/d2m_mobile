@@ -1,6 +1,7 @@
 package com.d2m.app.ui.screens.child
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,8 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,23 +35,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.ThreadOut
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.SeriousModeRepository
+import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
-import com.d2m.app.ui.components.D2MButton
-import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
+
+/** Same two-tone gradient d2m_web hardcodes for every match avatar (MatchesScreen.jsx's `linear-gradient(135deg,#DCEEEA,#FBEAD2)`) -- there's no real profile photo on a Thread on either platform (ThreadOut/app/schemas.py's ThreadOut has no photo field at all), so this gradient squircle IS the design, not a placeholder standing in for a missing photo. */
+private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
 
 /**
  * Mirrors screens/child/MatchesScreen.jsx -- match inbox + chat. The
@@ -135,7 +145,7 @@ fun MatchesScreen() {
                     IconButton(onClick = { selected = null }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
                     }
-                    Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                    Box(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
                         ThreadHeader(
                             thread = t,
                             onGoSerious = {
@@ -186,14 +196,7 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(
-                    Brush.linearGradient(colors = listOf(mutedText(0.15f), mutedText(0.28f))),
-                    CircleShape,
-                ),
-        )
+        Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
         Column(modifier = Modifier.weight(1f)) {
             Text(thread.otherParticipantName, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -206,6 +209,19 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Mirrors MatchesScreen.jsx's chat header exactly (lines ~562-639 of that
+ * file): gradient squircle avatar + presence dot, name with a status
+ * subtitle underneath (typing > online > match-status, same priority web
+ * uses), and a "more options" (⋮) menu -- NOT inline buttons -- holding Go
+ * Serious/Revoke/Unmatch, same as web keeps those out of the toolbar itself.
+ * Reported directly: showing them as always-visible buttons plus a separate
+ * "Matched" pill floating in the header didn't match web at all -- both are
+ * fixed here. A pending Serious Mode request is the one thing web (and now
+ * this) still surfaces as inline Accept/Decline buttons rather than burying
+ * it in the menu, since it's a time-sensitive action on the other person,
+ * not a routine setting.
+ */
 @Composable
 private fun ThreadHeader(
     thread: ThreadOut,
@@ -215,33 +231,59 @@ private fun ThreadHeader(
     onAcceptSeriousRequest: () -> Unit,
     onDeclineSeriousRequest: () -> Unit,
 ) {
+    val messagingRepo: MessagingRepository = koinInject()
+    val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
+    val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
+    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
+    var menuOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
+
     Column {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(thread.otherParticipantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
-        }
-
-        // Presence of the id alone means "pending" -- the backend only
-        // populates pending_serious_mode_request_id at all while a request
-        // is outstanding (see ThreadOut's doc comment), there's no separate
-        // status field to check on this flat pair of ids.
-        if (thread.pendingSeriousModeRequestId != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                D2MButton("Accept Serious Mode", onClick = onAcceptSeriousRequest)
-                D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, onClick = onDeclineSeriousRequest)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.size(40.dp)) {
+                Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+                PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
             }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-            if (thread.status == "active") {
-                D2MButton("Go Serious", variant = D2MButtonVariant.OUTLINE, onClick = onGoSerious)
+            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                val subtitle = when {
+                    peerTyping -> "typing…"
+                    peerOnline -> "Online"
+                    else -> threadStatusLabel(thread.status)
+                }
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
-            if (thread.status == "exclusive") {
-                D2MButton("Revoke Serious Mode", variant = D2MButtonVariant.OUTLINE, onClick = onRevoke)
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (thread.pendingSeriousModeRequestId != null) {
+                        DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
+                        DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
+                    }
+                    if (thread.status == "active") {
+                        DropdownMenuItem(text = { Text("Go Serious") }, onClick = { menuOpen = false; onGoSerious() })
+                    }
+                    if (thread.status == "exclusive") {
+                        DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
+                    }
+                    DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
+                }
             }
-            D2MButton("Unmatch", variant = D2MButtonVariant.GHOST, onClick = onUnmatch)
         }
     }
+}
+
+@Composable
+private fun PresenceDot(online: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(11.dp)
+            .background(if (online) Color(0xFF3DBE6C) else mutedText(0.3f), CircleShape)
+            .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape),
+    )
 }
 
 private fun threadStatusLabel(status: String): String = when (status) {
