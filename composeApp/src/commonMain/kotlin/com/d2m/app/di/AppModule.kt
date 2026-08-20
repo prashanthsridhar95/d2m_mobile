@@ -5,6 +5,7 @@ import com.d2m.app.data.network.*
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.data.session.createSettings
 import com.d2m.app.domain.repository.*
+import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.call.WebRtcEngine
@@ -54,6 +55,10 @@ val appModule = module {
     single<CryptoProvider> { StubUnencryptedCryptoProvider() }
     single { MessagingWsClient() }
     single { MessagingRepository(get(), get(), get()) }
+
+    // Shared UI-chrome flag (hide bottom nav while a chat is open, jump to a
+    // thread from a tapped in-app notification banner) -- see ChatUiState.kt.
+    single { ChatUiState() }
 
     // Audio/video calling -- see messaging/call/CallManager.kt +
     // WebRtcEngine.android.kt (real) / WebRtcEngine.ios.kt (not implemented

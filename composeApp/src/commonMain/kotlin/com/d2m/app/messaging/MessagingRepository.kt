@@ -23,8 +23,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -83,6 +86,18 @@ data class ChatMessage(
 
 data class CallLogInfo(val media: String, val reason: String, val durationSec: Int, val incoming: Boolean)
 
+/**
+ * One event per incoming message from a peer whose chat ISN'T the one
+ * currently open (same condition as the unread-badge increment right next
+ * to where this is emitted) -- consumed by messaging/ui/InAppNotificationLayer.kt
+ * to show an Instagram-style in-app banner (point 4 of the notification
+ * request), and by push/LocalNotificationBridge.android.kt to post a real
+ * system notification when the app is backgrounded (point 3/5). Rides the
+ * live WebSocket stream directly, so it works with zero backend push
+ * involvement.
+ */
+data class InboxNotification(val peerUsername: String, val preview: String, val messageId: String)
+
 object MessagingConfig {
     var httpBaseUrl: String = "https://chat.prashanthsridhar.com"
     var wsBaseUrl: String = "wss://chat.prashanthsridhar.com"
@@ -113,6 +128,7 @@ class MessagingRepository(
     private val _presenceByUser = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val _unreadByPeer = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val _peerDisplayNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _inboxNotifications = MutableSharedFlow<InboxNotification>(extraBufferCapacity = 8)
     private val typingClearJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
     private val subscribedPeers = mutableSetOf<String>()
     private var activePeer: String? = null
@@ -128,6 +144,7 @@ class MessagingRepository(
 
     val isProductionGradeEncryption: Boolean get() = cryptoProvider.isProductionGrade
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
+    val inboxNotifications: SharedFlow<InboxNotification> = _inboxNotifications.asSharedFlow()
 
     fun currentUsername(): String? = myUsername
 
@@ -364,14 +381,14 @@ class MessagingRepository(
                 when (payload) {
                     is ChatPayload.Text -> {
                         appendMessage(event.msg.from, ChatMessage(event.msg.id, event.msg.from, event.msg.to, payload.text, event.msg.sentAt, isMine = false, status = MessageStatus.DELIVERED, replyTo = payload.replyTo))
-                        markUnreadOrChime(event.msg.from)
+                        markUnreadOrChime(event.msg.from, payload.text, event.msg.id)
                     }
                     is ChatPayload.Media -> {
                         appendMessage(
                             event.msg.from,
                             ChatMessage(event.msg.id, event.msg.from, event.msg.to, payload.caption.orEmpty(), event.msg.sentAt, isMine = false, status = MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
                         )
-                        markUnreadOrChime(event.msg.from)
+                        markUnreadOrChime(event.msg.from, payload.caption?.takeIf { it.isNotBlank() } ?: "Sent a photo", event.msg.id)
                     }
                     is ChatPayload.Edit -> updateMessage(payload.targetId) { it.copy(text = payload.text, edited = true) }
                     is ChatPayload.Delete -> updateMessage(payload.targetId) { it.copy(deleted = true) }
@@ -415,9 +432,10 @@ class MessagingRepository(
         }
     }
 
-    private fun markUnreadOrChime(fromUsername: String) {
+    private fun markUnreadOrChime(fromUsername: String, preview: String, messageId: String) {
         if (activePeer != fromUsername) {
             _unreadByPeer.update { it + (fromUsername to ((it[fromUsername] ?: 0) + 1)) }
+            _inboxNotifications.tryEmit(InboxNotification(fromUsername, preview, messageId))
         }
     }
 

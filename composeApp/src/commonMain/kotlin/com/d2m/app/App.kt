@@ -15,7 +15,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.call.ui.CallLayer
+import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
@@ -47,7 +49,9 @@ import org.koin.compose.koinInject
 fun App() {
     val identityStore: IdentityStore = koinInject()
     val pushInitializer: PlatformPushInitializer = koinInject()
+    val chatUiState: ChatUiState = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val conversationOpen by chatUiState.conversationOpen.collectAsState()
 
     // Fire-once: push permission/token registration shouldn't block first
     // paint and isn't tied to any particular screen's lifecycle.
@@ -77,7 +81,11 @@ fun App() {
         D2MRole.CHILD -> ChildTabs
         null -> null
     }
-    val showBottomBar = tabs != null && tabs.any { it.route == currentRoute }
+    // "Botton nav bar is not required inside a person's chat" -- currentRoute
+    // alone can't tell us that (the thread list and an open conversation are
+    // both the MATCHES route, see MatchesScreen.kt/ChatUiState.kt), so this
+    // also factors in the shared conversationOpen flag.
+    val showBottomBar = tabs != null && tabs.any { it.route == currentRoute } && !conversationOpen
 
     D2MTheme(flow = D2MFlow.ENTRY) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -108,6 +116,25 @@ fun App() {
             // d2m_web's CallLayer.jsx sitting above its router. Renders
             // nothing while idle -- see CallLayer.kt.
             CallLayer()
+
+            // Instagram-style in-app message banner (point 4 of the
+            // notification request) -- mounted the same way as CallLayer so
+            // it can show up regardless of which screen is on top. Tapping
+            // it records the peer via ChatUiState and navigates to Matches;
+            // MatchesScreen.kt picks the pending peer up once its thread
+            // list is loaded and opens that conversation directly.
+            if (identity.role == D2MRole.CHILD) {
+                InAppNotificationLayer(
+                    onOpenPeer = { peerUsername ->
+                        chatUiState.requestOpenPeer(peerUsername)
+                        navController.navigate(Routes.MATCHES) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
         }
     }
 }

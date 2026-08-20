@@ -1,9 +1,7 @@
 package com.d2m.app.messaging.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,7 +27,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -59,7 +55,6 @@ import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatMessage
 import com.d2m.app.messaging.MessageStatus
 import com.d2m.app.messaging.MessagingRepository
-import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.theme.D2MRadius
@@ -75,19 +70,23 @@ private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "
  * Real-time conversation pane -- mirrors screens/child/MatchesScreen.jsx's
  * MessageList + MessageComposer + MessageBubble, now at full parity with
  * useMessaging.js's feature set: reply, edit, delete-for-me/everyone,
- * reactions, typing indicator, delivered/read ticks, and audio/video call
- * buttons wired to call/CallManager.kt. Media (image attachments) render if
- * received but there's no attach button yet on either platform -- see
- * messaging/README.md. Accepts an optional `trailingActions` slot so a
- * caller (MatchesScreen.kt) can add its own icon buttons into the same
- * toolbar row as the call buttons, rather than rendering a second row above
- * this one -- see that screen's "more options" menu for the intended use.
+ * reactions, typing indicator, delivered/read ticks. Media (image
+ * attachments) render if received but there's no attach button yet on
+ * either platform -- see messaging/README.md.
+ *
+ * Deliberately owns NO header/toolbar of its own anymore (back button,
+ * avatar, name, call buttons, more-menu all used to be split across this
+ * composable's own toolbar row and a second row in MatchesScreen.kt above
+ * it -- reported directly as wrong: "back button, user thumbnail, Name,
+ * audio call button, video call button, more option all in one line -
+ * that's how things are in all the apps"). The caller now owns the entire
+ * header as ONE row and renders this pane underneath it -- see
+ * MatchesScreen.kt's ConversationHeader.
  *
  * Runs today on the explicitly non-production StubUnencryptedCryptoProvider
- * (see messaging/crypto/CryptoProvider.kt) -- no banner here anymore (that
- * was reported as unwanted clutter); the caller is expected to show a lock
- * icon next to the peer's name only once `isProductionGradeEncryption` is
- * actually true, same as MatchesScreen.kt's ThreadHeader now does.
+ * (see messaging/crypto/CryptoProvider.kt) -- no banner here (that was
+ * reported as unwanted clutter); the caller shows a lock icon next to the
+ * peer's name only once `isProductionGradeEncryption` is actually true.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -95,18 +94,14 @@ fun ChatPane(
     peerId: String,
     peerName: String,
     modifier: Modifier = Modifier,
-    trailingActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
 ) {
     val identityStore: IdentityStore = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
-    val callManager: CallManager = koinInject()
     val apiClient = koinInject<com.d2m.app.data.network.ApiClient>()
     val scope = rememberCoroutineScope()
 
     val peerUsername = remember(peerId) { d2mIdToMessagingUsername(peerId) }
     val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
-    val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
-    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
     val myUsername = remember(messages) { messagingRepo.currentUsername() }
 
     var draft by remember { mutableStateOf("") }
@@ -129,39 +124,6 @@ fun ChatPane(
     }
 
     Column(modifier = modifier) {
-        // Toolbar -- one line: online/typing status on the left, then every
-        // action (audio call, video call, and whatever the caller passes
-        // via `trailingActions`, e.g. MatchesScreen's "more options" menu)
-        // together on the right as outlined circular buttons, all in the
-        // same row (previously call buttons and "more" lived in two
-        // separate rows -- reported directly, fixed here). No encryption
-        // banner text anymore -- see the lock icon next to the peer's name
-        // in MatchesScreen.kt's ThreadHeader instead, which only appears
-        // once `isProductionGradeEncryption` is actually true.
-        Row(
-            modifier = Modifier.fillMaxWidth().height(44.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            val status = when {
-                peerTyping -> "$peerName is typing…"
-                peerOnline -> "Online"
-                else -> ""
-            }
-            Text(status, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f), modifier = Modifier.weight(1f))
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ToolbarIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call") {
-                    scope.launch { callManager.startCall(peerUsername, "audio") }
-                }
-                ToolbarIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call") {
-                    scope.launch { callManager.startCall(peerUsername, "video") }
-                }
-                trailingActions()
-            }
-        }
-        HorizontalDivider(color = mutedText(0.08f))
-
         Box(modifier = Modifier.weight(1f)) {
             if (messages.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -269,20 +231,6 @@ fun ChatPane(
                 )
             }
         }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ToolbarIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.size(38.dp)
-            .clip(CircleShape)
-            .border(BorderStroke(1.dp, mutedText(0.15f)), CircleShape)
-            .combinedClickable(onClick = onClick, onLongClick = {}),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp))
     }
 }
 

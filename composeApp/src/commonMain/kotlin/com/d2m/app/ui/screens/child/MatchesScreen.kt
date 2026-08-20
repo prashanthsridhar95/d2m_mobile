@@ -1,8 +1,11 @@
 package com.d2m.app.ui.screens.child
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +20,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -26,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,15 +41,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.ThreadOut
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.SeriousModeRepository
+import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.ui.components.D2MBadge
@@ -90,6 +100,8 @@ private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Colo
 fun MatchesScreen() {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
+    val chatUiState = org.koin.compose.koinInject<ChatUiState>()
+    val callManager = org.koin.compose.koinInject<CallManager>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -118,6 +130,29 @@ fun MatchesScreen() {
         }
     }
 
+    // Hide App.kt's bottom-tab bar while a conversation is open -- reported
+    // directly: "Bottom nav bar is not required inside a person's chat".
+    // The thread list and open conversation are both this same MATCHES nav
+    // route (switched by `selected`, not a route change), so App.kt has no
+    // way to know a chat is open without this shared flag -- see
+    // ChatUiState.kt's doc comment for why this is a Koin singleton rather
+    // than a nav-graph change.
+    LaunchedEffect(selected) { chatUiState.setConversationOpen(selected != null) }
+    DisposableEffect(Unit) { onDispose { chatUiState.setConversationOpen(false) } }
+
+    // A tapped in-app notification banner (messaging/ui/InAppNotificationLayer.kt)
+    // records which peer to jump to -- once this screen's thread list is
+    // loaded, find the matching thread and open it directly.
+    val pendingOpenPeer by chatUiState.pendingOpenPeerUsername.collectAsState()
+    LaunchedEffect(pendingOpenPeer, threads) {
+        val pending = pendingOpenPeer ?: return@LaunchedEffect
+        val match = threads.firstOrNull { d2mIdToMessagingUsername(it.otherParticipantId) == pending }
+        if (match != null) {
+            selected = match
+            chatUiState.clearPendingOpenPeer()
+        }
+    }
+
     D2MTheme(flow = D2MFlow.CHILD) {
         val t = selected
         if (t == null) {
@@ -137,24 +172,20 @@ fun MatchesScreen() {
             }
         } else {
             // Conversation, full width -- replaces the list entirely (back
-            // button returns to it), same as web's isNarrow branch.
+            // button returns to it), same as web's isNarrow branch. Header
+            // is ONE row -- back button, avatar, name, audio call, video
+            // call, more -- reported directly: "back button, user
+            // thumbnail, Name, audio call button, video call button, more
+            // option all in one line - that's how things are in all the
+            // apps." ChatPane below owns nothing but messages + composer.
+            val peerUsername = remember(t.otherParticipantId) { d2mIdToMessagingUsername(t.otherParticipantId) }
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
-                ) {
-                    IconButton(onClick = { selected = null }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
-                    }
-                    Box(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                        ThreadHeader(thread = t)
-                    }
-                }
-                ChatPane(
-                    peerId = t.otherParticipantId,
-                    peerName = t.otherParticipantName,
-                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                    trailingActions = {
+                ConversationHeader(
+                    thread = t,
+                    onBack = { selected = null },
+                    onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
+                    onStartVideoCall = { scope.launch { callManager.startCall(peerUsername, "video") } },
+                    menuContent = {
                         MoreOptionsMenu(
                             thread = t,
                             onGoSerious = {
@@ -181,6 +212,11 @@ fun MatchesScreen() {
                             },
                         )
                     },
+                )
+                ChatPane(
+                    peerId = t.otherParticipantId,
+                    peerName = t.otherParticipantName,
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                 )
             }
         }
@@ -218,22 +254,30 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
 }
 
 /**
- * Mirrors MatchesScreen.jsx's chat header (lines ~562-639): gradient
- * squircle avatar + presence dot, name with a status subtitle underneath
- * (typing > online > match-status, web's own priority). A small lock icon
+ * Full conversation header -- ONE row: back button, gradient squircle
+ * avatar + presence dot, name (+ lock icon once real E2E encryption is on)
+ * with a status subtitle underneath (typing > online > match-status, web's
+ * own priority), then audio call / video call / more-options together on
+ * the trailing edge. Previously split across two rows (a back+avatar+name
+ * row in MatchesScreen() and a second toolbar row inside ChatPane) --
+ * reported directly as wrong ("all in one line - that's how things are in
+ * all the apps"), fixed by moving the whole header here and having
+ * ChatPane render only messages + composer underneath it. A small lock icon
  * appears next to the name only once messaging is actually end-to-end
  * encrypted (`isProductionGradeEncryption`) -- today that's always false
  * (see messaging/crypto/CryptoProvider.kt), so no lock shows and no other
  * "not encrypted yet" text clutters the header; this is the one place that
  * state surfaces at all now, and only in the direction of "yes, this is
- * secure," never "no, it isn't." The "more options" menu (Go Serious/
- * Revoke/Unmatch) moved into ChatPane's own toolbar row via
- * `trailingActions` -- see MoreOptionsMenu below and the call site in
- * MatchesScreen() -- so audio call/video call/more all sit in one line,
- * instead of the menu living in a second row up here.
+ * secure," never "no, it isn't."
  */
 @Composable
-private fun ThreadHeader(thread: ThreadOut) {
+private fun ConversationHeader(
+    thread: ThreadOut,
+    onBack: () -> Unit,
+    onStartAudioCall: () -> Unit,
+    onStartVideoCall: () -> Unit,
+    menuContent: @Composable () -> Unit,
+) {
     val messagingRepo: MessagingRepository = koinInject()
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
@@ -241,14 +285,20 @@ private fun ThreadHeader(thread: ThreadOut) {
 
     LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
 
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
+        }
         Box(modifier = Modifier.size(40.dp)) {
             Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
             PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (messagingRepo.isProductionGradeEncryption) {
                     Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
                 }
@@ -260,10 +310,30 @@ private fun ThreadHeader(thread: ThreadOut) {
             }
             Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call", onClick = onStartAudioCall)
+            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call", onClick = onStartVideoCall)
+            menuContent()
+        }
     }
 }
 
-/** The "more options" (⋮) menu -- Go Serious/Revoke Serious Mode/Unmatch, plus a pending Serious Mode request's Accept/Decline -- passed into ChatPane's `trailingActions` so it renders in the same toolbar row as the call buttons. */
+/** Same 38dp outlined-circle visual as the call buttons used to be inside ChatPane's old toolbar -- kept identical now that they live here instead. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(38.dp)
+            .clip(CircleShape)
+            .border(BorderStroke(1.dp, mutedText(0.15f)), CircleShape)
+            .combinedClickable(onClick = onClick, onLongClick = {}),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp))
+    }
+}
+
+/** The "more options" (⋮) menu -- Go Serious/Revoke Serious Mode/Unmatch, plus a pending Serious Mode request's Accept/Decline -- rendered as part of ConversationHeader's single row, trailing the call buttons. */
 @Composable
 private fun MoreOptionsMenu(
     thread: ThreadOut,
