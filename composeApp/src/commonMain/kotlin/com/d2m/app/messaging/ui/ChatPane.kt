@@ -1,14 +1,18 @@
 package com.d2m.app.messaging.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,18 +20,23 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,7 +62,6 @@ import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
-import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
@@ -75,6 +84,7 @@ private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "
  * (see messaging/crypto/CryptoProvider.kt) -- a warning banner surfaces that
  * state visibly rather than silently.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
     val identityStore: IdentityStore = koinInject()
@@ -110,57 +120,83 @@ fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
 
     Column(modifier = modifier) {
         if (!messagingRepo.isProductionGradeEncryption) {
-            Text(
-                "Development build: messages are not end-to-end encrypted yet (Phase 6 crypto is stubbed -- see CryptoProvider.kt).",
-                style = MaterialTheme.typography.labelSmall,
-                color = mutedText(0.55f),
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text(peerName, style = MaterialTheme.typography.titleMedium)
-                val status = when {
-                    peerTyping -> "typing…"
-                    peerOnline -> "online"
-                    else -> null
-                }
-                if (status != null) Text(status, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
-            }
-            Row {
-                IconButton(onClick = { scope.launch { callManager.startCall(peerUsername, "audio") } }) {
-                    Icon(Icons.Filled.Call, contentDescription = "Audio call")
-                }
-                IconButton(onClick = { scope.launch { callManager.startCall(peerUsername, "video") } }) {
-                    Icon(Icons.Filled.Videocam, contentDescription = "Video call")
-                }
-            }
-        }
-
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(messages, key = { it.id }) { m ->
-                MessageRow(
-                    message = m,
-                    myUsername = myUsername,
-                    menuOpen = menuForMessageId == m.id,
-                    reactionPickerOpen = reactionPickerFor == m.id,
-                    onOpenMenu = { menuForMessageId = m.id },
-                    onCloseMenu = { menuForMessageId = null },
-                    onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
-                    onCloseReactionPicker = { reactionPickerFor = null },
-                    onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
-                    onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
-                    onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
-                    onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
-                    onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(mutedText(0.05f), RoundedCornerShape(D2MRadius.sm))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    "Development build -- messages aren't end-to-end encrypted yet.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = mutedText(0.5f),
+                    maxLines = 1,
                 )
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+
+        // Toolbar -- online/typing status on the left, call actions on the
+        // right as outlined circular buttons (mirrors MatchesScreen.jsx's
+        // call-button styling: a transparent 38dp circle with a hairline
+        // border, not a bare unstyled icon). The peer's name/match-status
+        // header already lives one level up in MatchesScreen.kt's own
+        // ThreadHeader -- repeating it here just to fill space was the
+        // "randomly placed" duplication reported directly.
+        Row(
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            val status = when {
+                peerTyping -> "$peerName is typing…"
+                peerOnline -> "Online"
+                else -> ""
+            }
+            Text(status, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f), modifier = Modifier.weight(1f))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToolbarIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call") {
+                    scope.launch { callManager.startCall(peerUsername, "audio") }
+                }
+                ToolbarIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call") {
+                    scope.launch { callManager.startCall(peerUsername, "video") }
+                }
+            }
+        }
+        HorizontalDivider(color = mutedText(0.08f))
+
+        Box(modifier = Modifier.weight(1f)) {
+            if (messages.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+                }
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(messages, key = { it.id }) { m ->
+                        MessageRow(
+                            message = m,
+                            myUsername = myUsername,
+                            menuOpen = menuForMessageId == m.id,
+                            reactionPickerOpen = reactionPickerFor == m.id,
+                            onOpenMenu = { menuForMessageId = m.id },
+                            onCloseMenu = { menuForMessageId = null },
+                            onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
+                            onCloseReactionPicker = { reactionPickerFor = null },
+                            onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
+                            onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
+                            onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
+                            onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
+                            onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
+                        )
+                    }
+                }
             }
         }
 
         if (replyingTo != null || editingId != null) {
             Row(
-                modifier = Modifier.fillMaxWidth().background(mutedText(0.06f), RoundedCornerShape(D2MRadius.sm)).padding(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    .background(mutedText(0.06f), RoundedCornerShape(D2MRadius.sm)).padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -169,14 +205,17 @@ fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { replyingTo = null; editingId = null; draft = "" }, modifier = Modifier.size(20.dp)) {
+                IconButton(onClick = { replyingTo = null; editingId = null; draft = "" }, modifier = Modifier.size(22.dp)) {
                     Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
                 }
             }
-            Spacer(Modifier.padding(top = 4.dp))
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             OutlinedTextField(
                 value = draft,
                 onValueChange = { new ->
@@ -193,28 +232,60 @@ fun ChatPane(peerId: String, peerName: String, modifier: Modifier = Modifier) {
                     }
                 },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Message…") },
+                placeholder = { Text("Message…", color = mutedText(0.4f)) },
+                shape = RoundedCornerShape(D2MRadius.pill),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = mutedText(0.15f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedContainerColor = mutedText(0.03f),
+                    focusedContainerColor = mutedText(0.03f),
+                ),
             )
-            D2MButton(
-                text = if (editingId != null) "Save" else "Send",
-                enabled = draft.isNotBlank(),
-                onClick = {
-                    val text = draft
-                    draft = ""
-                    val editing = editingId
-                    val reply = replyingTo
-                    editingId = null
-                    replyingTo = null
-                    scope.launch {
-                        messagingRepo.sendTyping(peerId, false)
-                        when {
-                            editing != null -> messagingRepo.editMessage(peerId, editing, text)
-                            else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+            val canSend = draft.isNotBlank()
+            Box(
+                modifier = Modifier.size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (canSend) MaterialTheme.colorScheme.primary else mutedText(0.12f))
+                    .combinedClickable(enabled = canSend, onClick = {
+                        val text = draft
+                        draft = ""
+                        val editing = editingId
+                        val reply = replyingTo
+                        editingId = null
+                        replyingTo = null
+                        scope.launch {
+                            messagingRepo.sendTyping(peerId, false)
+                            when {
+                                editing != null -> messagingRepo.editMessage(peerId, editing, text)
+                                else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+                            }
                         }
-                    }
-                },
-            )
+                    }, onLongClick = {}),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (editingId != null) Icons.Filled.Check else Icons.Filled.Send,
+                    contentDescription = if (editingId != null) "Save" else "Send",
+                    tint = if (canSend) Color.White else mutedText(0.4f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ToolbarIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(38.dp)
+            .clip(CircleShape)
+            .border(BorderStroke(1.dp, mutedText(0.15f)), CircleShape)
+            .combinedClickable(onClick = onClick, onLongClick = {}),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp))
     }
 }
 
