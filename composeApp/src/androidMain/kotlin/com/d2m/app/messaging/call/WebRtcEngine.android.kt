@@ -91,8 +91,13 @@ class AndroidWebRtcEngine(private val appContext: Context) : WebRtcEngine {
     override suspend fun createPeerConnection(iceServers: List<IceServer>, observer: PeerConnectionObserver): Any {
         val f = ensureFactory()
         val rtcIceServers = iceServers.mapNotNull { s ->
-            val first = s.urls.firstOrNull() ?: return@mapNotNull null
-            val b = PeerConnection.IceServer.builder(first).setUrls(s.urls)
+            if (s.urls.isEmpty()) return@mapNotNull null
+            // builder(List<String>) sets urls directly -- the single-String
+            // builder(String) + chained .setUrls() combo doesn't exist on
+            // this SDK's IceServer.Builder (compile error reported against
+            // the first version of this file); this List overload is the
+            // one that's actually there.
+            val b: PeerConnection.IceServer.Builder = PeerConnection.IceServer.builder(s.urls)
             s.username?.let { b.setUsername(it) }
             s.credential?.let { b.setPassword(it) }
             b.createIceServer()
