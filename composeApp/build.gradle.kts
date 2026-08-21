@@ -90,6 +90,9 @@ kotlin {
                 // WebSocketCapability" on every single connect attempt).
                 implementation(libs.ktor.client.okhttp)
                 implementation(libs.androidx.activity.compose)
+                // NotificationCompat.CallStyle/MessagingStyle + RemoteInput --
+                // see push/LocalNotificationBridge.kt.
+                implementation(libs.androidx.core.ktx)
                 implementation(libs.sqldelight.android.driver)
                 // Requires the google-services Gradle plugin + a real
                 // google-services.json (from your own Firebase project) to

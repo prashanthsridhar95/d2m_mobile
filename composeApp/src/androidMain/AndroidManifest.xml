@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Lets the incoming-call notification's ring UI show over the lock
+         screen (push/LocalNotificationBridge.kt's postIncomingCallNotification).
+         Normal-protection pre-Android 14; on 14+ the OS may still block it
+         until the user allows it in Settings -- CallManager/CallLayer's
+         existing in-app incoming-call UI (shown whenever the app IS
+         foregrounded) is unaffected either way, this only covers the
+         backgrounded/locked case. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
         android:name=".D2MApplication"
@@ -45,6 +53,13 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Incoming-call notification's Answer/Decline actions and a
+             message notification's inline quick-reply -- see
+             push/LocalNotificationBridge.kt. Not exported: only this app's
+             own PendingIntents target them. -->
+        <receiver android:name=".push.CallActionReceiver" android:exported="false" />
+        <receiver android:name=".push.MessageReplyReceiver" android:exported="false" />
 
     </application>
 </manifest>

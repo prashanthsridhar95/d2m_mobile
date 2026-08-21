@@ -2,13 +2,18 @@ package com.d2m.app.push
 
 import android.app.Activity
 import android.app.Application
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.Build
 import android.os.Bundle
+import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import com.d2m.app.MainActivity
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
@@ -29,6 +34,20 @@ const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
  * background. D2MFirebaseMessagingService.onMessageReceived was previously
  * a no-op (see its own doc comment, and PushTokenRegistrar.kt) -- nothing
  * ever showed a notification for anything, foreground or background.
+ *
+ * Since then, also answers two follow-up UX reports directly:
+ *  - "Ringtone, message tone not included" -- both channels below now carry
+ *    real audio: the calls channel uses AudioAttributes.USAGE_NOTIFICATION_
+ *    RINGTONE (the system's actual ringtone, played/looped the way an
+ *    incoming call is supposed to sound, not a single notification "ding"),
+ *    the messages channel gets an explicit default notification sound
+ *    (previously implicit/unset).
+ *  - "When receiving a call through notif, quick actions not shown. same
+ *    for messages" -- postIncomingCallNotification below uses
+ *    NotificationCompat.CallStyle with real Answer/Decline actions
+ *    (CallActionReceiver.kt), and postMessageNotification uses
+ *    NotificationCompat.MessagingStyle with an inline quick-reply action
+ *    (MessageReplyReceiver.kt) -- both work without opening the app.
  *
  * IMPORTANT scope boundary, stated plainly: this rides MessagingRepository's
  * live WebSocket connection, which Android keeps open for a while after the
@@ -57,12 +76,37 @@ const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
  */
 fun installLocalNotificationBridge(app: Application) {
     val notificationManager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    // Ringtone-style audio usage (not a plain notification sound) -- this is
+    // what actually makes Android treat it like an incoming call: played at
+    // ringer volume (not media/notification volume), respects the same
+    // system rules a real phone call would. Falls back to the system's
+    // current default ringtone; if even that's unavailable (some emulator
+    // images ship with none), the channel just has no sound rather than
+    // crashing channel creation.
+    val ringtoneAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+    val ringtoneUri = runCatching { RingtoneManager.getActualDefaultRingtoneUri(app, RingtoneManager.TYPE_RINGTONE) }.getOrNull()
+        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+
+    val messageAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+    val messageSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
     notificationManager.createNotificationChannel(
-        NotificationChannel(NOTIFICATION_CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH),
+        NotificationChannel(NOTIFICATION_CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
+            enableVibration(true)
+            runCatching { setSound(messageSoundUri, messageAttributes) }
+        },
     )
     notificationManager.createNotificationChannel(
         NotificationChannel(NOTIFICATION_CHANNEL_CALLS, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
             enableVibration(true)
+            runCatching { setSound(ringtoneUri, ringtoneAttributes) }
         },
     )
 
@@ -97,11 +141,11 @@ fun installLocalNotificationBridge(app: Application) {
         val messagingRepo = koin.get<MessagingRepository>()
         messagingRepo.inboxNotifications.collect { event ->
             if (isForeground) return@collect
-            postD2mNotification(
+            postMessageNotification(
                 app,
                 notificationManager,
-                NOTIFICATION_CHANNEL_MESSAGES,
                 nextNotificationId++,
+                event.peerUsername,
                 messagingRepo.peerDisplayName(event.peerUsername),
                 event.preview,
             )
@@ -110,32 +154,153 @@ fun installLocalNotificationBridge(app: Application) {
 
     // Incoming calls -- CallLayer.kt already shows a full-screen in-app
     // ring UI while foregrounded, so this only fires while backgrounded too.
+    // Notification id is derived from callId (not the shared counter) so it
+    // can be looked up again below to cancel it the moment the call stops
+    // being INCOMING for any other reason (answered/declined via some other
+    // path, caller hung up before we responded, it timed out) -- otherwise a
+    // stale "Incoming call" notification with dead Answer/Decline buttons
+    // could sit there ringing after the call itself is long gone.
     scope.launch {
         val messagingRepo = koin.get<MessagingRepository>()
         val callManager = koin.get<CallManager>()
         var lastNotifiedCallId: String? = null
         callManager.view.collect { view ->
-            if (view != null && view.phase == CallPhase.INCOMING && !isForeground && view.callId != lastNotifiedCallId) {
-                lastNotifiedCallId = view.callId
-                postD2mNotification(
-                    app,
-                    notificationManager,
-                    NOTIFICATION_CHANNEL_CALLS,
-                    nextNotificationId++,
-                    "Incoming call",
-                    messagingRepo.peerDisplayName(view.peerUsername),
-                )
+            if (view != null && view.phase == CallPhase.INCOMING) {
+                if (!isForeground && view.callId != lastNotifiedCallId) {
+                    lastNotifiedCallId = view.callId
+                    postIncomingCallNotification(
+                        app,
+                        notificationManager,
+                        view.callId,
+                        messagingRepo.peerDisplayName(view.peerUsername),
+                    )
+                }
+            } else if (lastNotifiedCallId != null) {
+                notificationManager.cancel(lastNotifiedCallId.hashCode())
+                lastNotifiedCallId = null
             }
         }
     }
 }
 
 /**
- * Shared by installLocalNotificationBridge above and
- * D2MFirebaseMessagingService.onMessageReceived once the backend actually
- * sends a real push. Opens MainActivity on tap -- there's no deep link yet
- * for "open this exact thread" (see MatchesScreen.kt/ChatUiState.kt), so
- * this lands on whatever screen the app resumes to rather than the exact
+ * NotificationCompat.CallStyle.forIncomingCall -- renders as a real
+ * full-bleed incoming-call notification on Android 12+ (large avatar,
+ * prominent Answer/Decline) and degrades to a normal high-priority
+ * notification with the same two actions on older versions. Answer starts
+ * MainActivity too (see CallActionReceiver) since accepting needs the
+ * actual in-call UI, not just a background action.
+ *
+ * setFullScreenIntent additionally asks to show this over the lock screen --
+ * wrapped in runCatching since Android 14+ can silently ignore it until the
+ * user grants "Settings > Apps > D2M > Full screen notifications" (see the
+ * USE_FULL_SCREEN_INTENT permission's comment in AndroidManifest.xml); the
+ * heads-up notification with working actions still shows either way.
+ */
+fun postIncomingCallNotification(context: Context, notificationManager: NotificationManager, callId: String, callerName: String) {
+    val notificationId = callId.hashCode()
+    val fullScreenIntent = PendingIntent.getActivity(
+        context,
+        notificationId,
+        Intent(context, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    fun actionIntent(action: String) = PendingIntent.getBroadcast(
+        context,
+        notificationId * 31 + action.hashCode(),
+        Intent(context, CallActionReceiver::class.java).apply {
+            this.action = action
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    val caller = Person.Builder().setName(callerName).build()
+    val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_CALLS)
+        .setSmallIcon(context.applicationInfo.icon)
+        .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, actionIntent(ACTION_DECLINE_CALL), actionIntent(ACTION_ACCEPT_CALL)))
+        .setContentTitle(callerName)
+        .setContentText("Incoming call")
+        .setContentIntent(fullScreenIntent)
+        .setCategory(NotificationCompat.CATEGORY_CALL)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setOngoing(true)
+        .setAutoCancel(false)
+        .setLocalOnly(false) // deliberately -- mirrors to a paired Wear OS watch (point 5).
+        .apply { if (canShowFullScreenIntent(context)) setFullScreenIntent(fullScreenIntent, true) }
+        .build()
+    runCatching { notificationManager.notify(notificationId, notification) }
+}
+
+private fun canShowFullScreenIntent(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < 34) return true // permission auto-granted pre-Android 14
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    return runCatching { notificationManager.canUseFullScreenIntent() }.getOrDefault(false)
+}
+
+/**
+ * NotificationCompat.MessagingStyle + an inline RemoteInput reply action --
+ * lets a reply go out (MessageReplyReceiver) without opening the app, same
+ * as any modern messaging app's notification.
+ */
+fun postMessageNotification(
+    context: Context,
+    notificationManager: NotificationManager,
+    notificationId: Int,
+    peerUsername: String,
+    senderName: String,
+    preview: String,
+) {
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val contentIntent = PendingIntent.getActivity(
+        context,
+        notificationId,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    val remoteInput = RemoteInput.Builder(KEY_QUICK_REPLY_INPUT).setLabel("Reply").build()
+    val replyIntent = PendingIntent.getBroadcast(
+        context,
+        notificationId,
+        Intent(context, MessageReplyReceiver::class.java).apply {
+            action = ACTION_QUICK_REPLY
+            putExtra(EXTRA_PEER_USERNAME, peerUsername)
+            putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+        },
+        // Mutable -- required for the platform to attach the RemoteInput's
+        // typed text onto this PendingIntent when the user submits it.
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+    )
+    val replyAction = NotificationCompat.Action.Builder(0, "Reply", replyIntent)
+        .addRemoteInput(remoteInput)
+        .setAllowGeneratedReplies(true)
+        .build()
+
+    val sender = Person.Builder().setName(senderName).build()
+    val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_MESSAGES)
+        .setSmallIcon(context.applicationInfo.icon)
+        .setStyle(
+            NotificationCompat.MessagingStyle(sender)
+                .addMessage(preview, System.currentTimeMillis(), sender),
+        )
+        .setContentIntent(contentIntent)
+        .addAction(replyAction)
+        .setAutoCancel(true)
+        .setLocalOnly(false) // deliberately -- mirrors to a paired Wear OS watch (point 5).
+        .build()
+    runCatching { notificationManager.notify(notificationId, notification) }
+}
+
+/**
+ * Shared by D2MFirebaseMessagingService.onMessageReceived once the backend
+ * actually sends a real push, for anything that doesn't warrant the
+ * call/message styling above. Opens MainActivity on tap -- there's no deep
+ * link yet for "open this exact thread" (see MatchesScreen.kt/ChatUiState.kt),
+ * so this lands on whatever screen the app resumes to rather than the exact
  * conversation; acceptable for now, a smaller follow-up if it matters later.
  */
 fun postD2mNotification(context: Context, notificationManager: NotificationManager, channelId: String, notificationId: Int, title: String, text: String) {
@@ -152,7 +317,7 @@ fun postD2mNotification(context: Context, notificationManager: NotificationManag
     // notification-icon asset (none exists in this repo) -- fine
     // functionally, just not the crisp single-color icon Android prefers
     // in the status bar; a real icon asset is a design follow-up.
-    val notification = Notification.Builder(context, channelId)
+    val notification = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(context.applicationInfo.icon)
         .setContentTitle(title)
         .setContentText(text)

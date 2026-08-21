@@ -33,6 +33,11 @@ android-compileSdk = "34"
 android-minSdk = "26"
 android-targetSdk = "34"
 firebase-bom-version = "33.4.0"
+# NotificationCompat.CallStyle/MessagingStyle + RemoteInput for the incoming-
+# call ringtone/quick-actions and message quick-reply notifications -- not
+# previously a direct dependency (LocalNotificationBridge.kt used the raw
+# platform android.app.Notification.Builder, which has neither).
+androidx-core-version = "1.13.1"
 # GetStream's Maven Central republish of Google's official prebuilt WebRTC
 # AAR (Google stopped publishing org.webrtc:google-webrtc there directly) --
 # same `org.webrtc.*` package/API as upstream, just a different groupId.
@@ -71,6 +76,7 @@ ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "k
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core-version" }
 
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation-compose-version" }
 lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
