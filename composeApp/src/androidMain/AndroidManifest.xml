@@ -12,7 +12,7 @@
     <!-- Lets the incoming-call notification's ring UI show over the lock
          screen (push/LocalNotificationBridge.kt's postIncomingCallNotification).
          Normal-protection pre-Android 14; on 14+ the OS may still block it
-         until the user allows it in Settings -- CallManager/CallLayer's
+         until the user allows it in Settings. CallManager/CallLayer's
          existing in-app incoming-call UI (shown whenever the app IS
          foregrounded) is unaffected either way, this only covers the
          backgrounded/locked case. -->
@@ -55,7 +55,7 @@
         </service>
 
         <!-- Incoming-call notification's Answer/Decline actions and a
-             message notification's inline quick-reply -- see
+             message notification's inline quick-reply. See
              push/LocalNotificationBridge.kt. Not exported: only this app's
              own PendingIntents target them. -->
         <receiver android:name=".push.CallActionReceiver" android:exported="false" />
