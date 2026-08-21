@@ -56,6 +56,21 @@ import kotlin.coroutines.resumeWithException
  * observer callback or builder overload), not a design problem -- send the
  * error and it's a quick fix.
  */
+// Sender-side bitrate ceilings/floors -- see addAudioTrack/addVideoTrack's
+// own comments for why these exist at all (nothing previously told the
+// encoder what it was allowed to use, capping real-world quality well below
+// what the 1280x720@30 capture in acquireCamera could actually deliver).
+// 720p-class targets, in the same range Meet/WhatsApp operate in for 1:1
+// calls -- not the higher multi-Mbps ceilings appropriate for 1080p/screen
+// share, which is real headroom for a future quality tier, not this one.
+private const val VIDEO_MAX_BITRATE_BPS = 2_500_000
+private const val VIDEO_MIN_BITRATE_BPS = 200_000
+// OPUS full-band voice quality tops out well before this -- 64kbps mono is
+// already indistinguishable from a landline call; going higher mostly just
+// spends bandwidth encoding room noise more faithfully, not worth it for a
+// voice/video-call use case (as opposed to, say, a hi-fi audio broadcast).
+private const val AUDIO_MAX_BITRATE_BPS = 64_000
+
 /** Set by D2MApplication.onCreate(), same pattern as AndroidSettingsContextHolder in data/session/Settings.android.kt -- keeps commonMain platform-agnostic (AppModule.kt only ever calls the expect createWebRtcEngine() factory, never this class directly). */
 object AndroidWebRtcContextHolder {
     lateinit var appContext: Context
@@ -158,11 +173,52 @@ class AndroidWebRtcEngine(private val appContext: Context) : WebRtcEngine {
         }
     }
 
-    override fun addAudioTrack(pc: Any, track: Any, streamId: String): Any =
-        (pc as PeerConnection).addTrack(track as AudioTrack, listOf(streamId))
+    override fun addAudioTrack(pc: Any, track: Any, streamId: String): Any {
+        val sender = (pc as PeerConnection).addTrack(track as AudioTrack, listOf(streamId))
+        // Without an explicit cap, OPUS negotiates a fairly conservative
+        // default bitrate -- fine for basic intelligibility, noticeably
+        // thinner than what WhatsApp/Meet actually send. 64kbps mono is
+        // comfortably into "full-band, indistinguishable from a phone call"
+        // territory for OPUS while staying trivial on bandwidth (see
+        // AUDIO_MAX_BITRATE_BPS's own comment for the reasoning against
+        // going higher).
+        runCatching {
+            val params = sender.parameters
+            for (encoding in params.encodings) encoding.maxBitrateBps = AUDIO_MAX_BITRATE_BPS
+            sender.parameters = params
+        }
+        return sender
+    }
 
-    override fun addVideoTrack(pc: Any, track: Any, streamId: String): Any =
-        (pc as PeerConnection).addTrack(track as VideoTrack, listOf(streamId))
+    override fun addVideoTrack(pc: Any, track: Any, streamId: String): Any {
+        val sender = (pc as PeerConnection).addTrack(track as VideoTrack, listOf(streamId))
+        // Reported directly: "video & audio quality is very bad... want top
+        // quality competing Google Meet, WhatsApp." Root cause for video:
+        // capture was already a solid 1280x720@30 (see acquireCamera above),
+        // but nothing ever told the ENCODER/RtpSender what bitrate it's
+        // allowed to use -- left fully to WebRTC's built-in bandwidth
+        // estimator (GCC), which starts conservative and ramps up slowly,
+        // and more importantly has no explicit ceiling raised to match a
+        // real 720p picture's needs. Google Meet/WhatsApp-class quality at
+        // 720p wants roughly 1.5-2.5Mbps; without this, senders often
+        // plateau well below that even on a healthy connection, which reads
+        // as persistent blockiness/softness that never clears up.
+        // degradationPreference = MAINTAIN_FRAMERATE keeps motion smooth
+        // (drops resolution before dropping frames) under real bandwidth
+        // pressure, matching how a 1:1 video call should degrade -- a
+        // stuttery-but-sharp frame is worse for conversation than a
+        // slightly softer smooth one.
+        runCatching {
+            val params = sender.parameters
+            for (encoding in params.encodings) {
+                encoding.maxBitrateBps = VIDEO_MAX_BITRATE_BPS
+                encoding.minBitrateBps = VIDEO_MIN_BITRATE_BPS
+            }
+            params.degradationPreference = org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+            sender.parameters = params
+        }
+        return sender
+    }
 
     override fun replaceVideoTrack(sender: Any, track: Any?) {
         (sender as RtpSender).setTrack(track as? VideoTrack, false)
