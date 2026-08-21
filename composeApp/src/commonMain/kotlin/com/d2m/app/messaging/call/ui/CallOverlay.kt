@@ -1,5 +1,12 @@
 package com.d2m.app.messaging.call.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,17 +66,30 @@ fun CallOverlay(callManager: CallManager, view: CallView, streams: CallStreams, 
     val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        if (view.hasRemoteVideo) {
-            VideoRendererView(track = streams.remoteVideoTrack, mirror = false, modifier = Modifier.fillMaxSize())
-        } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(peerName, style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                    Spacer(Modifier.height(8.dp))
-                    Text(statusLabel(view), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
-                    if (!view.remoteMicOn) {
+        // Crossfade instead of an instant swap -- the moment remote video
+        // actually starts flowing is a meaningful state change (audio-only
+        // waiting screen -> the other person's live picture) and deserves
+        // to read as a transition, not a jump cut.
+        Crossfade(targetState = view.hasRemoteVideo, animationSpec = tween(280)) { hasVideo ->
+            if (hasVideo) {
+                VideoRendererView(track = streams.remoteVideoTrack, mirror = false, modifier = Modifier.fillMaxSize())
+            } else {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Pulsing while we're still trying to connect; a plain
+                        // static avatar once actually in the call (nothing left
+                        // to signal "in progress" about at that point).
+                        if (view.phase == CallPhase.CALLING || view.phase == CallPhase.CONNECTING) {
+                            PulsingAvatar(initial = peerName.take(1).uppercase(), size = 72.dp)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        Text(peerName, style = MaterialTheme.typography.headlineSmall, color = Color.White)
                         Spacer(Modifier.height(8.dp))
-                        Text("${peerName} is muted", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                        Text(statusLabel(view), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
+                        if (!view.remoteMicOn) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("${peerName} is muted", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                        }
                     }
                 }
             }
@@ -158,13 +178,21 @@ private fun formatDuration(startedAtMs: Long): String {
 
 @Composable
 private fun CallControlButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, background: Color = Color.White.copy(alpha = 0.15f)) {
+    // Background eases between states (e.g. mic on/off doesn't itself
+    // recolor here, but hangup's red vs. the neutral buttons benefits from
+    // the same treatment if a caller ever animates `background` in) and the
+    // icon crossfades rather than popping when it swaps (mic <-> mic-off,
+    // video <-> video-off) -- a toggle should visibly acknowledge the tap.
+    val animatedBackground by animateColorAsState(background, tween(150))
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            modifier = Modifier.size(56.dp).clip(CircleShape).background(background),
+            modifier = Modifier.size(56.dp).clip(CircleShape).background(animatedBackground),
             contentAlignment = Alignment.Center,
         ) {
             IconButton(onClick = onClick) {
-                Icon(icon, contentDescription = label, tint = Color.White)
+                AnimatedContent(targetState = icon, transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(120)) }) { animatedIcon ->
+                    Icon(animatedIcon, contentDescription = label, tint = Color.White)
+                }
             }
         }
     }

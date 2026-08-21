@@ -19,6 +19,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -122,13 +123,33 @@ class MessagingRepository(
     private val cryptoProvider: CryptoProvider,
     private val identityStore: IdentityStore,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Safety net for every coroutine launched on [scope]. Without this, an
+     * uncaught exception from any of them (most realistically
+     * `cryptoProvider.encrypt/decrypt` -- see the send-path try/catches
+     * below, added after a real "messages/calls aren't sent or received,
+     * and the app crashes" bug report) propagates to the platform's default
+     * uncaught-exception handler and kills the whole app. `SupervisorJob`
+     * alone does NOT prevent this -- it only stops one child's failure from
+     * cancelling its siblings, it doesn't swallow the exception itself.
+     * This handler is the last line of defense; individual call sites below
+     * still catch what they can locally so failures are recoverable
+     * (message marked FAILED, a human-readable message on [sendErrors])
+     * rather than just silently logged here.
+     */
+    private val exceptionHandler = CoroutineExceptionHandler { _, e ->
+        println("MessagingRepository: uncaught coroutine exception (recovered, not fatal): $e")
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
     private val _messagesByPeer = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap())
     private val _typingByPeer = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val _presenceByUser = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val _unreadByPeer = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val _peerDisplayNames = MutableStateFlow<Map<String, String>>(emptyMap())
     private val _inboxNotifications = MutableSharedFlow<InboxNotification>(extraBufferCapacity = 8)
+    /** Human-readable, transient failures for ChatPane to surface as a snackbar (Don Norman "visibility of system status" -- a send failure used to just vanish with no feedback at all). Not for call signaling failures, which have their own CallManager.errors -- see that class. */
+    private val _sendErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val sendErrors: SharedFlow<String> = _sendErrors.asSharedFlow()
     private val typingClearJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
     private val subscribedPeers = mutableSetOf<String>()
     private var activePeer: String? = null
@@ -226,11 +247,29 @@ class MessagingRepository(
         val peerUsername = d2mIdToMessagingUsername(peerD2mId)
         val id = Uuid.random().toString()
         appendMessage(peerUsername, ChatMessage(id, me, peerUsername, t, Clock.System.now().toEpochMilliseconds(), isMine = true, status = MessageStatus.SENDING, replyTo = replyTo))
+        sendTextInternal(id, me, peerUsername, t, replyTo)
+    }
 
-        val payload = ChatPayload.Text(t, replyTo)
-        val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-        val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-        wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+    private suspend fun sendTextInternal(id: String, me: String, peerUsername: String, t: String, replyTo: ReplyContext?) {
+        try {
+            val payload = ChatPayload.Text(t, replyTo)
+            val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
+            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
+            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        } catch (e: Throwable) {
+            updateMessage(id) { it.copy(status = MessageStatus.FAILED) }
+            _sendErrors.tryEmit("Message couldn't be sent -- tap it to retry")
+        }
+    }
+
+    /** Re-encrypts and re-sends a message that's sitting at MessageStatus.FAILED -- the tap-to-retry affordance on the failed-message bubble (Don Norman: an error state is only useful if there's an obvious, immediate way to recover from it). */
+    suspend fun retryFailedMessage(peerD2mId: String, messageId: String) {
+        val me = myUsername ?: return
+        val peerUsername = d2mIdToMessagingUsername(peerD2mId)
+        val message = _messagesByPeer.value[peerUsername]?.firstOrNull { it.id == messageId } ?: return
+        if (message.status != MessageStatus.FAILED) return
+        updateMessage(messageId) { it.copy(status = MessageStatus.SENDING) }
+        sendTextInternal(messageId, me, peerUsername, message.text, message.replyTo)
     }
 
     /** Uploads `bytes` to the messaging server's blob store and sends a media chat message. See this class's doc comment: bytes travel un-encrypted today (stub crypto) -- `MediaMeta.key`/`.iv` are placeholders, not real AES-GCM material, until a real CryptoProvider lands. */
@@ -273,12 +312,21 @@ class MessagingRepository(
         val t = newText.trim()
         if (t.isEmpty()) return
         val peerUsername = d2mIdToMessagingUsername(peerD2mId)
+        val previous = _messagesByPeer.value[peerUsername]?.firstOrNull { it.id == messageId }
         updateMessage(messageId) { it.copy(text = t, edited = true) }
 
-        val payload = ChatPayload.Edit(messageId, t)
-        val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-        val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-        wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        try {
+            val payload = ChatPayload.Edit(messageId, t)
+            val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
+            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
+            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        } catch (e: Throwable) {
+            // Revert the optimistic edit so the bubble doesn't silently show
+            // text the peer never actually received (Don Norman: the visible
+            // state must match reality, not what we merely attempted).
+            if (previous != null) updateMessage(messageId) { previous }
+            _sendErrors.tryEmit("Edit couldn't be sent")
+        }
     }
 
     /** Delete-for-everyone: tombstones the bubble on both sides (keeps its slot, shows "deleted"). */
@@ -286,12 +334,18 @@ class MessagingRepository(
     suspend fun deleteForEveryone(peerD2mId: String, messageId: String) {
         val me = myUsername ?: return
         val peerUsername = d2mIdToMessagingUsername(peerD2mId)
+        val previous = _messagesByPeer.value[peerUsername]?.firstOrNull { it.id == messageId }
         updateMessage(messageId) { it.copy(deleted = true) }
 
-        val payload = ChatPayload.Delete(messageId)
-        val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-        val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-        wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        try {
+            val payload = ChatPayload.Delete(messageId)
+            val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
+            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
+            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        } catch (e: Throwable) {
+            if (previous != null) updateMessage(messageId) { previous }
+            _sendErrors.tryEmit("Delete couldn't be sent")
+        }
     }
 
     /** Local-only: removes the row from this device, nothing sent -- the peer's copy is untouched. */
@@ -311,10 +365,16 @@ class MessagingRepository(
         val action = if (alreadyReacted) "remove" else "add"
         updateMessage(message.id) { applyReaction(it, emoji, me, action) }
 
-        val payload = ChatPayload.Reaction(message.id, emoji, action)
-        val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-        val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-        wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        try {
+            val payload = ChatPayload.Reaction(message.id, emoji, action)
+            val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
+            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
+            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+        } catch (e: Throwable) {
+            // Revert the optimistic reaction toggle -- same inverse action undoes it.
+            updateMessage(message.id) { applyReaction(it, emoji, me, if (action == "add") "remove" else "add") }
+            _sendErrors.tryEmit("Reaction couldn't be sent")
+        }
     }
 
     suspend fun sendTyping(peerD2mId: String, isTyping: Boolean) {
@@ -322,24 +382,47 @@ class MessagingRepository(
         wsClient.send(if (isTyping) ClientToServer.TypingStart(peerUsername) else ClientToServer.TypingStop(peerUsername))
     }
 
-    /** Sends a CallSignal.* over the same encrypted channel, tagged ephemeral (never queued/stored server-side) and callInvite only for the invite that starts a call (lets the server push "incoming call" without seeing content). Called by call/CallManager.kt. */
+    /**
+     * Sends a CallSignal.* over the same encrypted channel, tagged ephemeral
+     * (never queued/stored server-side) and callInvite only for the invite
+     * that starts a call (lets the server push "incoming call" without
+     * seeing content). Called by call/CallManager.kt.
+     *
+     * Returns false (never throws) on any failure -- most call sites in
+     * CallManager fire this from a bare `scope.launch { }` with no try/catch
+     * of their own (hangup, decline, ICE candidates, mid-call mute/camera
+     * state, mid-ring resend): call signaling is inherently best-effort,
+     * same as a dropped UDP packet, so a crypto/network failure here should
+     * degrade gracefully, not propagate an uncaught exception that crashes
+     * the whole app on a background dispatcher thread. That crash was a real
+     * bug: ending a call launched this on CallManager's scope with no
+     * handler, so a failure here took the app down right as `teardown()` ran.
+     * The two call sites that DO need to know about failure (starting a call,
+     * accepting one) check this return value explicitly instead.
+     */
     @OptIn(ExperimentalUuidApi::class)
-    suspend fun sendCallSignal(peerUsername: String, signal: CallSignal) {
-        val me = myUsername ?: return
-        val payload = ChatPayload.Call(signal)
-        val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-        val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-        val envelope = MessageEnvelope(
-            id = Uuid.random().toString(),
-            from = me,
-            to = peerUsername,
-            ciphertextType = ciphertextType,
-            body = body,
-            sentAt = Clock.System.now().toEpochMilliseconds(),
-            ephemeral = true,
-            callInvite = signal is CallSignal.Invite,
-        )
-        wsClient.send(ClientToServer.MessageSend(envelope))
+    suspend fun sendCallSignal(peerUsername: String, signal: CallSignal): Boolean {
+        val me = myUsername ?: return false
+        return try {
+            val payload = ChatPayload.Call(signal)
+            val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
+            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
+            val envelope = MessageEnvelope(
+                id = Uuid.random().toString(),
+                from = me,
+                to = peerUsername,
+                ciphertextType = ciphertextType,
+                body = body,
+                sentAt = Clock.System.now().toEpochMilliseconds(),
+                ephemeral = true,
+                callInvite = signal is CallSignal.Invite,
+            )
+            wsClient.send(ClientToServer.MessageSend(envelope))
+            true
+        } catch (e: Throwable) {
+            println("MessagingRepository.sendCallSignal: failed to send ${signal::class.simpleName} to $peerUsername: $e")
+            false
+        }
     }
 
     /** Appends a call-history bubble ("Missed call", "Video call · 3:12", ...) into chat -- called by CallManager.onEnded. Not a real ChatPayload send: call logs are local-only, same as web (each side independently logs its own view of how the call ended). */

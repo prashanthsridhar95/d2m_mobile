@@ -1,5 +1,14 @@
 package com.d2m.app.messaging.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -23,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
@@ -33,6 +43,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -111,6 +124,7 @@ fun ChatPane(
     var reactionPickerFor by remember { mutableStateOf<String?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     DisposableEffect(peerId) {
         scope.launch { messagingRepo.start(apiClient.client) }
@@ -123,112 +137,144 @@ fun ChatPane(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
-    Column(modifier = modifier) {
-        Box(modifier = Modifier.weight(1f)) {
-            if (messages.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+    // Don Norman "visibility of system status": a send/edit/delete/reaction
+    // that failed used to just vanish with zero feedback -- now it surfaces
+    // as a transient snackbar (MessagingRepository.sendErrors), same pattern
+    // the rest of the OS uses for "this action didn't go through."
+    LaunchedEffect(Unit) {
+        messagingRepo.sendErrors.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
+
+    Box(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (messages.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+                    }
+                } else {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(messages, key = { it.id }) { m ->
+                            MessageRow(
+                                message = m,
+                                myUsername = myUsername,
+                                menuOpen = menuForMessageId == m.id,
+                                reactionPickerOpen = reactionPickerFor == m.id,
+                                // Automatic fade-in on arrival + smooth reflow when a bubble
+                                // above/below it changes size (edit, reaction, status tick) --
+                                // the single highest-value animation for a chat list, and Compose
+                                // provides it for free once items are keyed (they already are).
+                                modifier = Modifier.animateItem(),
+                                onOpenMenu = { menuForMessageId = m.id },
+                                onCloseMenu = { menuForMessageId = null },
+                                onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
+                                onCloseReactionPicker = { reactionPickerFor = null },
+                                onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
+                                onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
+                                onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
+                                onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
+                                onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
+                                onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
+                            )
+                        }
+                    }
                 }
-            } else {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(messages, key = { it.id }) { m ->
-                        MessageRow(
-                            message = m,
-                            myUsername = myUsername,
-                            menuOpen = menuForMessageId == m.id,
-                            reactionPickerOpen = reactionPickerFor == m.id,
-                            onOpenMenu = { menuForMessageId = m.id },
-                            onCloseMenu = { menuForMessageId = null },
-                            onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
-                            onCloseReactionPicker = { reactionPickerFor = null },
-                            onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
-                            onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
-                            onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
-                            onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
-                            onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
-                        )
+                SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { data ->
+                    Snackbar(snackbarData = data, containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+
+            // AnimatedVisibility (expand/fade) instead of a plain `if` -- the
+            // reply/edit context bar now slides in and out instead of
+            // popping abruptly, and its appearance/disappearance itself IS
+            // the feedback that "reply mode" was entered or left.
+            AnimatedVisibility(
+                visible = replyingTo != null || editingId != null,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit = shrinkVertically(tween(150)) + fadeOut(tween(120)),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        .background(mutedText(0.06f), RoundedCornerShape(D2MRadius.sm)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        if (editingId != null) "Editing message" else "Replying to ${replyingTo?.let { if (it.isMine) "yourself" else peerName }}: ${replyingTo?.text.orEmpty().take(60)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { replyingTo = null; editingId = null; draft = "" }, modifier = Modifier.size(22.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
                     }
                 }
             }
-        }
 
-        if (replyingTo != null || editingId != null) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
-                    .background(mutedText(0.06f), RoundedCornerShape(D2MRadius.sm)).padding(horizontal = 10.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    if (editingId != null) "Editing message" else "Replying to ${replyingTo?.let { if (it.isMine) "yourself" else peerName }}: ${replyingTo?.text.orEmpty().take(60)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { replyingTo = null; editingId = null; draft = "" }, modifier = Modifier.size(22.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { new ->
-                    val wasEmpty = draft.isEmpty()
-                    draft = new
-                    if (editingId == null) {
-                        if (new.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
-                        typingJob?.cancel()
-                        typingJob = scope.launch {
-                            delay(2_000)
-                            messagingRepo.sendTyping(peerId, false)
-                        }
-                        if (new.isEmpty()) scope.launch { messagingRepo.sendTyping(peerId, false) }
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message…", color = mutedText(0.4f)) },
-                shape = RoundedCornerShape(D2MRadius.pill),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = mutedText(0.15f),
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedContainerColor = mutedText(0.03f),
-                    focusedContainerColor = mutedText(0.03f),
-                ),
-            )
-            val canSend = draft.isNotBlank()
-            Box(
-                modifier = Modifier.size(44.dp)
-                    .clip(CircleShape)
-                    .background(if (canSend) MaterialTheme.colorScheme.primary else mutedText(0.12f))
-                    .combinedClickable(enabled = canSend, onClick = {
-                        val text = draft
-                        draft = ""
-                        val editing = editingId
-                        val reply = replyingTo
-                        editingId = null
-                        replyingTo = null
-                        scope.launch {
-                            messagingRepo.sendTyping(peerId, false)
-                            when {
-                                editing != null -> messagingRepo.editMessage(peerId, editing, text)
-                                else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { new ->
+                        val wasEmpty = draft.isEmpty()
+                        draft = new
+                        if (editingId == null) {
+                            if (new.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
+                            typingJob?.cancel()
+                            typingJob = scope.launch {
+                                delay(2_000)
+                                messagingRepo.sendTyping(peerId, false)
                             }
+                            if (new.isEmpty()) scope.launch { messagingRepo.sendTyping(peerId, false) }
                         }
-                    }, onLongClick = {}),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (editingId != null) Icons.Filled.Check else Icons.Filled.Send,
-                    contentDescription = if (editingId != null) "Save" else "Send",
-                    tint = if (canSend) Color.White else mutedText(0.4f),
-                    modifier = Modifier.size(20.dp),
+                    },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Message…", color = mutedText(0.4f)) },
+                    shape = RoundedCornerShape(D2MRadius.pill),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = mutedText(0.15f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedContainerColor = mutedText(0.03f),
+                        focusedContainerColor = mutedText(0.03f),
+                    ),
                 )
+                val canSend = draft.isNotBlank()
+                // Animates instead of snapping so the button visibly "wakes up"
+                // the moment there's something to send -- a small but real
+                // affordance cue (Don Norman: the control's own appearance
+                // should signal whether the action is currently available).
+                val sendBg by animateColorAsState(if (canSend) MaterialTheme.colorScheme.primary else mutedText(0.12f), tween(150))
+                Box(
+                    modifier = Modifier.size(44.dp)
+                        .clip(CircleShape)
+                        .background(sendBg)
+                        .combinedClickable(enabled = canSend, onClick = {
+                            val text = draft
+                            draft = ""
+                            val editing = editingId
+                            val reply = replyingTo
+                            editingId = null
+                            replyingTo = null
+                            scope.launch {
+                                messagingRepo.sendTyping(peerId, false)
+                                when {
+                                    editing != null -> messagingRepo.editMessage(peerId, editing, text)
+                                    else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+                                }
+                            }
+                        }, onLongClick = {}),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (editingId != null) Icons.Filled.Check else Icons.Filled.Send,
+                        contentDescription = if (editingId != null) "Save" else "Send",
+                        tint = if (canSend) Color.White else mutedText(0.4f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }
@@ -241,6 +287,7 @@ private fun MessageRow(
     myUsername: String?,
     menuOpen: Boolean,
     reactionPickerOpen: Boolean,
+    modifier: Modifier = Modifier,
     onOpenMenu: () -> Unit,
     onCloseMenu: () -> Unit,
     onOpenReactionPicker: () -> Unit,
@@ -250,8 +297,9 @@ private fun MessageRow(
     onEdit: () -> Unit,
     onDeleteForMe: () -> Unit,
     onDeleteForEveryone: () -> Unit,
+    onRetry: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
             Box {
                 Box(
@@ -261,7 +309,10 @@ private fun MessageRow(
                             if (message.isMine) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else mutedText(0.08f),
                             RoundedCornerShape(D2MRadius.md),
                         )
-                        .combinedClickable(onClick = {}, onLongClick = { if (!message.deleted) onOpenMenu() })
+                        // Tap now also does something: FAILED messages retry
+                        // on tap (Don Norman "error recovery" -- a stuck
+                        // "Failed" label with no action was a dead end before).
+                        .combinedClickable(onClick = { if (message.status == MessageStatus.FAILED) onRetry() }, onLongClick = { if (!message.deleted) onOpenMenu() })
                         .padding(10.dp),
                 ) {
                     Column {
@@ -314,17 +365,32 @@ private fun MessageRow(
                         }
 
                         if (message.isMine && !message.deleted) {
-                            Text(
-                                when (message.status) {
-                                    MessageStatus.SENDING -> "Sending…"
-                                    MessageStatus.SENT -> "Sent"
-                                    MessageStatus.DELIVERED -> "Delivered"
-                                    MessageStatus.READ -> "Read"
-                                    MessageStatus.FAILED -> "Failed"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (message.status == MessageStatus.READ) MaterialTheme.colorScheme.primary else mutedText(0.5f),
-                            )
+                            // Crossfades between states instead of snapping --
+                            // Sending…/Sent/Delivered/Read/Failed is exactly
+                            // the kind of small, frequent status change where
+                            // a hard cut reads as a glitch and a soft fade
+                            // reads as "the system is quietly keeping you
+                            // updated" (Don Norman: continuous feedback).
+                            AnimatedContent(targetState = message.status, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) }) { status ->
+                                if (status == MessageStatus.FAILED) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
+                                        Text("Failed -- tap to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    }
+                                } else {
+                                    Text(
+                                        when (status) {
+                                            MessageStatus.SENDING -> "Sending…"
+                                            MessageStatus.SENT -> "Sent"
+                                            MessageStatus.DELIVERED -> "Delivered"
+                                            MessageStatus.READ -> "Read"
+                                            MessageStatus.FAILED -> "" // unreachable, handled above
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (status == MessageStatus.READ) MaterialTheme.colorScheme.primary else mutedText(0.5f),
+                                    )
+                                }
+                            }
                         }
                     }
                 }

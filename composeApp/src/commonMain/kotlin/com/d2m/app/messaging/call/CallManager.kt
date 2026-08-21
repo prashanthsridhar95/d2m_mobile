@@ -8,6 +8,7 @@ import com.d2m.app.messaging.protocol.CallSignal
 import com.d2m.app.messaging.protocol.IceCandidateData
 import com.d2m.app.messaging.protocol.SdpDescription
 import com.d2m.app.messaging.protocol.VideoMeta
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,7 +75,11 @@ class CallManager(
     private val messagingRepository: MessagingRepository,
     private val engine: WebRtcEngine,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Safety net matching MessagingRepository's own -- see that class's `exceptionHandler` doc comment. hangup()/decline()/mid-call-state updates below fire signals from bare `scope.launch { }` blocks with no local try/catch (call signaling is best-effort), so anything that still slips through needs somewhere to land besides "crash the app." */
+    private val exceptionHandler = CoroutineExceptionHandler { _, e ->
+        println("CallManager: uncaught coroutine exception (recovered, not fatal): $e")
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
 
     private val _view = MutableStateFlow<CallView?>(null)
     val view: StateFlow<CallView?> = _view.asStateFlow()
@@ -82,6 +87,18 @@ class CallManager(
     val streams: StateFlow<CallStreams> = _streams.asStateFlow()
     private val _errors = MutableStateFlow<String?>(null)
     val errors: StateFlow<String?> = _errors.asStateFlow()
+
+    /**
+     * [errors] was previously never rendered anywhere and never cleared --
+     * "Could not start call: ..." was set on genuine failures but the UI had
+     * no idea it existed, so a failed call just silently vanished with zero
+     * explanation (exactly the "calls not being sent" symptom this was
+     * reported alongside). CallLayer.kt now observes [errors] and calls this
+     * once it's finished showing the message.
+     */
+    fun clearError() {
+        _errors.value = null
+    }
 
     private var pc: Any? = null
     private var audioTrack: Any? = null
@@ -262,7 +279,8 @@ class CallManager(
             engine.waitForIceGatheringComplete(myPc)
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: offer
-            messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn))
+            val sent = messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn))
+            if (!sent) error("couldn't reach $peer -- check your connection")
 
             ringJob = scope.launch {
                 delay(RING_TIMEOUT_MS)
@@ -295,7 +313,8 @@ class CallManager(
             engine.waitForIceGatheringComplete(myPc)
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: answer
-            messagingRepository.sendCallSignal(peer, CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
+            val sent = messagingRepository.sendCallSignal(peer, CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
+            if (!sent) error("couldn't reach $peer -- check your connection")
             pendingOfferSdp = null
         } catch (e: Throwable) {
             _errors.value = "Could not answer call: ${e.message}"
@@ -531,9 +550,21 @@ class CallManager(
         }
 
         clearRing()
-        audioTrack?.let { engine.stopTrack(it) }
-        cameraTrack?.let { engine.stopTrack(it) }
+        // Close/dispose the PeerConnection FIRST, THEN the local tracks --
+        // this order matters and getting it backwards was the actual cause
+        // of "app crashes after ending a call": native WebRTC throws
+        // IllegalStateException out of MediaStreamTrack.dispose() if the
+        // track is disposed while still referenced by an active RtpSender
+        // on a live PeerConnection. Closing the PeerConnection first drops
+        // its senders' references to these tracks, so disposing them right
+        // after is safe. Every step is independently wrapped in runCatching
+        // so one failure can't abort the rest of teardown() partway through
+        // (which is exactly what the old unwrapped `engine.stopTrack(it)`
+        // calls did -- an exception there skipped phase = ENDED, emit(),
+        // and reset() entirely, leaving the call stuck mid-teardown).
         pc?.let { runCatching { engine.closePeerConnection(it) } }
+        audioTrack?.let { runCatching { engine.stopTrack(it) } }
+        cameraTrack?.let { runCatching { engine.stopTrack(it) } }
         phase = CallPhase.ENDED
         emit()
         _streams.value = EMPTY_STREAMS
