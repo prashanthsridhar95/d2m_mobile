@@ -21,10 +21,11 @@ import kotlinx.serialization.modules.subclass
  * (ReplyContext) and call signaling (ChatPayload.Call/CallSignal) -- see
  * messaging/README.md for the current real-vs-scaffolded status of what
  * consumes these (MessagingRepository for chat, call/CallManager.kt for
- * signaling). `archive`/`callInvite` on MessageEnvelope are ported for wire
- * shape-completeness (the server keys push-notification and archival
- * behavior off them) but this build never populates `archive` itself --
- * there is no real Archive Keypair layer here, matching the crypto stub.
+ * signaling). `archive` on MessageEnvelope (JsonWebKey/ArchiveEnvelope/
+ * ArchiveField/ArchiveKeyBundle below) is now real -- see
+ * messaging/crypto/archive/ArchiveCrypto.kt and ArchiveManager.kt -- and is
+ * populated on Android (matching this build's Signal crypto: real on
+ * Android, stubbed on iOS).
  */
 
 @Serializable
@@ -62,7 +63,79 @@ data class MessageEnvelope(
     // lets the server trigger an "incoming call" push without ever seeing
     // call content. See callManager's `send` wiring.
     val callInvite: Boolean = false,
+    // Long-term recoverable copy, additive to (never a replacement for) the
+    // Signal ratchet ciphertext in `body` above -- absent on rows from a
+    // device that hasn't set up an Archive Keypair yet, or on ephemeral
+    // (call-signaling) envelopes, which are never archived. See
+    // ArchiveManager.buildArchiveField.
+    val archive: ArchiveField? = null,
 )
+
+/**
+ * P-256 ECDH public key in JSON Web Key form -- the literal wire shape
+ * `crypto.subtle.exportKey("jwk", ...)` produces on the web side (and what
+ * this app's ArchivePrimitives/ArchiveCodec produce/consume on Android).
+ * `x`/`y` (and `d`, private-key exports only, used for THIS DEVICE's own
+ * local cache -- never sent to the server or a peer) are base64url WITHOUT
+ * padding (RFC 7515), a DIFFERENT alphabet from the standard base64 used
+ * for every other byte-blob field in this file -- see ArchiveCodec.kt's doc
+ * comment.
+ */
+@Serializable
+data class JsonWebKey(
+    val kty: String = "EC",
+    val crv: String = "P-256",
+    val x: String,
+    val y: String,
+    val d: String? = null,
+)
+
+/**
+ * One person's copy of a message's archive content-key, sealed via
+ * ephemeral ECDH to their Archive Keypair's public key (see
+ * ArchiveKeyBundle below). `ephemeralPublicKey` is the one-off keypair the
+ * sender generated just for this seal -- the recipient redoes the same
+ * ECDH using their own private key + this public key to re-derive the
+ * wrapping key. Direct port of messaging-framework's `ArchiveEnvelope`.
+ */
+@Serializable
+data class ArchiveEnvelope(
+    val ephemeralPublicKey: JsonWebKey,
+    val wrappedKey: String, // base64 AES-GCM ciphertext of the per-message content key
+    val wrapIv: String, // base64
+)
+
+/** The `archive` field attached to an outgoing MessageEnvelope -- direct port of the inline type on messaging-framework's `MessageEnvelope.archive`. */
+@Serializable
+data class ArchiveField(
+    val body: String, // base64 AES-GCM ciphertext (the plaintext ChatPayload, sealed independently of MessageEnvelope.body above)
+    val iv: String, // base64
+    val envelopeForSender: ArchiveEnvelope,
+    val envelopeForRecipient: ArchiveEnvelope,
+)
+
+/**
+ * What a client publishes to `PUT /archive/:username` -- server stores this
+ * verbatim, opaque past the JWK shape (it never sees the PIN or the
+ * unwrapped private key). Direct port of messaging-framework's
+ * `ArchiveKeyBundle`.
+ */
+@Serializable
+data class ArchiveKeyBundle(
+    val publicKey: JsonWebKey, // P-256 ECDH public key
+    val wrappedPrivateKey: String, // base64 AES-GCM ciphertext of the exported private key
+    val wrapIv: String, // base64
+    val kdfSalt: String, // base64, PBKDF2 salt
+    val kdfIterations: Int,
+)
+
+/** `GET /archive/:username/public` response shape. */
+@Serializable
+data class ArchivePublicKeyResponse(val publicKey: JsonWebKey)
+
+/** `GET /messages/history` response shape -- every message (own + received) this account has ever sent/received, for ArchiveManager.restoreFromArchive to decrypt. */
+@Serializable
+data class MessagesHistoryResponse(val messages: List<MessageEnvelope> = emptyList())
 
 // ----- WebSocket events: client -> server -----
 @Serializable

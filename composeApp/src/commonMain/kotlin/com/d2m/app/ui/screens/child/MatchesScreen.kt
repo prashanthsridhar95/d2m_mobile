@@ -56,6 +56,7 @@ import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.d2mIdToMessagingUsername
+import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
@@ -103,6 +104,7 @@ fun MatchesScreen() {
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
     val callManager = org.koin.compose.koinInject<CallManager>()
+    val messagingRepo = org.koin.compose.koinInject<MessagingRepository>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -166,6 +168,7 @@ fun MatchesScreen() {
     }
 
     D2MTheme(flow = D2MFlow.CHILD) {
+      Box(modifier = Modifier.fillMaxSize()) {
         val t = selected
         if (t == null) {
             // Thread list, full width -- default pane.
@@ -275,6 +278,12 @@ fun MatchesScreen() {
                 )
             }
         }
+        // Rendered unconditionally (mirrors ArchivePinModal.jsx being
+        // mounted regardless of whether a thread is open) -- it internally
+        // no-ops until messagingRepo.archivePrompt is set, see its own doc
+        // comment. Sits on top of both branches above via this shared Box.
+        ArchivePinDialog(messagingRepo)
+      }
     }
 }
 

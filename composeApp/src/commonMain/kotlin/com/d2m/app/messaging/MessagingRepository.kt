@@ -2,6 +2,8 @@ package com.d2m.app.messaging
 
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.crypto.CryptoProvider
+import com.d2m.app.messaging.crypto.archive.ArchiveManager
+import com.d2m.app.messaging.crypto.archive.ArchivePrompt
 import com.d2m.app.messaging.protocol.CallSignal
 import com.d2m.app.messaging.protocol.ChatPayload
 import com.d2m.app.messaging.protocol.ClientToServer
@@ -49,13 +51,14 @@ import kotlin.uuid.Uuid
  * Full text-messaging parity with useMessaging.js as of this pass: send/
  * receive text + media, edit, delete-for-everyone, delete-for-me, reactions,
  * typing, presence, delivered/read receipts, unread counters, active-peer
- * tracking. Deliberately NOT ported: the Archive Keypair cross-device
- * history-recovery system (archiveCrypto.ts/archiveStore.ts) -- it only
- * makes sense once a real CryptoProvider exists (it's an extension of real
- * Signal Protocol identity, not a separate feature), and a `session.reset`
- * recovery loop for a REAL crypto desync (this build's stub never actually
- * desyncs, so `session.reset` here is wired for wire-compatibility and
- * best-effort resend, not real Double Ratchet re-handshake).
+ * tracking, and (now) the Archive Keypair cross-device history-recovery
+ * system -- see [archiveManager] (crypto/archive/ArchiveManager.kt) for the
+ * state machine and crypto/archive/ArchiveCrypto.kt for the underlying
+ * P-256 ECDH/AES-GCM/PBKDF2 crypto. Every send path below attaches a
+ * best-effort `archive` field via [archiveManager]'s buildArchiveField;
+ * [start] wires the post-connect local-cache/server-bundle check
+ * (checkAfterConnect) and replays decrypted history back in via
+ * [applyArchivedPayload].
  *
  * Call signaling: `sendCallSignal`/`callSignalHandler` below are the seam
  * `call/CallManager.kt` plugs into -- see that file. Call signals ride this
@@ -122,7 +125,16 @@ class MessagingRepository(
     private val wsClient: MessagingWsClient,
     private val cryptoProvider: CryptoProvider,
     private val identityStore: IdentityStore,
+    private val archiveManager: ArchiveManager,
 ) {
+    init {
+        // Wired once here rather than per-restore -- see ArchiveManager.restoreFromArchive's
+        // doc comment: it can fire on every boot (already-set-up device) or
+        // once after a PIN restore, and either way just needs somewhere to
+        // hand decrypted history back to.
+        archiveManager.onRestoredEntry = { peerUsername, payload, msg, isMine -> applyArchivedPayload(peerUsername, payload, msg, isMine) }
+    }
+
     /**
      * Safety net for every coroutine launched on [scope]. Without this, an
      * uncaught exception from any of them (most realistically
@@ -169,6 +181,14 @@ class MessagingRepository(
     val isProductionGradeEncryption: Boolean get() = cryptoProvider.isProductionGrade
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
     val inboxNotifications: SharedFlow<InboxNotification> = _inboxNotifications.asSharedFlow()
+
+    // ---- Archive Keypair (cross-device history restore) -- delegates straight to ArchiveManager; see that class + ArchivePinDialog.kt for the PIN UI this drives. ----
+    val archivePrompt: StateFlow<ArchivePrompt?> get() = archiveManager.archivePrompt
+    val archiveBusy: StateFlow<Boolean> get() = archiveManager.archiveBusy
+    val archiveError: StateFlow<String> get() = archiveManager.archiveError
+    suspend fun submitArchiveSetupPin(pin: String) = archiveManager.submitSetupPin(pin)
+    suspend fun submitArchiveRestorePin(pin: String) = archiveManager.submitRestorePin(pin)
+    fun dismissArchivePrompt() = archiveManager.dismissPrompt()
 
     fun currentUsername(): String? = myUsername
 
@@ -248,6 +268,18 @@ class MessagingRepository(
             started = true
             _startupError.value = null
             println("MessagingRepository.start: identity ready, socket connect initiated for $myUsername (see MessagingWsClient logs for actual connect result)")
+
+            // Archive Keypair check -- deliberately fire-and-forget, not
+            // awaited before start() returns: live messaging (what everyone
+            // needs immediately) shouldn't wait on this, exactly like
+            // useMessaging.js's own post-setReady IIFE. See
+            // ArchiveManager.checkAfterConnect for what 'restore' vs 'setup'
+            // mean.
+            archiveManager.attach(httpClient, myUsername!!)
+            scope.launch {
+                runCatching { archiveManager.checkAfterConnect() }
+                    .onFailure { e -> println("MessagingRepository.start: archive keypair check failed (non-fatal): ${e.message ?: e::class.simpleName}") }
+            }
         } catch (e: Throwable) {
             val message = "Messaging couldn't start: ${e.message ?: e::class.simpleName}"
             println("MessagingRepository.start: $message")
@@ -294,7 +326,8 @@ class MessagingRepository(
             val payload = ChatPayload.Text(t, replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
             // wsClient.send() silently no-ops (never throws) if the socket
             // isn't connected -- without this check the message would sit at
             // SENDING forever with nothing to explain why (this was the
@@ -344,7 +377,8 @@ class MessagingRepository(
             val payload = ChatPayload.Media(media, replyTo = replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.sendMedia: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -367,7 +401,8 @@ class MessagingRepository(
             val payload = ChatPayload.Edit(messageId, t)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.editMessage: failed to send edit for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -391,7 +426,8 @@ class MessagingRepository(
             val payload = ChatPayload.Delete(messageId)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.deleteForEveryone: failed to send delete for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -421,7 +457,8 @@ class MessagingRepository(
             val payload = ChatPayload.Reaction(message.id, emoji, action)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.toggleReaction: failed to send $emoji ($action) for ${message.id} to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -606,6 +643,43 @@ class MessagingRepository(
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = runCatching { cryptoProvider.encrypt(peerUsername, payloadJson) }.getOrNull() ?: continue
             wsClient.send(ClientToServer.MessageSend(MessageEnvelope(m.id, me, peerUsername, ciphertextType, body, m.sentAt)))
+        }
+    }
+
+    /**
+     * Replays one decrypted archive entry (ArchiveManager.restoreFromArchive's
+     * callback) into chat history -- direct port of useMessaging.js's
+     * top-level `applyArchivedPayload` helper, adapted to this class's
+     * appendMessage/updateMessage/applyReaction primitives instead of
+     * mutating a plain bucket object directly. Deliberately DOESN'T touch
+     * unread counters, in-app notifications, delivered/read receipts, or
+     * send acks -- those are live-arrival concerns (see handleEvent's
+     * MessageNew branch, which this mirrors the payload-application half
+     * of); a history replay is silent by design, exactly like the web
+     * version's bucket rebuild. `ChatPayload.Call` is a no-op here: call
+     * signaling is `ephemeral: true` and never reaches the server's message
+     * log in the first place (see ArchiveManager.buildArchiveField's call
+     * sites -- sendCallSignal never builds an archive field), so this
+     * branch should never actually fire; kept only so the `when` stays
+     * exhaustive.
+     */
+    private fun applyArchivedPayload(peerUsername: String, payload: ChatPayload, msg: MessageEnvelope, isMine: Boolean) {
+        when (payload) {
+            is ChatPayload.Text -> appendMessage(
+                peerUsername,
+                ChatMessage(msg.id, msg.from, msg.to, payload.text, msg.sentAt, isMine = isMine, status = if (isMine) MessageStatus.SENT else MessageStatus.DELIVERED, replyTo = payload.replyTo),
+            )
+            is ChatPayload.Media -> appendMessage(
+                peerUsername,
+                ChatMessage(
+                    msg.id, msg.from, msg.to, payload.caption.orEmpty(), msg.sentAt, isMine = isMine,
+                    status = if (isMine) MessageStatus.SENT else MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo,
+                ),
+            )
+            is ChatPayload.Edit -> updateMessage(payload.targetId) { it.copy(text = payload.text, edited = true) }
+            is ChatPayload.Delete -> updateMessage(payload.targetId) { it.copy(deleted = true) }
+            is ChatPayload.Reaction -> updateMessage(payload.targetId) { applyReaction(it, payload.emoji, msg.from, payload.action) }
+            is ChatPayload.Call -> Unit
         }
     }
 

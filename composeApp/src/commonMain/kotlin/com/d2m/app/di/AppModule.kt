@@ -12,6 +12,10 @@ import com.d2m.app.messaging.call.WebRtcEngine
 import com.d2m.app.messaging.call.createWebRtcEngine
 import com.d2m.app.messaging.crypto.CryptoProvider
 import com.d2m.app.messaging.crypto.createCryptoProvider
+import com.d2m.app.messaging.crypto.archive.ArchiveKeyStore
+import com.d2m.app.messaging.crypto.archive.ArchiveManager
+import com.d2m.app.messaging.crypto.archive.ArchivePrimitives
+import com.d2m.app.messaging.crypto.archive.createArchivePrimitives
 import com.d2m.app.messaging.transport.MessagingWsClient
 import com.d2m.app.push.PushTokenRegistrar
 import org.koin.dsl.module
@@ -55,8 +59,18 @@ val appModule = module {
     // top doc comment (including its "needs real device verification"
     // caveat) for the full picture.
     single<CryptoProvider> { createCryptoProvider(get(), createSettings()) }
+
+    // Cross-device message-history backup (messaging/crypto/archive/) --
+    // P-256 ECDH/AES-GCM/PBKDF2, real on Android (same createSettings()-backed
+    // local-cache pattern as SignalSessionStore, separate namespace -- see
+    // ArchiveKeyStore's doc comment), no iOS actual yet (same precedent as
+    // CryptoProvider above).
+    single<ArchivePrimitives> { createArchivePrimitives() }
+    single { ArchiveKeyStore(createSettings()) }
+    single { ArchiveManager(get(), get()) }
+
     single { MessagingWsClient() }
-    single { MessagingRepository(get(), get(), get()) }
+    single { MessagingRepository(get(), get(), get(), get()) }
 
     // Shared UI-chrome flag (hide bottom nav while a chat is open, jump to a
     // thread from a tapped in-app notification banner) -- see ChatUiState.kt.
