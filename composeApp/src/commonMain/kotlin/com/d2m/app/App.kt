@@ -6,9 +6,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -133,6 +135,20 @@ fun App() {
     D2MTheme(flow = D2MFlow.ENTRY) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
+                // Explicitly systemBars only -- NOT Material3's own default,
+                // which folds the IME inset into this same Scaffold-wide
+                // padding. Since that padding wraps the ENTIRE nav graph
+                // (every screen's content, including a chat's header AND its
+                // message list, all as one block -- see D2MNavGraph below),
+                // letting it react to the keyboard meant the whole screen
+                // compressed/rose as a unit whenever it opened, not just the
+                // composer (reported directly: "the entire view moves up").
+                // ChatPane now claims its own `imePadding()` locally instead
+                // (see MatchesScreen.kt) so only its message-list+composer
+                // area shrinks to make room, while everything above it --
+                // this Scaffold's own chrome, and each screen's header --
+                // stays completely still.
+                contentWindowInsets = WindowInsets.systemBars,
                 bottomBar = {
                     if (showBottomBar && tabs != null) {
                         D2MBottomBar(

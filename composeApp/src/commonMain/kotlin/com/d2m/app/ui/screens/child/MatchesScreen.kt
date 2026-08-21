@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -264,7 +265,13 @@ fun MatchesScreen() {
                 ChatPane(
                     peerId = t.otherParticipantId,
                     peerName = t.otherParticipantName,
-                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    // imePadding() scoped right here -- ONLY this weighted
+                    // region (message list + composer) reacts to the
+                    // keyboard; ConversationHeader above is a plain sibling
+                    // in this Column and is untouched by it. See App.kt's
+                    // Scaffold contentWindowInsets comment for the other
+                    // half of this fix.
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp).imePadding(),
                 )
             }
         }
@@ -277,9 +284,25 @@ fun MatchesScreen() {
  * platform had no equivalent of at all) plus name and status, in a tappable
  * row rather than a boxed Card so a long list doesn't turn into a stack of
  * competing card borders.
+ *
+ * Presence dot added here (previously only shown once a conversation was
+ * already open, in ConversationHeader below -- reported directly as "online
+ * availability status is not shown properly," and this row was the actual
+ * gap: it never subscribed to or rendered presence at all). Subscribing here
+ * is safe to call once per row mount -- MessagingRepository.subscribePresence
+ * is idempotent (guarded by its own `subscribedPeers` set) and self-heals on
+ * reconnect, so this is just "make sure we're subscribed" for every peer
+ * actually visible in the list, same as WhatsApp/web showing online status
+ * directly in the chat list rather than only after opening a thread.
  */
 @Composable
 private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
+    val messagingRepo: MessagingRepository = koinInject()
+    val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
+    val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
+
+    LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -288,11 +311,18 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
     ) {
-        Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+        Box(modifier = Modifier.size(48.dp)) {
+            Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+            PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(thread.otherParticipantName, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (peerOnline) {
+                    D2MBadge("Online", D2MBadgeTone.SUCCESS)
+                } else {
+                    D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
+                }
                 if (thread.pendingSeriousModeRequestId != null) {
                     D2MBadge("Serious Mode pending", D2MBadgeTone.INFO)
                 }
