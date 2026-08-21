@@ -1,7 +1,13 @@
 package com.d2m.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -9,7 +15,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -22,6 +31,7 @@ import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
 import com.d2m.app.push.ui.rememberNotificationPermissionLauncher
+import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
 import com.d2m.app.ui.navigation.D2MNavGraph
@@ -29,6 +39,7 @@ import com.d2m.app.ui.navigation.ParentTabs
 import com.d2m.app.ui.navigation.Routes
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -57,6 +68,8 @@ fun App() {
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
+    val messagingStartupError by messagingRepo.startupError.collectAsState()
+    val scope = rememberCoroutineScope()
 
     // "Messages sent on web is received on web, but not on mobile" --
     // root cause: MessagingRepository.start() (which opens the WebSocket)
@@ -164,6 +177,32 @@ fun App() {
                         }
                     },
                 )
+            }
+
+            // Standing banner (not a toast -- doesn't auto-dismiss) for when
+            // MessagingRepository.start() itself fails: identity/key
+            // generation or the initial WebSocket connect. Previously this
+            // failure was invisible -- the LaunchedEffect above wraps
+            // start() in runCatching, so calls/messages just silently never
+            // worked with nothing on screen to explain why (reported
+            // directly: "totally silent, no error shown", even with the
+            // backend confirmed healthy). Retry re-runs start(), which is
+            // safe to call repeatedly (its own `started` guard no-ops once
+            // it actually succeeds).
+            AnimatedVisibility(
+                visible = messagingStartupError != null,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp, start = 10.dp, end = 10.dp),
+            ) {
+                val message = messagingStartupError
+                if (message != null) {
+                    D2MErrorBanner(
+                        message = message,
+                        onRetry = { scope.launch { messagingRepo.start(apiClient.client) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }

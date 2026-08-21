@@ -150,6 +150,9 @@ class MessagingRepository(
     /** Human-readable, transient failures for ChatPane to surface as a snackbar (Don Norman "visibility of system status" -- a send failure used to just vanish with no feedback at all). Not for call signaling failures, which have their own CallManager.errors -- see that class. */
     private val _sendErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val sendErrors: SharedFlow<String> = _sendErrors.asSharedFlow()
+    /** Set if `start()` itself fails (identity/key generation, WS connect) -- see that function's doc comment. Persistent (not a one-shot toast like [sendErrors]) since a failed startup means EVERYTHING is broken until the app is relaunched or this is retried; App.kt shows this as a standing banner with a retry action. */
+    private val _startupError = MutableStateFlow<String?>(null)
+    val startupError: StateFlow<String?> = _startupError.asStateFlow()
     private val typingClearJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
     private val subscribedPeers = mutableSetOf<String>()
     private var activePeer: String? = null
@@ -200,20 +203,43 @@ class MessagingRepository(
         return flow.asStateFlow()
     }
 
+    /**
+     * If this throws (or is swallowed by a caller's own runCatching, as
+     * App.kt's cold-start LaunchedEffect does), messaging never starts at
+     * all -- no WebSocket, no send, no receive, nothing -- with previously
+     * ZERO visible indication why ("calls/messages not sending or
+     * receiving... totally silent, no error shown" was reported after the
+     * backend itself was confirmed healthy, which points squarely at this
+     * function: `cryptoProvider.ensureIdentity()` generates a fresh Signal
+     * identity + prekeys on first run via the from-spec crypto in
+     * messaging/crypto/signal/ -- code that has explicitly never been
+     * verified against a real device -- and had no error handling of its
+     * own here). Now catches its own failure and publishes it on
+     * [startupError] instead of leaving the caller to decide (and possibly
+     * silently swallow, as `runCatching { messagingRepo.start(...) }` in
+     * App.kt does) whether the whole subsystem came up.
+     */
     suspend fun start(httpClient: HttpClient) {
         this.httpClient = httpClient
         if (started) return
         val identity = identityStore.identity.value
         val myId = identity.primaryId ?: identity.sponsorId ?: return
         myUsername = d2mIdToMessagingUsername(myId)
-        cryptoProvider.ensureIdentity(myUsername!!)
+        try {
+            cryptoProvider.ensureIdentity(myUsername!!)
 
-        wsClient.onEvent = { event -> handleEvent(event) }
-        wsClient.onOpen = {
-            for (peer in subscribedPeers) scope.launch { wsClient.send(ClientToServer.PresenceSubscribe(peer)) }
+            wsClient.onEvent = { event -> handleEvent(event) }
+            wsClient.onOpen = {
+                for (peer in subscribedPeers) scope.launch { wsClient.send(ClientToServer.PresenceSubscribe(peer)) }
+            }
+            wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient)
+            started = true
+            _startupError.value = null
+        } catch (e: Throwable) {
+            val message = "Messaging couldn't start: ${e.message ?: e::class.simpleName}"
+            println("MessagingRepository.start: $message")
+            _startupError.value = message
         }
-        wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient)
-        started = true
     }
 
     fun stop() {
