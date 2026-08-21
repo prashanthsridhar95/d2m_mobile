@@ -2,9 +2,9 @@ package com.d2m.app.messaging.crypto.signal
 
 import com.russhwolf.settings.Settings
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromString
-import kotlinx.serialization.json.encodeToString
 
 /**
  * Local storage for identity/prekeys/sessions -- the Kotlin equivalent of
