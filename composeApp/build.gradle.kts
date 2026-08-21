@@ -82,7 +82,13 @@ kotlin {
 
         val androidMain by getting {
             dependencies {
-                implementation(libs.ktor.client.android)
+                // OkHttp, not the Android engine -- see HttpEngine.android.kt's
+                // doc comment: Ktor's Android engine (HttpURLConnection-based)
+                // doesn't implement WebSockets at all, which was the actual
+                // root cause of every "messages/calls not sent" report this
+                // whole session (confirmed via logcat: "Engine doesn't support
+                // WebSocketCapability" on every single connect attempt).
+                implementation(libs.ktor.client.okhttp)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.sqldelight.android.driver)
                 // Requires the google-services Gradle plugin + a real

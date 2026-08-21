@@ -61,6 +61,14 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
+# Android's Ktor engine (above) wraps HttpURLConnection, which has no
+# WebSocket support at all -- every wsClient.connect() attempt was failing
+# instantly with "Engine doesn't support WebSocketCapability" (confirmed via
+# the console logging added in 7d53d9a), which is the actual root cause of
+# every "messages/calls not sent" report this session: the socket never
+# connected once, on any build. OkHttp's Ktor engine does support
+# WebSockets and is the engine Ktor's own docs recommend for Android.
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 

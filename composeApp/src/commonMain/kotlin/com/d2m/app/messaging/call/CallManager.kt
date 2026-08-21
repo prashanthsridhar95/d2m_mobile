@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.datetime.Clock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -129,6 +130,22 @@ class CallManager(
     private var makingOffer = false
     private var polite = false
     private var remoteVideoTrack: Any? = null
+
+    /**
+     * Guards teardown() against a real, observed reentrancy crash: calling
+     * engine.closePeerConnection() below triggers PeerConnectionObserver's
+     * onClosed() natively on WebRTC's own signaling thread, which calls
+     * teardown() again -- concurrently with the outer call still running on
+     * the caller's thread. Both executions read the same non-null `pc` (it's
+     * only cleared in reset(), near the very end) and both call
+     * engine.closePeerConnection(pc) on the same native PeerConnection --
+     * two threads disposing the same native object at once, which crashed
+     * with SIGSEGV (SEGV_ACCERR) in production logs. tryLock() is a
+     * non-suspend, single-owner "first caller wins" gate that works from
+     * onClosed()'s non-suspend callback context. A fresh Mutex is installed
+     * in reset() so the NEXT call gets its own gate.
+     */
+    private var tearDownGate = Mutex()
 
     init {
         messagingRepository.callSignalHandler = { from, signal -> handleSignal(from, signal) }
@@ -523,6 +540,7 @@ class CallManager(
     }
 
     private fun reset() {
+        tearDownGate = Mutex()
         pc = null
         audioTrack = null
         cameraTrack = null
@@ -551,6 +569,10 @@ class CallManager(
     }
 
     private fun teardown(reasonOverride: CallEndReason? = null) {
+        if (!tearDownGate.tryLock()) {
+            println("CallManager.teardown: dropped reentrant call (callId=$callId, peer=$peer, phase=$phase) -- a teardown is already in progress")
+            return
+        }
         println("CallManager.teardown: callId=$callId, peer=$peer, phase=$phase, reasonOverride=$reasonOverride")
         var info: CallEndInfo? = null
         if (peer.isNotEmpty()) {
