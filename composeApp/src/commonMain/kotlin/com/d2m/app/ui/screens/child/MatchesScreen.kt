@@ -109,12 +109,23 @@ fun MatchesScreen() {
     var selected by remember { mutableStateOf<ThreadOut?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
 
+    // Was `threads = seriousModeRepo.getThreads(...)` with no guard -- every
+    // caller below wraps its own action in runCatching but then calls this
+    // afterwards unguarded, so a network hiccup on the refresh alone (not
+    // just the Go Serious/Revoke/Unmatch/respond call itself) escaped
+    // scope.launch as an uncaught ApiError and crashed the whole app. Same
+    // friendlyError/actionError pattern as ChildHomeScreen.kt's handlers.
     suspend fun refresh() {
         if (primaryId == null) return
-        threads = seriousModeRepo.getThreads(primaryId, forceRefresh = true)
+        try {
+            threads = seriousModeRepo.getThreads(primaryId, forceRefresh = true)
+        } catch (e: Exception) {
+            actionError = friendlyError(e, "Couldn't refresh your matches.")
+        }
     }
 
     LaunchedEffect(primaryId) {
@@ -190,29 +201,66 @@ fun MatchesScreen() {
                             thread = t,
                             onGoSerious = {
                                 val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch { runCatching { seriousModeRepo.requestSeriousMode(pid, t.threadId, pid) }; refresh() }
+                                scope.launch {
+                                    try {
+                                        seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
+                                    } catch (e: Exception) {
+                                        actionError = friendlyError(e, "Couldn't send that Serious Mode request.")
+                                    }
+                                    refresh()
+                                }
                             },
                             onRevoke = {
                                 val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch { runCatching { seriousModeRepo.revoke(pid, t.threadId) }; refresh() }
+                                scope.launch {
+                                    try {
+                                        seriousModeRepo.revoke(pid, t.threadId)
+                                    } catch (e: Exception) {
+                                        actionError = friendlyError(e, "Couldn't revoke Serious Mode.")
+                                    }
+                                    refresh()
+                                }
                             },
                             onUnmatch = {
                                 val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch { runCatching { seriousModeRepo.unmatch(pid, t.threadId) }; refresh(); selected = null }
+                                scope.launch {
+                                    try {
+                                        seriousModeRepo.unmatch(pid, t.threadId)
+                                        selected = null
+                                    } catch (e: Exception) {
+                                        actionError = friendlyError(e, "Couldn't unmatch.")
+                                    }
+                                    refresh()
+                                }
                             },
                             onAcceptSeriousRequest = {
                                 val reqId = t.pendingSeriousModeRequestId ?: return@MoreOptionsMenu
                                 val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "accept") }; refresh() }
+                                scope.launch {
+                                    try {
+                                        seriousModeRepo.respond(pid, reqId, "accept")
+                                    } catch (e: Exception) {
+                                        actionError = friendlyError(e, "Couldn't accept that Serious Mode request.")
+                                    }
+                                    refresh()
+                                }
                             },
                             onDeclineSeriousRequest = {
                                 val reqId = t.pendingSeriousModeRequestId ?: return@MoreOptionsMenu
                                 val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch { runCatching { seriousModeRepo.respond(pid, reqId, "decline") }; refresh() }
+                                scope.launch {
+                                    try {
+                                        seriousModeRepo.respond(pid, reqId, "decline")
+                                    } catch (e: Exception) {
+                                        actionError = friendlyError(e, "Couldn't decline that Serious Mode request.")
+                                    }
+                                    refresh()
+                                }
                             },
                         )
                     },
                 )
+                actionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
                 ChatPane(
                     peerId = t.otherParticipantId,
                     peerName = t.otherParticipantName,
