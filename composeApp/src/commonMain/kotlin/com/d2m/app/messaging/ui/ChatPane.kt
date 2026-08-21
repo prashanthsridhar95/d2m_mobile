@@ -1,6 +1,5 @@
 package com.d2m.app.messaging.ui
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -8,9 +7,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,12 +25,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
@@ -40,6 +41,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -48,6 +50,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -75,9 +78,59 @@ import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 
 private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
+// ----- Date/time formatting for bubbles + day dividers -- matches d2m_web's
+// MessageBubble.jsx (fmtBubbleTime) and MessageList.jsx (dayLabel/sameDay)
+// exactly: "Today"/"Yesterday"/"Month Day"(+", Year" if not this year) for
+// day pills, "h:mm AM/PM" inside each bubble. -----
+
+private fun localDateOf(epochMillis: Long): LocalDate =
+    Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+private fun sameDay(a: Long, b: Long): Boolean = localDateOf(a) == localDateOf(b)
+
+private val MONTH_NAMES = listOf(
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+
+private fun dayLabel(epochMillis: Long): String {
+    val now = Clock.System.now().toEpochMilliseconds()
+    if (sameDay(epochMillis, now)) return "Today"
+    if (sameDay(epochMillis, now - 86_400_000L)) return "Yesterday"
+    val date = localDateOf(epochMillis)
+    val monthDay = "${MONTH_NAMES[date.monthNumber - 1]} ${date.dayOfMonth}"
+    return if (date.year == localDateOf(now).year) monthDay else "$monthDay, ${date.year}"
+}
+
+private fun formatBubbleTime(epochMillis: Long): String {
+    val dt = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour12 = when (val h = dt.hour % 12) { 0 -> 12; else -> h }
+    val amPm = if (dt.hour < 12) "AM" else "PM"
+    return "$hour12:${dt.minute.toString().padStart(2, '0')} $amPm"
+}
+
+/** Consecutive messages grouped into one entry per calendar day -- mirrors d2m_web's MessageList.jsx groupByDay exactly (same reasoning: one real bounding box per day is what lets a sticky pill let go once its own day scrolls out, instead of every day's pill stacking against one shared unbounded list). */
+private fun groupByDay(messages: List<ChatMessage>): List<Pair<String, List<ChatMessage>>> {
+    val groups = mutableListOf<Pair<String, MutableList<ChatMessage>>>()
+    for (m in messages) {
+        val last = groups.lastOrNull()
+        if (last != null && sameDay(last.second.last().sentAt, m.sentAt)) {
+            last.second.add(m)
+        } else {
+            groups.add(m.id to mutableListOf(m))
+        }
+    }
+    return groups
+}
 
 /**
  * Real-time conversation pane -- mirrors screens/child/MatchesScreen.jsx's
@@ -153,29 +206,49 @@ fun ChatPane(
                         Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
                     }
                 } else {
+                    val dayGroups = remember(messages) { groupByDay(messages) }
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(messages, key = { it.id }) { m ->
-                            MessageRow(
-                                message = m,
-                                myUsername = myUsername,
-                                menuOpen = menuForMessageId == m.id,
-                                reactionPickerOpen = reactionPickerFor == m.id,
-                                // Automatic fade-in on arrival + smooth reflow when a bubble
-                                // above/below it changes size (edit, reaction, status tick) --
-                                // the single highest-value animation for a chat list, and Compose
-                                // provides it for free once items are keyed (they already are).
-                                modifier = Modifier.animateItem(),
-                                onOpenMenu = { menuForMessageId = m.id },
-                                onCloseMenu = { menuForMessageId = null },
-                                onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
-                                onCloseReactionPicker = { reactionPickerFor = null },
-                                onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
-                                onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
-                                onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
-                                onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
-                                onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
-                                onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
-                            )
+                        for ((groupKey, groupMessages) in dayGroups) {
+                            // Matches d2m_web's sticky day pill exactly (MessageList.jsx)
+                            // -- one real stickyHeader per day, so it lets go the moment
+                            // that day's own messages scroll out rather than every day's
+                            // pill stacking against one shared unbounded list.
+                            stickyHeader(key = "day-$groupKey") {
+                                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        dayLabel(groupMessages.first().sentAt),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = mutedText(0.6f),
+                                        modifier = Modifier
+                                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(D2MRadius.pill))
+                                            .padding(horizontal = 14.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                            items(groupMessages, key = { it.id }) { m ->
+                                MessageRow(
+                                    message = m,
+                                    myUsername = myUsername,
+                                    menuOpen = menuForMessageId == m.id,
+                                    reactionPickerOpen = reactionPickerFor == m.id,
+                                    // Automatic fade-in on arrival + smooth reflow when a bubble
+                                    // above/below it changes size (edit, reaction, status tick) --
+                                    // the single highest-value animation for a chat list, and Compose
+                                    // provides it for free once items are keyed (they already are).
+                                    modifier = Modifier.animateItem(),
+                                    onOpenMenu = { menuForMessageId = m.id },
+                                    onCloseMenu = { menuForMessageId = null },
+                                    onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
+                                    onCloseReactionPicker = { reactionPickerFor = null },
+                                    onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
+                                    onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
+                                    onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
+                                    onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
+                                    onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
+                                    onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
+                                )
+                            }
                         }
                     }
                 }
@@ -280,6 +353,31 @@ fun ChatPane(
     }
 }
 
+/**
+ * Sent/delivered/read ticks -- WhatsApp's single-check/double-check/blue-
+ * double-check convention, matching d2m_web's MessageBubble.jsx Ticks
+ * exactly (down to reusing the theme's primary color for "read" rather than
+ * a hardcoded blue, so it stays correct across all of this app's color
+ * flows and in dark mode). No tick at all while SENDING (nothing to confirm
+ * yet); FAILED is handled by the caller before this is ever reached.
+ */
+@Composable
+private fun MessageTicks(status: MessageStatus, mine: Boolean) {
+    if (status == MessageStatus.SENDING || status == MessageStatus.FAILED) return
+    val color = if (status == MessageStatus.READ) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = if (mine) 0.75f else 0.5f)
+    Icon(
+        if (status == MessageStatus.SENT) Icons.Filled.Check else Icons.Filled.DoneAll,
+        contentDescription = when (status) {
+            MessageStatus.SENT -> "Sent"
+            MessageStatus.DELIVERED -> "Delivered"
+            MessageStatus.READ -> "Read"
+            else -> null
+        },
+        tint = color,
+        modifier = Modifier.size(13.dp),
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
@@ -302,93 +400,111 @@ private fun MessageRow(
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
             Box {
+                // Bubble shape + fill matches d2m_web's MessageBubble.jsx exactly:
+                // mine = solid accent fill, "tail" corner bottom-right (sharp 4dp
+                // vs 16dp everywhere else); theirs = card surface + a subtle
+                // border, tail bottom-left. Text/icon color inside is provided via
+                // LocalContentColor below so every unstyled Text/Icon in this
+                // bubble (message text, reply quote, call-log label, timestamp,
+                // ticks) automatically contrasts against whichever fill is
+                // actually behind it, instead of each needing its own color logic.
+                val bubbleShape = RoundedCornerShape(
+                    topStart = D2MRadius.md,
+                    topEnd = D2MRadius.md,
+                    bottomEnd = if (message.isMine) 4.dp else D2MRadius.md,
+                    bottomStart = if (message.isMine) D2MRadius.md else 4.dp,
+                )
+                val bubbleContentColor = if (message.isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                 Box(
                     modifier = Modifier
                         .widthIn(max = 280.dp)
-                        .background(
-                            if (message.isMine) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else mutedText(0.08f),
-                            RoundedCornerShape(D2MRadius.md),
-                        )
+                        .background(if (message.isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, bubbleShape)
+                        .then(if (message.isMine) Modifier else Modifier.border(1.dp, mutedText(0.15f), bubbleShape))
                         // Tap now also does something: FAILED messages retry
                         // on tap (Don Norman "error recovery" -- a stuck
                         // "Failed" label with no action was a dead end before).
                         .combinedClickable(onClick = { if (message.status == MessageStatus.FAILED) onRetry() }, onLongClick = { if (!message.deleted) onOpenMenu() })
                         .padding(10.dp),
                 ) {
-                    Column {
-                        if (message.replyTo != null) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth()
-                                    .background(mutedText(0.08f), RoundedCornerShape(D2MRadius.sm))
-                                    .padding(6.dp),
-                            ) {
-                                Text(message.replyTo.from, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                Text(message.replyTo.preview, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                    CompositionLocalProvider(LocalContentColor provides bubbleContentColor) {
+                        Column {
+                            if (message.replyTo != null) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(
+                                            if (message.isMine) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                            RoundedCornerShape(D2MRadius.sm),
+                                        )
+                                        .padding(6.dp),
+                                ) {
+                                    Text(message.replyTo.from, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    Text(message.replyTo.preview, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                                }
+                                Spacer(Modifier.padding(top = 4.dp))
                             }
-                            Spacer(Modifier.padding(top = 4.dp))
-                        }
 
-                        when {
-                            message.deleted -> Text("This message was deleted", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = mutedText(0.55f))
-                            message.callLog != null -> {
-                                val info = message.callLog
-                                val label = when (info.reason) {
-                                    "ended" -> "${if (info.media == "video") "Video" else "Voice"} call · ${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}"
-                                    "busy", "failed" -> "Call failed"
-                                    "declined" -> "Call declined"
-                                    else -> if (info.incoming) "Missed call" else "No answer"
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Icon(if (info.media == "video") Icons.Filled.Videocam else Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Text(label, style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                            else -> {
-                                if (message.media != null && message.mediaUrl != null) {
-                                    AsyncImage(
-                                        model = message.mediaUrl,
-                                        contentDescription = message.media.name,
-                                        modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm)),
-                                    )
-                                }
-                                if (message.uploading) {
-                                    Column(modifier = Modifier.width(160.dp).padding(top = 4.dp)) {
-                                        Text("Uploading…", style = MaterialTheme.typography.labelSmall)
-                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            when {
+                                message.deleted -> Text("This message was deleted", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
+                                message.callLog != null -> {
+                                    val info = message.callLog
+                                    val label = when (info.reason) {
+                                        "ended" -> "${if (info.media == "video") "Video" else "Voice"} call · ${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}"
+                                        "busy", "failed" -> "Call failed"
+                                        "declined" -> "Call declined"
+                                        else -> if (info.incoming) "Missed call" else "No answer"
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(if (info.media == "video") Icons.Filled.Videocam else Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Text(label, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
-                                if (message.uploadFailed) Text("Attachment failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                if (message.text.isNotBlank()) {
-                                    Text(message.text + if (message.edited) "  (edited)" else "", style = MaterialTheme.typography.bodyMedium)
+                                else -> {
+                                    if (message.media != null && message.mediaUrl != null) {
+                                        AsyncImage(
+                                            model = message.mediaUrl,
+                                            contentDescription = message.media.name,
+                                            modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm)),
+                                        )
+                                    }
+                                    if (message.uploading) {
+                                        Column(modifier = Modifier.width(160.dp).padding(top = 4.dp)) {
+                                            Text("Uploading…", style = MaterialTheme.typography.labelSmall)
+                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                        }
+                                    }
+                                    if (message.uploadFailed) Text("Attachment failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    if (message.text.isNotBlank()) {
+                                        Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                                    }
                                 }
                             }
-                        }
 
-                        if (message.isMine && !message.deleted) {
-                            // Crossfades between states instead of snapping --
-                            // Sending…/Sent/Delivered/Read/Failed is exactly
-                            // the kind of small, frequent status change where
-                            // a hard cut reads as a glitch and a soft fade
-                            // reads as "the system is quietly keeping you
-                            // updated" (Don Norman: continuous feedback).
-                            AnimatedContent(targetState = message.status, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) }) { status ->
-                                if (status == MessageStatus.FAILED) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            if (!message.deleted) {
+                                // Timestamp (+ "edited" + read ticks for my own
+                                // messages) sits INSIDE the bubble, bottom-right --
+                                // matches d2m_web's MessageBubble.jsx layout exactly,
+                                // rather than the timestamp living outside/below the
+                                // bubble as a separate element.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    if (message.status == MessageStatus.FAILED) {
                                         Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
+                                        Spacer(Modifier.width(3.dp))
                                         Text("Failed -- tap to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    } else {
+                                        if (message.edited) {
+                                            Text("edited", style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.65f))
+                                            Spacer(Modifier.width(4.dp))
+                                        }
+                                        Text(formatBubbleTime(message.sentAt), style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
+                                        if (message.isMine) {
+                                            Spacer(Modifier.width(4.dp))
+                                            MessageTicks(status = message.status, mine = message.isMine)
+                                        }
                                     }
-                                } else {
-                                    Text(
-                                        when (status) {
-                                            MessageStatus.SENDING -> "Sending…"
-                                            MessageStatus.SENT -> "Sent"
-                                            MessageStatus.DELIVERED -> "Delivered"
-                                            MessageStatus.READ -> "Read"
-                                            MessageStatus.FAILED -> "" // unreachable, handled above
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (status == MessageStatus.READ) MaterialTheme.colorScheme.primary else mutedText(0.5f),
-                                    )
                                 }
                             }
                         }
