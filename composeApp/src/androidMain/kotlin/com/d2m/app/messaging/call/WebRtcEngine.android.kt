@@ -14,7 +14,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -208,35 +207,31 @@ class AndroidWebRtcEngine(private val appContext: Context) : WebRtcEngine {
     override fun isSignalingStable(pc: Any): Boolean = (pc as PeerConnection).signalingState() == PeerConnection.SignalingState.STABLE
 
     /**
-     * A real device crash traced back to this exact function: a native
-     * SIGSEGV on WebRTC's own signaling thread ("trying to execute
-     * non-executable memory"), firing immediately after
-     * "NetworkMonitor: Stop monitoring... Unregister network callback" --
-     * which happens inside PeerConnection.dispose()'s native teardown. This
-     * is a known class of issue with this binding: calling close() and
-     * dispose() back-to-back on the same call can race dispose()'s native
-     * cleanup against signaling-thread work that close() only asked to stop,
-     * not necessarily finished draining yet. No Kotlin try/catch can prevent
-     * this -- a native segfault kills the process directly, below the JVM
-     * entirely (the surrounding runCatching calls never even mattered here).
+     * A real device crash traced back to this exact function, twice, with
+     * the second attempt's stack trace pinning down the actual mechanism:
+     * `PeerConnection.dispose()`'s own Java implementation internally calls
+     * `close()` again as part of its native cleanup (visible directly in the
+     * crash backtrace: our closePeerConnection coroutine -> dispose() ->
+     * close() (called BY dispose(), not by us at that point) -> native
+     * nativeClose() -> SIGSEGV null-pointer-dereference). The first attempt
+     * at fixing this called close() ourselves and then dispose() afterwards
+     * (immediately, then with a delay) -- both variants made close() run
+     * TWICE on the same native peer (once from us, once again from inside
+     * dispose()'s own cleanup), and the second invocation crashes because
+     * the native session was already torn down by the first one. No Kotlin
+     * try/catch can prevent this either way -- a native segfault kills the
+     * process directly, below the JVM entirely.
      *
-     * Mitigation: still close() synchronously (severs the PeerConnection's
-     * senders' references to the local tracks immediately, which is what the
-     * teardown-ordering fix in CallManager.teardown() depends on), but defer
-     * dispose() a short beat on this engine's own scope instead of calling
-     * it in the same breath. This is the standard workaround for this class
-     * of WebRTC-Android-binding race -- give the signaling thread time to
-     * actually finish draining before freeing the native object out from
-     * under it.
+     * Fix: don't call close() ourselves at all. dispose() already closes
+     * the connection as part of freeing its native resources -- calling it
+     * alone, exactly once, is the correct and sufficient teardown. This also
+     * means it's simple and synchronous again, no artificial delay needed
+     * (the delay was working around the wrong problem).
      */
     override fun closePeerConnection(pc: Any) {
         val p = pc as PeerConnection
         pcObservers.remove(p)
-        runCatching { p.close() }
-        engineScope.launch {
-            delay(300)
-            runCatching { p.dispose() }
-        }
+        runCatching { p.dispose() }
     }
 
     // SdpObserver has one interface for both create and set callbacks; each
