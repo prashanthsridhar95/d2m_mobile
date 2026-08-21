@@ -6,11 +6,18 @@ import com.d2m.app.domain.repository.NotificationsRepository
 /**
  * Client-side half of push (plan §7/§8 Phase 3): registers whatever
  * platform token is generated against POST /accounts/{id}/device-tokens.
- * The backend's notification_service.dispatch() only logs a push_result of
- * "stubbed" or "no_device_token" today -- there's no real FCM/APNs send
- * implemented server-side yet (explicit SWAP POINT comment in that file).
- * Registering early costs nothing and means delivery starts working the
- * moment that backend work lands, with zero mobile-side changes needed.
+ * The backend's notification_service.dispatch() now does a real FCM send
+ * (app/services/push_service.py, firebase_admin) for every registered "fcm"
+ * token, gated behind D2M_FCM_SERVICE_ACCOUNT_JSON being configured on the
+ * deployed server -- confirmed real via direct inspection, not a stub
+ * (an "apns" token still registers cleanly but has no real send wired up
+ * yet, no APNs SDK integration exists). This function itself never fires
+ * for real on Android without ALSO having the google-services Gradle plugin
+ * applied and a real google-services.json from your own Firebase project
+ * (see composeApp/build.gradle.kts + README.md) -- without that,
+ * `registerCurrentToken` is simply never called at all, since
+ * FirebaseMessaging never mints a token in the first place. Registering
+ * early costs nothing regardless, so this stays unconditional.
  *
  * `registerCurrentToken` is called from each platform's actual once a real
  * token is obtained (Firebase's onNewToken / APNs' didRegisterForRemote...)

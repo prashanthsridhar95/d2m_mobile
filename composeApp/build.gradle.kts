@@ -12,6 +12,29 @@ plugins {
     alias(libs.plugins.sqldelight)
 }
 
+// Applied conditionally, by plugin id (not alias(libs.plugins.googleServices)
+// unconditionally in the block above) -- the google-services plugin FAILS
+// THE BUILD outright if google-services.json isn't present, which would
+// break every checkout that doesn't have its own Firebase project's json
+// dropped in (this file is gitignored -- see .gitignore -- so a fresh clone
+// or CI never has one by default). Already resolved onto the build
+// classpath via the root build.gradle.kts's `apply false`, so applying it
+// here by id alone (no version needed again) works.
+//
+// This is the actual missing piece behind push notifications not arriving
+// at all, on or off the app: without it, FirebaseMessaging never mints a
+// real token (PlatformPushInitializer.android.kt's FirebaseMessaging.getInstance()
+// silently no-ops), so no DeviceToken row is ever registered server-side,
+// and every push attempt resolves to "no_device_token" regardless of
+// whether the backend's own FCM credentials (D2M_FCM_SERVICE_ACCOUNT_JSON,
+// see d2m_core_engine/app/services/push_service.py) are configured. See
+// README.md's push section for the exact steps (create a Firebase project,
+// register this app under applicationId "com.d2m.app", download
+// google-services.json to this directory).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 kotlin {
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -94,11 +117,13 @@ kotlin {
                 // see push/LocalNotificationBridge.kt.
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.sqldelight.android.driver)
-                // Requires the google-services Gradle plugin + a real
-                // google-services.json (from your own Firebase project) to
-                // actually initialize -- see README.md's Phase 3 section.
-                // Safe to keep on the classpath without one; PlatformPushInitializer
-                // catches init failures rather than crashing the app.
+                // The google-services Gradle plugin (applied conditionally,
+                // above) + a real google-services.json (from your own
+                // Firebase project, dropped into this directory) are what
+                // actually let this initialize -- see README.md's push
+                // section. Safe to keep on the classpath without one;
+                // PlatformPushInitializer catches init failures rather than
+                // crashing the app, it just never gets a real token.
                 //
                 // Written as a literal coordinate (not the libs.firebase.bom
                 // catalog accessor) deliberately: this project's version

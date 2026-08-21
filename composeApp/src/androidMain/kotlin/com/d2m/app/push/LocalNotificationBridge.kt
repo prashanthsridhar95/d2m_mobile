@@ -52,14 +52,15 @@ const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
  * IMPORTANT scope boundary, stated plainly: this rides MessagingRepository's
  * live WebSocket connection, which Android keeps open for a while after the
  * app is backgrounded but not indefinitely, and never once the OS kills the
- * process. It is a real, working improvement over "nothing" today, but it
- * is NOT the same as true push. The backend's notification_service.dispatch()
- * only logs a push_result of "stubbed"/"no_device_token" -- there is no
- * real FCM/APNs send implemented server-side yet. Once that lands and
- * starts reaching D2MFirebaseMessagingService.onMessageReceived (also
- * updated in this pass to post a real notification once it does), delivery
- * will work even with the app fully killed. That backend work is out of
- * scope for this mobile codebase.
+ * process. For that "fully killed, or never opened this cold boot" case,
+ * see D2MFirebaseMessagingService.kt instead -- real FCM push (backend send
+ * via d2m_core_engine's push_service.py, client token registration via
+ * PlatformPushInitializer.android.kt + the google-services Gradle plugin)
+ * is what covers it; that file's doc comment has the current, accurate
+ * status of both halves (this comment previously described the backend
+ * send as still stubbed, which is now out of date -- it's real, gated only
+ * behind D2M_FCM_SERVICE_ACCOUNT_JSON being configured on the deployed
+ * server, same as the client half needs its own google-services.json).
  *
  * Notifications posted here are deliberately NOT setLocalOnly(true) --
  * Android's standard notification bridge mirrors any non-local-only

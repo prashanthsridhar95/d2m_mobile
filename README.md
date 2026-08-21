@@ -111,11 +111,45 @@ needs to go when real auth lands.
 Token *capture* is wired (FCM on Android via `PlatformPushInitializer.android.kt`;
 APNs permission request + device token capture on iOS via `iOSApp.swift`'s
 `AppDelegate`) and registers against `POST /accounts/{id}/device-tokens`. Real
-push *send* doesn't exist server-side yet (`notification_service.dispatch()`
-only logs a stub result) -- this is expected, not a mobile-side bug. Android
-additionally needs your own Firebase project's `google-services.json` dropped
-into `composeApp/` (gitignored) before FCM will actually initialize; without
-it, `PlatformPushInitializer` degrades to a no-op rather than crashing.
+push *send* is also wired server-side now (`d2m_core_engine/app/services/push_service.py`,
+`firebase_admin`) for `fcm` tokens -- confirmed real, not a stub -- but BOTH
+halves below need to actually be set up before push notifications work end to
+end (received while the app is backgrounded or fully killed, per a direct
+report: "even when i'm not on the app, i should be receiving notifications
+regarding calls & messages"). Neither is optional; missing either one means
+zero push notifications, silently:
+
+1. **Client (this repo, Android):** create a Firebase project, register an
+   Android app under this project's `applicationId` (`com.d2m.app`, see
+   `composeApp/build.gradle.kts`), download that app's `google-services.json`,
+   and drop it into `composeApp/` (gitignored -- every developer/deploy needs
+   their own copy, or all point at the same Firebase project's file). The
+   `com.google.gms.google-services` Gradle plugin is already wired
+   (`composeApp/build.gradle.kts`, applied conditionally so a checkout
+   without the file still builds) -- it just needs that file present.
+   Without it, `FirebaseMessaging` never mints a real token, so
+   `PlatformPushInitializer` silently degrades to a no-op (never crashes)
+   and no `DeviceToken` row is ever registered server-side.
+2. **Server (`d2m_core_engine`, not this repo):** set `D2M_FCM_SERVICE_ACCOUNT_JSON`
+   on the deployed backend to a Firebase service account key (same Firebase
+   project as step 1 -- Firebase console → Project settings → Service
+   accounts → Generate new private key). Without it, `push_service.configured()`
+   is false and every push attempt records `push_result = "stubbed"` even
+   with a real device token registered.
+
+Messages are sent data-only (no `notification=` block) at Android high
+priority specifically so `D2MFirebaseMessagingService.onMessageReceived`
+always runs -- including while the app is backgrounded or killed -- rather
+than the OS auto-displaying a generic tray notification and skipping the
+app's own call/message channel + ringtone + action logic for exactly that
+case. See that file's doc comment for the full payload contract and its one
+real, load-bearing limitation: the messaging relay server is E2E and never
+decrypts anything, so a push-triggered call notification knows a sender's
+raw username but not their display name or the call's id, so it can invite
+the user to open the app but can't offer real Answer/Decline actions the way
+the live in-app notification (open socket, real `CallSignal`) can.
+iOS-side (`apns` tokens) still registers cleanly but has no real send
+implemented -- no APNs SDK integration exists yet.
 
 ## Project structure
 

@@ -54,6 +54,12 @@ stream-webrtc-android-version = "1.3.10"
 # licensed. Version confirmed current on Maven Central (repo1.maven.org
 # metadata, last updated 2026-08-07) at implementation time.
 bouncycastle-version = "1.85.2"
+# The Gradle plugin that reads google-services.json and generates the
+# resources/config firebase-messaging (above) actually needs at runtime to
+# initialize -- see composeApp/build.gradle.kts's conditional `apply` (only
+# applied when that file is actually present, so a checkout without your own
+# Firebase project's json still builds cleanly) and README.md's push section.
+google-services-version = "4.4.2"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -113,3 +119,4 @@ composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-mu
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+googleServices = { id = "com.google.gms.google-services", version.ref = "google-services-version" }
