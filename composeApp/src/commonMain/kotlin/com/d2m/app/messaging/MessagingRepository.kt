@@ -281,7 +281,13 @@ class MessagingRepository(
             val payload = ChatPayload.Text(t, replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            // wsClient.send() silently no-ops (never throws) if the socket
+            // isn't connected -- without this check the message would sit at
+            // SENDING forever with nothing to explain why (this was the
+            // actual remaining cause of "messages not sent... totally
+            // silent" after start() itself was confirmed to be succeeding).
+            if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             updateMessage(id) { it.copy(status = MessageStatus.FAILED) }
             _sendErrors.tryEmit("Message couldn't be sent -- tap it to retry")
@@ -324,7 +330,8 @@ class MessagingRepository(
             val payload = ChatPayload.Media(media, replyTo = replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            if (!sent) error("not connected to the server")
         } catch (_: Throwable) {
             updateMessage(id) { it.copy(uploading = false, uploadFailed = true, status = MessageStatus.FAILED) }
         }
@@ -345,7 +352,8 @@ class MessagingRepository(
             val payload = ChatPayload.Edit(messageId, t)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             // Revert the optimistic edit so the bubble doesn't silently show
             // text the peer never actually received (Don Norman: the visible
@@ -367,7 +375,8 @@ class MessagingRepository(
             val payload = ChatPayload.Delete(messageId)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             if (previous != null) updateMessage(messageId) { previous }
             _sendErrors.tryEmit("Delete couldn't be sent")
@@ -395,7 +404,8 @@ class MessagingRepository(
             val payload = ChatPayload.Reaction(message.id, emoji, action)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
+            if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             // Revert the optimistic reaction toggle -- same inverse action undoes it.
             updateMessage(message.id) { applyReaction(it, emoji, me, if (action == "add") "remove" else "add") }
@@ -444,7 +454,6 @@ class MessagingRepository(
                 callInvite = signal is CallSignal.Invite,
             )
             wsClient.send(ClientToServer.MessageSend(envelope))
-            true
         } catch (e: Throwable) {
             println("MessagingRepository.sendCallSignal: failed to send ${signal::class.simpleName} to $peerUsername: $e")
             false

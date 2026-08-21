@@ -38,6 +38,18 @@ class MessagingWsClient {
     var onEvent: (ServerToClient) -> Unit = {}
     var onOpen: () -> Unit = {}
 
+    /**
+     * True only while an actual session is live. [send] silently no-ops
+     * (never throws) when this is false -- see that function's doc comment
+     * for why that used to be invisible ("messages not sent... totally
+     * silent" was reported while `start()` itself was succeeding, i.e. the
+     * failure was happening here, past the point anything else could catch
+     * it). MessagingRepository observes this to fail sends loudly instead of
+     * leaving them at "Sending..." forever with nothing to explain why.
+     */
+    private val _isConnected = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isConnected: kotlinx.coroutines.flow.StateFlow<Boolean> = _isConnected
+
     fun connect(wsBaseUrl: String, username: String, client: HttpClient) {
         closedByUs = false
         if (job?.isActive == true) return
@@ -48,6 +60,7 @@ class MessagingWsClient {
                     val url = "$wsBaseUrl/ws?user=${encodeQueryParam(username)}"
                     client.webSocketSession(urlString = url).let { s ->
                         session = s
+                        _isConnected.value = true
                         onOpen()
                         heartbeatJob = scope.launch {
                             while (isActive) {
@@ -75,16 +88,18 @@ class MessagingWsClient {
                     // connection failed or dropped -- fall through to the reconnect delay below
                 }
                 session = null
+                _isConnected.value = false
                 if (closedByUs) break
                 delay(1_500)
             }
         }
     }
 
-    suspend fun send(event: ClientToServer) {
-        val s = session ?: return
+    /** Returns false (never throws) if there's no live session to send on, or if the send itself fails -- see [isConnected]'s doc comment for why callers that care about delivery (MessagingRepository's send paths) need to check this instead of assuming a lack of exception means it went out. */
+    suspend fun send(event: ClientToServer): Boolean {
+        val s = session ?: return false
         val text = messagingProtocolJson.encodeToString(ClientToServer.serializer(), event)
-        runCatching { s.send(Frame.Text(text)) }
+        return runCatching { s.send(Frame.Text(text)) }.isSuccess
     }
 
     fun disconnect() {
@@ -92,6 +107,7 @@ class MessagingWsClient {
         heartbeatJob?.cancel()
         scope.launch { runCatching { session?.close() } }
         job?.cancel()
+        _isConnected.value = false
     }
 }
 
