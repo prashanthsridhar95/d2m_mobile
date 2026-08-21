@@ -26,12 +26,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -181,6 +183,38 @@ class MessagingRepository(
     val isProductionGradeEncryption: Boolean get() = cryptoProvider.isProductionGrade
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
     val inboxNotifications: SharedFlow<InboxNotification> = _inboxNotifications.asSharedFlow()
+
+    /** True only while wsClient actually has a live session -- see MessagingWsClient.isConnected's own doc comment. Exposed here mainly for [ensureConnected] below, but also useful directly (e.g. a "reconnecting…" indicator). */
+    val isConnected: StateFlow<Boolean> get() = wsClient.isConnected
+
+    /**
+     * Ensures [start] has run and waits (bounded) for a live socket before
+     * returning -- for callers OUTSIDE any Compose lifecycle that would
+     * otherwise trigger [start] itself (App.kt's LaunchedEffect, ChatPane's
+     * DisposableEffect): specifically MessageReplyReceiver.kt and
+     * CallActionReceiver.kt, which can fire from a BroadcastReceiver in a
+     * freshly-spawned process (the app was fully killed, nothing has called
+     * [start] yet in this process at all) or one where the socket has gone
+     * silently stale in the background without the app knowing (see
+     * MessagingWsClient's own reconnect-loop doc comment). Without this, a
+     * reply typed straight from a message notification would call
+     * [sendText] against a dead/nonexistent connection and fail immediately
+     * -- reported directly: "when i reply to it, it stops at the mobile
+     * itself... shows as failed" until the app is opened by hand (which is
+     * what finally calls [start] for real and lets the retry succeed).
+     *
+     * Safe to call when already connected (returns true immediately, no
+     * extra work) and safe to call [start] again here even if it already
+     * ran once in this process -- [start] itself no-ops past its first
+     * successful call ([started] guard).
+     */
+    suspend fun ensureConnected(httpClient: HttpClient, timeoutMs: Long = 6_000): Boolean {
+        if (wsClient.isConnected.value) return true
+        start(httpClient)
+        return withTimeoutOrNull(timeoutMs) {
+            wsClient.isConnected.first { it }
+        } ?: false
+    }
 
     // ---- Archive Keypair (cross-device history restore) -- delegates straight to ArchiveManager; see that class + ArchivePinDialog.kt for the PIN UI this drives. ----
     val archivePrompt: StateFlow<ArchivePrompt?> get() = archiveManager.archivePrompt

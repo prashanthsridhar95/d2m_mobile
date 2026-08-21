@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.d2m.app.MainActivity
+import com.d2m.app.data.network.ApiClient
+import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,16 @@ class CallActionReceiver : BroadcastReceiver() {
                 // receiver down mid-handshake.
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.Default).launch {
+                    // ensureConnected before accept(): the socket may have gone
+                    // silently stale in the time between the call starting to
+                    // ring and this action firing (same class of bug as
+                    // MessageReplyReceiver.kt's -- see MessagingRepository.
+                    // ensureConnected's doc comment) -- accept() needs a live
+                    // socket to actually send CallSignal.Accept back.
+                    runCatching {
+                        val koin = GlobalContext.get()
+                        koin.get<MessagingRepository>().ensureConnected(koin.get<ApiClient>().client)
+                    }
                     runCatching { callManager.accept() }
                     // Bring the app to the foreground so CallLayer's actual
                     // in-call UI (mute/camera/hangup controls) is visible --
