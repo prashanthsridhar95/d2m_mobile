@@ -185,16 +185,28 @@ class MessagingRepository(
         return flow.asStateFlow()
     }
 
-    fun isPeerTyping(peerUsername: String): StateFlow<Boolean> {
+    // Callers (ConversationHeader, ThreadRow) call isPeerTyping/isPeerOnline
+    // directly in @Composable bodies with no `remember` wrapping -- every
+    // recomposition (ThreadRow's especially, scrolling a list) would
+    // otherwise create ANOTHER fresh MutableStateFlow + launch ANOTHER
+    // `scope.launch { collect }` on this repository's own long-lived scope,
+    // none of which ever get cancelled (that scope outlives any composable).
+    // Caching one derived flow per peer here, keyed on the SAME map both
+    // functions already need, means repeat calls for the same peer just
+    // return the existing flow instead of leaking a new collector forever.
+    private val typingFlows = mutableMapOf<String, StateFlow<Boolean>>()
+    private val onlineFlows = mutableMapOf<String, StateFlow<Boolean>>()
+
+    fun isPeerTyping(peerUsername: String): StateFlow<Boolean> = typingFlows.getOrPut(peerUsername) {
         val flow = MutableStateFlow(_typingByPeer.value[peerUsername] ?: false)
         scope.launch { _typingByPeer.collect { flow.value = it[peerUsername] ?: false } }
-        return flow.asStateFlow()
+        flow.asStateFlow()
     }
 
-    fun isPeerOnline(peerUsername: String): StateFlow<Boolean> {
+    fun isPeerOnline(peerUsername: String): StateFlow<Boolean> = onlineFlows.getOrPut(peerUsername) {
         val flow = MutableStateFlow(_presenceByUser.value[peerUsername] ?: false)
         scope.launch { _presenceByUser.collect { flow.value = it[peerUsername] ?: false } }
-        return flow.asStateFlow()
+        flow.asStateFlow()
     }
 
     fun unreadFor(peerUsername: String): StateFlow<Int> {
