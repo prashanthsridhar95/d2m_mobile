@@ -188,6 +188,7 @@ class CallManager(
                 scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Ice(callId, candidate)) }
             }
             override fun onConnected() {
+                println("CallManager: peer connection connected (callId=$callId, peer=$peer)")
                 if (phase != CallPhase.IN_CALL) {
                     phase = CallPhase.IN_CALL
                     startedAt = Clock.System.now().toEpochMilliseconds()
@@ -196,9 +197,11 @@ class CallManager(
                 }
             }
             override fun onFailed() {
+                println("CallManager: peer connection failed (callId=$callId, peer=$peer), attempting ICE restart")
                 scope.launch { tryIceRestart() }
             }
             override fun onClosed() {
+                println("CallManager: peer connection closed (callId=$callId, peer=$peer)")
                 teardown()
             }
             override fun onRemoteAudioTrackAdded() { /* audio plays automatically once attached by the engine's actual */ }
@@ -266,6 +269,7 @@ class CallManager(
         this.media = media
         phase = CallPhase.CALLING
         emit()
+        println("CallManager.startCall: calling $peerUsername (media=$media, callId=$callId)")
 
         try {
             val myPc = newPeerConnection()
@@ -281,13 +285,18 @@ class CallManager(
             val sdp = engine.localDescriptionSdp(myPc) ?: offer
             val sent = messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn))
             if (!sent) error("couldn't reach $peer -- check your connection")
+            println("CallManager.startCall: invite sent to $peer (callId=$callId)")
 
             ringJob = scope.launch {
                 delay(RING_TIMEOUT_MS)
-                if (phase == CallPhase.CALLING) hangup()
+                if (phase == CallPhase.CALLING) {
+                    println("CallManager.startCall: ring timeout (${RING_TIMEOUT_MS}ms) for $peer, hanging up (callId=$callId)")
+                    hangup()
+                }
             }
             emit()
         } catch (e: Throwable) {
+            println("CallManager.startCall: failed to start call to $peerUsername: ${e.message ?: e::class.simpleName}")
             _errors.value = "Could not start call: ${e.message}"
             endFailed = true
             teardown()
@@ -300,6 +309,7 @@ class CallManager(
         val offerSdp = pendingOfferSdp ?: return
         phase = CallPhase.CONNECTING
         emit()
+        println("CallManager.accept: accepting call from $peer (callId=$callId)")
         try {
             val myPc = newPeerConnection()
             acquireLocal(media == "video")
@@ -315,8 +325,10 @@ class CallManager(
             val sdp = engine.localDescriptionSdp(myPc) ?: answer
             val sent = messagingRepository.sendCallSignal(peer, CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
             if (!sent) error("couldn't reach $peer -- check your connection")
+            println("CallManager.accept: accept sent to $peer (callId=$callId)")
             pendingOfferSdp = null
         } catch (e: Throwable) {
+            println("CallManager.accept: failed to accept call from $peer: ${e.message ?: e::class.simpleName}")
             _errors.value = "Could not answer call: ${e.message}"
             endFailed = true
             teardown()
@@ -333,12 +345,14 @@ class CallManager(
 
     fun decline() {
         if (phase != CallPhase.INCOMING) return
+        println("CallManager.decline: declining call from $peer (callId=$callId)")
         scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Decline(callId, "declined")) }
         teardown()
     }
 
     fun hangup() {
         if (!active) return
+        println("CallManager.hangup: hanging up on $peer (callId=$callId, phase=$phase)")
         scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Hangup(callId)) }
         teardown()
     }
@@ -403,9 +417,13 @@ class CallManager(
 
     // ---------- Signaling in ----------
     suspend fun handleSignal(from: String, signal: CallSignal) {
+        println("CallManager.handleSignal: ${signal::class.simpleName} from $from (currentCallId=$callId)")
         if (signal is CallSignal.Invite) {
             if (active) {
-                if (signal.callId != callId) messagingRepository.sendCallSignal(from, CallSignal.Decline(signal.callId, "busy"))
+                if (signal.callId != callId) {
+                    println("CallManager.handleSignal: busy, declining new invite ${signal.callId} from $from while on call $callId")
+                    messagingRepository.sendCallSignal(from, CallSignal.Decline(signal.callId, "busy"))
+                }
                 return
             }
             reset()
@@ -533,6 +551,7 @@ class CallManager(
     }
 
     private fun teardown(reasonOverride: CallEndReason? = null) {
+        println("CallManager.teardown: callId=$callId, peer=$peer, phase=$phase, reasonOverride=$reasonOverride")
         var info: CallEndInfo? = null
         if (peer.isNotEmpty()) {
             val connected = startedAt != null

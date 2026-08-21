@@ -58,14 +58,17 @@ class MessagingWsClient {
             while (isActive && !closedByUs) {
                 try {
                     val url = "$wsBaseUrl/ws?user=${encodeQueryParam(username)}"
+                    println("MessagingWsClient: connecting to $url")
                     client.webSocketSession(urlString = url).let { s ->
                         session = s
                         _isConnected.value = true
+                        println("MessagingWsClient: connected (user=$username)")
                         onOpen()
                         heartbeatJob = scope.launch {
                             while (isActive) {
                                 delay(15_000)
-                                send(ClientToServer.Ping)
+                                val sent = send(ClientToServer.Ping)
+                                if (!sent) println("MessagingWsClient: heartbeat ping failed to send")
                             }
                         }
                         try {
@@ -74,35 +77,50 @@ class MessagingWsClient {
                                     val text = frame.readText()
                                     val event = runCatching {
                                         messagingProtocolJson.decodeFromString(ServerToClient.serializer(), text)
-                                    }.getOrNull()
-                                    if (event != null) onEvent(event)
+                                    }.getOrElse { e ->
+                                        println("MessagingWsClient: failed to decode incoming frame: ${e.message ?: e::class.simpleName} -- raw=$text")
+                                        null
+                                    }
+                                    if (event != null) {
+                                        println("MessagingWsClient: received ${event::class.simpleName}")
+                                        onEvent(event)
+                                    }
                                 }
                             }
-                        } catch (_: ClosedReceiveChannelException) {
-                            // normal close, fall through to reconnect below
+                        } catch (e: ClosedReceiveChannelException) {
+                            println("MessagingWsClient: socket closed (${e.message ?: "normal close"}), will reconnect")
                         } finally {
                             heartbeatJob?.cancel()
                         }
                     }
-                } catch (_: Throwable) {
-                    // connection failed or dropped -- fall through to the reconnect delay below
+                } catch (e: Throwable) {
+                    println("MessagingWsClient: connection attempt failed: ${e.message ?: e::class.simpleName}, will retry")
                 }
                 session = null
                 _isConnected.value = false
                 if (closedByUs) break
                 delay(1_500)
             }
+            println("MessagingWsClient: reconnect loop exited (closedByUs=$closedByUs)")
         }
     }
 
     /** Returns false (never throws) if there's no live session to send on, or if the send itself fails -- see [isConnected]'s doc comment for why callers that care about delivery (MessagingRepository's send paths) need to check this instead of assuming a lack of exception means it went out. */
     suspend fun send(event: ClientToServer): Boolean {
-        val s = session ?: return false
+        val s = session ?: run {
+            println("MessagingWsClient: send(${event::class.simpleName}) dropped -- not connected")
+            return false
+        }
         val text = messagingProtocolJson.encodeToString(ClientToServer.serializer(), event)
-        return runCatching { s.send(Frame.Text(text)) }.isSuccess
+        val result = runCatching { s.send(Frame.Text(text)) }
+        if (result.isFailure) {
+            println("MessagingWsClient: send(${event::class.simpleName}) failed -- ${result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.let { it::class.simpleName }}")
+        }
+        return result.isSuccess
     }
 
     fun disconnect() {
+        println("MessagingWsClient: disconnect() called")
         closedByUs = true
         heartbeatJob?.cancel()
         scope.launch { runCatching { session?.close() } }

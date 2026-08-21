@@ -235,6 +235,7 @@ class MessagingRepository(
             wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient)
             started = true
             _startupError.value = null
+            println("MessagingRepository.start: identity ready, socket connect initiated for $myUsername (see MessagingWsClient logs for actual connect result)")
         } catch (e: Throwable) {
             val message = "Messaging couldn't start: ${e.message ?: e::class.simpleName}"
             println("MessagingRepository.start: $message")
@@ -289,6 +290,7 @@ class MessagingRepository(
             // silent" after start() itself was confirmed to be succeeding).
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
+            println("MessagingRepository.sendTextInternal: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
             updateMessage(id) { it.copy(status = MessageStatus.FAILED) }
             _sendErrors.tryEmit("Message couldn't be sent -- tap it to retry")
         }
@@ -332,7 +334,8 @@ class MessagingRepository(
             val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
             val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
             if (!sent) error("not connected to the server")
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            println("MessagingRepository.sendMedia: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
             updateMessage(id) { it.copy(uploading = false, uploadFailed = true, status = MessageStatus.FAILED) }
         }
     }
@@ -355,6 +358,7 @@ class MessagingRepository(
             val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
+            println("MessagingRepository.editMessage: failed to send edit for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
             // Revert the optimistic edit so the bubble doesn't silently show
             // text the peer never actually received (Don Norman: the visible
             // state must match reality, not what we merely attempted).
@@ -378,6 +382,7 @@ class MessagingRepository(
             val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
+            println("MessagingRepository.deleteForEveryone: failed to send delete for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
             if (previous != null) updateMessage(messageId) { previous }
             _sendErrors.tryEmit("Delete couldn't be sent")
         }
@@ -407,6 +412,7 @@ class MessagingRepository(
             val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds())))
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
+            println("MessagingRepository.toggleReaction: failed to send $emoji ($action) for ${message.id} to $peerUsername: ${e.message ?: e::class.simpleName}")
             // Revert the optimistic reaction toggle -- same inverse action undoes it.
             updateMessage(message.id) { applyReaction(it, emoji, me, if (action == "add") "remove" else "add") }
             _sendErrors.tryEmit("Reaction couldn't be sent")
@@ -484,17 +490,24 @@ class MessagingRepository(
     private fun handleEvent(event: ServerToClient) {
         when (event) {
             is ServerToClient.MessageNew -> scope.launch {
+                println("MessagingRepository.handleEvent: MessageNew ${event.msg.id} from ${event.msg.from}")
                 val plaintext = runCatching {
                     cryptoProvider.decrypt(event.msg.from, event.msg.ciphertextType, event.msg.body)
+                }.onFailure { e ->
+                    println("MessagingRepository.handleEvent: decrypt failed for ${event.msg.id} from ${event.msg.from}: ${e.message ?: e::class.simpleName}")
                 }.getOrNull()
                 if (plaintext == null) {
                     // Session desync (real once a real CryptoProvider lands) -- ask the peer to re-handshake and resend; matches web's session.reset flow.
+                    println("MessagingRepository.handleEvent: null plaintext for ${event.msg.id}, requesting session reset with ${event.msg.from}")
                     wsClient.send(ClientToServer.SessionReset(event.msg.from))
                     return@launch
                 }
                 val payload = runCatching {
                     messagingProtocolJson.decodeFromString(ChatPayload.serializer(), plaintext)
-                }.getOrNull()
+                }.getOrElse { e ->
+                    println("MessagingRepository.handleEvent: failed to decode ChatPayload for ${event.msg.id}: ${e.message ?: e::class.simpleName}")
+                    null
+                }
 
                 when (payload) {
                     is ChatPayload.Text -> {
