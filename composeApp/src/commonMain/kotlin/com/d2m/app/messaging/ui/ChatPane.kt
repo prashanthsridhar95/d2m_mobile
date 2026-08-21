@@ -14,6 +14,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -427,7 +427,25 @@ private fun MessageRow(
                         .padding(10.dp),
                 ) {
                     CompositionLocalProvider(LocalContentColor provides bubbleContentColor) {
-                        Column {
+                        // width(IntrinsicSize.Max) is the fix for a real bug (reported
+                        // with a screenshot: every bubble stretched out to the full
+                        // widthIn(max=280.dp) cap regardless of how short the text was,
+                        // instead of hugging its content the way web's bubbles do). The
+                        // outer Box only constrains the MAX width (280.dp) -- a plain
+                        // Column has no opinion of its own on width beyond that, but
+                        // several children below (the timestamp/ticks row, the reply-quote
+                        // background, the upload progress bar) use fillMaxWidth() so their
+                        // OWN background/alignment spans the bubble's full resolved width
+                        // rather than just their own text's width. Without an explicit
+                        // width on this Column, "fill max width" for those children meant
+                        // literally the incoming 280.dp constraint, forcing the WHOLE
+                        // bubble to that width for every message. IntrinsicSize.Max makes
+                        // this Column measure itself to its widest child's natural
+                        // (non-fillMaxWidth) size first -- i.e. the message text -- and
+                        // THEN the fillMaxWidth() children below fill relative to that
+                        // resolved width instead of the outer constraint, exactly matching
+                        // MessageBubble.jsx's CSS (width: fit-content, max-width: ...).
+                        Column(modifier = Modifier.width(IntrinsicSize.Max)) {
                             if (message.replyTo != null) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
