@@ -1,8 +1,10 @@
 package com.d2m.app.messaging.protocol
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonClassDiscriminator
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
@@ -157,8 +159,28 @@ data class MediaMeta(
 @Serializable
 data class ReplyContext(val id: String, val from: String, val preview: String)
 
-/** The PLAINTEXT payload carried inside an encrypted MessageEnvelope.body -- this is what CryptoProvider encrypts/decrypts. */
+/**
+ * The PLAINTEXT payload carried inside an encrypted MessageEnvelope.body --
+ * this is what CryptoProvider encrypts/decrypts.
+ *
+ * `@JsonClassDiscriminator("type")` overrides messagingProtocolJson's global
+ * `classDiscriminator = "t"` (below) for JUST this hierarchy -- confirmed via
+ * a real cross-platform decrypt (mobile decrypting a live message from
+ * d2m_web) that the crypto interop is byte-for-byte correct, but the
+ * resulting plaintext JSON came back as `{"type":"text","text":"hello"}`,
+ * not `{"t":"text",...}`, and failed to deserialize with "Class
+ * discriminator was missing". Per
+ * messaging-framework/packages/protocol/src/index.ts, ChatPayload's wire
+ * discriminator key really is `type` -- it's ClientToServer/ServerToClient
+ * (the outer WS envelope, a separate polymorphic hierarchy) that uses `t`.
+ * Without this override every real message in both directions silently
+ * failed to decode after a *successful* decrypt, which looked from the UI
+ * like "messages not sent/received" despite the WebSocket, presence, and
+ * encryption all working correctly.
+ */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
+@JsonClassDiscriminator("type")
 sealed class ChatPayload {
     @Serializable
     @SerialName("text")
@@ -204,7 +226,10 @@ data class IceCandidateData(
 @Serializable
 data class VideoMeta(val roles: Map<String, String> = emptyMap(), val sending: List<String> = emptyList())
 
+/** Same discriminator-override reasoning as ChatPayload above -- CallSignal's wire discriminator key is `kind`, per messaging-framework/packages/protocol/src/index.ts, distinct from both ChatPayload's `type` and the outer envelope's `t`. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
+@JsonClassDiscriminator("kind")
 sealed class CallSignal {
     abstract val callId: String
 
