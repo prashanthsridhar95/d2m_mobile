@@ -497,8 +497,17 @@ class MessagingRepository(
                     println("MessagingRepository.handleEvent: decrypt failed for ${event.msg.id} from ${event.msg.from}: ${e.message ?: e::class.simpleName}")
                 }.getOrNull()
                 if (plaintext == null) {
-                    // Session desync (real once a real CryptoProvider lands) -- ask the peer to re-handshake and resend; matches web's session.reset flow.
-                    println("MessagingRepository.handleEvent: null plaintext for ${event.msg.id}, requesting session reset with ${event.msg.from}")
+                    // Session desync -- our side is just as broken as theirs (that's
+                    // WHY decrypt failed), so reset our own session before asking them
+                    // to re-handshake, exactly like d2m_web's useMessaging.js does
+                    // (`await crypto.resetPeer(msg.from)` before sending session.reset).
+                    // Skipping this was a real bug: without it, our NEXT encrypt() to
+                    // this peer kept reusing the same stale session that just failed
+                    // to decrypt, so their next decrypt failed too, and they'd send
+                    // another session.reset right back -- a reset loop that never
+                    // actually recovers instead of a real re-handshake.
+                    println("MessagingRepository.handleEvent: null plaintext for ${event.msg.id}, resetting our session with ${event.msg.from} and requesting they reset too")
+                    runCatching { cryptoProvider.resetSession(event.msg.from) }
                     wsClient.send(ClientToServer.SessionReset(event.msg.from))
                     return@launch
                 }
@@ -552,11 +561,18 @@ class MessagingRepository(
             }
             is ServerToClient.PresenceUpdate -> _presenceByUser.update { it + (event.user to event.online) }
             is ServerToClient.SessionReset -> {
-                // Peer couldn't decrypt us -- best-effort resend of anything still
-                // SENDING to them (no real session to rebuild against the stub
-                // provider; a real CryptoProvider would also rebuild its ratchet
-                // session here, same as crypto.resetPeer in useMessaging.js).
-                scope.launch { resendUndelivered(event.from) }
+                // Peer couldn't decrypt us -- forget our side of the session FIRST
+                // (mirrors useMessaging.js's `await crypto.resetPeer(ev.from)` before
+                // resendUndelivered), so the resend below re-establishes a fresh X3DH
+                // session instead of re-encrypting on the exact session the peer just
+                // gave up on. Without this the resend was a no-op in practice: same
+                // stale session in, same stale session out, so the peer's next decrypt
+                // failed too and they'd send another session.reset right back.
+                println("MessagingRepository.handleEvent: SessionReset from ${event.from} -- resetting our session and resending")
+                scope.launch {
+                    runCatching { cryptoProvider.resetSession(event.from) }
+                    resendUndelivered(event.from)
+                }
                 sessionResetHandler?.invoke(event.from)
             }
             else -> Unit

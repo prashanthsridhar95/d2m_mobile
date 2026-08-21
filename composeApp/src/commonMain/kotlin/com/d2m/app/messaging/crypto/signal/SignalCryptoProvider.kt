@@ -105,6 +105,10 @@ class SignalCryptoProvider(
         plaintext.decodeToString()
     }
 
+    override suspend fun resetSession(peerUsername: String) = lockFor(peerUsername).withLock {
+        store().clearSession(peerUsername)
+    }
+
     // ---- Relay server HTTP calls -- mirrors d2m_web's api.ts (uploadKeys/fetchBundle/keyCount) exactly. ----
     // Deliberately manual JSON encode/decode (not ApiClient.client's automatic ContentNegotiation) -- that
     // client's JSON is configured with snake_case naming for d2m_core_engine's Pydantic backend (see

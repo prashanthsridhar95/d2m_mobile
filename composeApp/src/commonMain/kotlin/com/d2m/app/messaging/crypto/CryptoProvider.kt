@@ -49,6 +49,20 @@ interface CryptoProvider {
 
     /** Decrypts a MessageEnvelope.body from `fromUsername` back to plaintext. */
     suspend fun decrypt(fromUsername: String, ciphertextType: String, body: String): String
+
+    /**
+     * Forgets the local session with `peerUsername` so the next [encrypt] call
+     * re-establishes fresh (a new X3DH handshake against a newly-fetched
+     * bundle). Mirrors d2m_web's `crypto.resetPeer` -- MessagingRepository
+     * calls this both when ITS OWN decrypt fails (our side is desynced too,
+     * not just the peer's) and when a peer's `session.reset` request arrives
+     * (they couldn't decrypt us). Skipping this step was a real bug: without
+     * it, "reset" only re-sent undelivered messages over the SAME stale
+     * session, which the other side -- having genuinely reset -- still
+     * couldn't decrypt, producing a reset loop instead of actually
+     * recovering.
+     */
+    suspend fun resetSession(peerUsername: String)
 }
 
 /**
@@ -70,6 +84,10 @@ class StubUnencryptedCryptoProvider : CryptoProvider {
 
     override suspend fun decrypt(fromUsername: String, ciphertextType: String, body: String): String =
         body.base64Decode().decodeToString()
+
+    override suspend fun resetSession(peerUsername: String) {
+        // No session state exists for the stub -- nothing to forget.
+    }
 }
 
 // Minimal, dependency-free base64 -- avoids pulling in a platform-specific
