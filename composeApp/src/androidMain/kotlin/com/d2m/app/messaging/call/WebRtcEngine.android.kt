@@ -14,6 +14,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -206,11 +207,36 @@ class AndroidWebRtcEngine(private val appContext: Context) : WebRtcEngine {
 
     override fun isSignalingStable(pc: Any): Boolean = (pc as PeerConnection).signalingState() == PeerConnection.SignalingState.STABLE
 
+    /**
+     * A real device crash traced back to this exact function: a native
+     * SIGSEGV on WebRTC's own signaling thread ("trying to execute
+     * non-executable memory"), firing immediately after
+     * "NetworkMonitor: Stop monitoring... Unregister network callback" --
+     * which happens inside PeerConnection.dispose()'s native teardown. This
+     * is a known class of issue with this binding: calling close() and
+     * dispose() back-to-back on the same call can race dispose()'s native
+     * cleanup against signaling-thread work that close() only asked to stop,
+     * not necessarily finished draining yet. No Kotlin try/catch can prevent
+     * this -- a native segfault kills the process directly, below the JVM
+     * entirely (the surrounding runCatching calls never even mattered here).
+     *
+     * Mitigation: still close() synchronously (severs the PeerConnection's
+     * senders' references to the local tracks immediately, which is what the
+     * teardown-ordering fix in CallManager.teardown() depends on), but defer
+     * dispose() a short beat on this engine's own scope instead of calling
+     * it in the same breath. This is the standard workaround for this class
+     * of WebRTC-Android-binding race -- give the signaling thread time to
+     * actually finish draining before freeing the native object out from
+     * under it.
+     */
     override fun closePeerConnection(pc: Any) {
         val p = pc as PeerConnection
         pcObservers.remove(p)
         runCatching { p.close() }
-        runCatching { p.dispose() }
+        engineScope.launch {
+            delay(300)
+            runCatching { p.dispose() }
+        }
     }
 
     // SdpObserver has one interface for both create and set callbacks; each
