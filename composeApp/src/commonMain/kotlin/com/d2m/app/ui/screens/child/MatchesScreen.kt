@@ -63,13 +63,49 @@ import com.d2m.app.messaging.ui.mediaLabel
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.theme.D2MFlow
+import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 
 /** Same two-tone gradient d2m_web hardcodes for every match avatar (MatchesScreen.jsx's `linear-gradient(135deg,#DCEEEA,#FBEAD2)`) -- there's no real profile photo on a Thread on either platform (ThreadOut/app/schemas.py's ThreadOut has no photo field at all), so this gradient squircle IS the design, not a placeholder standing in for a missing photo. */
 private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+
+private val SHORT_MONTH_NAMES = listOf(
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+private fun localDateOf(epochMillis: Long): LocalDate =
+    Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+/**
+ * "In matches view, timestamp is not shown - only last message is shown."
+ * Direct port of web's MatchesScreen.jsx fmtThreadListTime: today shows a
+ * time, yesterday says so, anything older shows a short date -- same
+ * today/yesterday/date ladder as ChatPane.kt's own dayLabel/formatBubbleTime
+ * (private to that file, so re-implemented here rather than exported across
+ * an unrelated module boundary for one shared helper).
+ */
+private fun fmtThreadListTime(epochMillis: Long): String {
+    if (epochMillis <= 0) return ""
+    val now = Clock.System.now().toEpochMilliseconds()
+    val date = localDateOf(epochMillis)
+    if (date == localDateOf(now)) {
+        val dt = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+        val hour12 = when (val h = dt.hour % 12) { 0 -> 12; else -> h }
+        val amPm = if (dt.hour < 12) "AM" else "PM"
+        return "$hour12:${dt.minute.toString().padStart(2, '0')} $amPm"
+    }
+    if (date == localDateOf(now - 86_400_000L)) return "Yesterday"
+    return "${SHORT_MONTH_NAMES[date.monthNumber - 1]} ${date.dayOfMonth}"
+}
 
 /**
  * Mirrors screens/child/MatchesScreen.jsx -- match inbox + chat. The
@@ -99,7 +135,7 @@ private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Colo
  * any phone messaging app (and as web itself falls back to below 720px).
  */
 @Composable
-fun MatchesScreen() {
+fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
@@ -227,6 +263,7 @@ fun MatchesScreen() {
                 ConversationHeader(
                     thread = t,
                     onBack = { selected = null },
+                    onOpenProfile = { onOpenProfile(t.otherParticipantId) },
                     onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
                     onStartVideoCall = { scope.launch { callManager.startCall(peerUsername, "video") } },
                     menuContent = {
@@ -378,7 +415,17 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
             PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(thread.otherParticipantName, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(thread.otherParticipantName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (lastMessage != null) {
+                    Text(
+                        fmtThreadListTime(lastMessage.sentAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mutedText(0.55f),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
             Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,
@@ -412,6 +459,7 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
 private fun ConversationHeader(
     thread: ThreadOut,
     onBack: () -> Unit,
+    onOpenProfile: () -> Unit,
     onStartAudioCall: () -> Unit,
     onStartVideoCall: () -> Unit,
     menuContent: @Composable () -> Unit,
@@ -430,23 +478,33 @@ private fun ConversationHeader(
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
         }
-        Box(modifier = Modifier.size(40.dp)) {
-            Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
-            PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (messagingRepo.isProductionGradeEncryption) {
-                    Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
+        // "tapping the user avatar inside chat is not taking me to the
+        // user's profile" -- matches web's own header (MatchesScreen.jsx:
+        // the avatar+name block is a role="button" that navigates to
+        // /child/profile/:id) -- this whole group had no tap handler at all
+        // before, avatar or name.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f).clickable(onClick = onOpenProfile),
+        ) {
+            Box(modifier = Modifier.size(40.dp)) {
+                Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+                PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (messagingRepo.isProductionGradeEncryption) {
+                        Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
+                    }
                 }
+                val subtitle = when {
+                    peerTyping -> "typing…"
+                    peerOnline -> "Online"
+                    else -> threadStatusLabel(thread.status)
+                }
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
-            val subtitle = when {
-                peerTyping -> "typing…"
-                peerOnline -> "Online"
-                else -> threadStatusLabel(thread.status)
-            }
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HeaderIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call", onClick = onStartAudioCall)
@@ -483,10 +541,12 @@ private fun MoreOptionsMenu(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { menuOpen = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        // "more menu button on the toolbar also should have rounded
+        // outline" -- was a bare IconButton (no outline at all), visibly
+        // inconsistent with the two call buttons right next to it
+        // (HeaderIconButton's 38dp outlined circle). Same visual now.
+        HeaderIconButton(icon = Icons.Filled.MoreVert, contentDescription = "More options", onClick = { menuOpen = true })
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(D2MRadius.lg)) {
             if (thread.pendingSeriousModeRequestId != null) {
                 DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
                 DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
