@@ -189,6 +189,14 @@ fun MatchesScreen() {
         }
     }
 
+    // Reported directly: "Why am I seeing closed chats? - we can remove
+    // them from list." Web actually keeps closed threads visible (with a
+    // "Closed" badge) -- this is a deliberate mobile-only divergence per
+    // that direct ask, not a parity bug. `threads` itself stays
+    // unfiltered (rememberPeerName/pendingOpenPeer above still need every
+    // match, closed or not); only the rendered list hides them.
+    val visibleThreads = remember(threads) { threads.filterNot { it.status == "closed" } }
+
     D2MTheme(flow = D2MFlow.CHILD) {
       Box(modifier = Modifier.fillMaxSize()) {
         val t = selected
@@ -199,9 +207,9 @@ fun MatchesScreen() {
                 when {
                     loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                     error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                    threads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
+                    visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                        items(threads) { thread ->
+                        items(visibleThreads) { thread ->
                             ThreadRow(thread = thread, onClick = { selected = thread })
                         }
                     }
