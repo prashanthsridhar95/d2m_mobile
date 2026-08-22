@@ -162,6 +162,9 @@ kotlin {
                 // Permissively licensed (MIT-style) -- deliberately NOT
                 // Signal's own AGPLv3 `libsignal`, see that file's doc comment.
                 implementation(libs.bouncycastle.provider)
+                // Animated-GIF decoding for chat media bubbles -- Android-only
+                // artifact (no iOS/Native variant), see messaging/ui/GifImageLoader.kt.
+                implementation(libs.coil.gif)
             }
         }
 

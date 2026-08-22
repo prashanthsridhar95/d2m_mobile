@@ -20,6 +20,7 @@ import com.d2m.app.messaging.crypto.archive.ArchiveManager
 import com.d2m.app.messaging.crypto.archive.ArchivePrimitives
 import com.d2m.app.messaging.crypto.archive.createArchivePrimitives
 import com.d2m.app.messaging.transport.MessagingWsClient
+import com.d2m.app.messaging.ui.createGifImageLoader
 import com.d2m.app.push.PushTokenRegistrar
 import org.koin.dsl.module
 
@@ -96,4 +97,8 @@ val appModule = module {
     // enough to wire calling up end-to-end.
     single<WebRtcEngine> { createWebRtcEngine() }
     single { CallManager(get(), get()) }
+
+    // Built once, not per-composition -- see messaging/ui/GifImageLoader.kt.
+    // Reported directly: "GIF sent/received should be autoplaying."
+    single { createGifImageLoader() }
 }

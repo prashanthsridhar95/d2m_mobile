@@ -101,6 +101,14 @@ multiplatform-settings-coroutines = { module = "com.russhwolf:multiplatform-sett
 
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+# Android-only artifact (ImageDecoder/Movie are Android platform APIs, no
+# iOS/Native variant is published) -- see messaging/ui/GifImageLoader.kt.
+# Without this, Coil has no animated-GIF decoder at all and a GIF message
+# renders as a static single frame regardless of any repeatCount/tap-replay
+# logic layered on top, which was the actual root cause behind "GIF sent/
+# received should be autoplaying" -- there was no animation happening yet
+# to control the loop count of.
+coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
 
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }

@@ -174,6 +174,12 @@ get a free key at https://developers.giphy.com/dashboard); read into
 `BuildConfig.GIPHY_API_KEY` at build time, see `composeApp/build.gradle.kts`'s
 `giphyApiKey` val.
 
+A sent/received GIF autoplays for 3 loops in its bubble, then freezes on
+the last frame; tapping it replays 3 more loops (`messaging/ui/GifBubbleImage`
+in `ChatPane.kt`, backed by `messaging/ui/GifImageLoader.kt`'s Coil
+ImageLoader -- real animated-GIF decoding on Android via `coil-gif`, static
+first-frame only on iOS since that artifact publishes no iOS variant).
+
 ## Local chat cache
 
 Chat history (including call-log bubbles, which are local-only and never
