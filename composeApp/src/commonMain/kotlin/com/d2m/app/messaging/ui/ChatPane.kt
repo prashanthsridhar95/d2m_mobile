@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,11 +31,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
@@ -178,8 +181,28 @@ fun ChatPane(
     var menuForMessageId by remember { mutableStateOf<String?>(null) }
     var reactionPickerFor by remember { mutableStateOf<String?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
+    var emojiOpen by remember { mutableStateOf(false) }
+    var attaching by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    fun replyContext() = replyingTo?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) }
+
+    // Attach (paperclip button below) -- any file type, matches web's plain
+    // <input type="file"> with no `accept` restriction. Reported directly:
+    // "I want to be able to attach media, send emojis, send gifs" --
+    // MessagingRepository.sendMedia already existed and was fully wired
+    // (used internally by the archive-restore path) but had ZERO UI call
+    // sites; this is the first one.
+    val mediaLauncher = rememberMediaAttachLauncher { picked ->
+        attaching = true
+        val reply = replyContext()
+        scope.launch {
+            runCatching { messagingRepo.sendMedia(peerId, picked.bytes, picked.fileName, picked.mime, picked.kind, replyTo = reply) }
+            replyingTo = null
+            attaching = false
+        }
+    }
 
     DisposableEffect(peerId) {
         scope.launch { messagingRepo.start(apiClient.client) }
@@ -289,11 +312,50 @@ fun ChatPane(
                 }
             }
 
+            // Emoji/Stickers/GIFs panel -- grows the composer area upward
+            // (message list shrinks to make room, since it's the only
+            // weight(1f) element in this Column) rather than a true CSS-style
+            // absolute overlay, which Compose has no direct equivalent for
+            // without extra offset math -- simpler and just as usable.
+            AnimatedVisibility(
+                visible = emojiOpen && editingId == null,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit = shrinkVertically(tween(150)) + fadeOut(tween(120)),
+            ) {
+                EmojiGifPanel(
+                    client = apiClient.client,
+                    onPickEmoji = { emoji -> draft += emoji },
+                    onSendSticker = { emoji ->
+                        val reply = replyContext()
+                        scope.launch { messagingRepo.sendText(peerId, emoji, reply) }
+                        replyingTo = null
+                        emojiOpen = false
+                    },
+                    onPickGif = { gif ->
+                        emojiOpen = false
+                        val reply = replyContext()
+                        scope.launch {
+                            runCatching {
+                                val bytes = fetchGifBytes(apiClient.client, gif)
+                                messagingRepo.sendMedia(peerId, bytes, "gif.gif", "image/gif", "image", gif.width, gif.height, reply)
+                            }
+                            replyingTo = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).padding(bottom = 6.dp),
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (editingId == null) {
+                    IconButton(onClick = { emojiOpen = false; mediaLauncher() }, enabled = !attaching, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach a file", tint = mutedText(0.45f))
+                    }
+                }
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { new ->
@@ -313,6 +375,17 @@ fun ChatPane(
                     placeholder = { Text("Message…", color = mutedText(0.4f)) },
                     shape = RoundedCornerShape(D2MRadius.pill),
                     textStyle = MaterialTheme.typography.bodyMedium,
+                    trailingIcon = {
+                        if (editingId == null) {
+                            IconButton(onClick = { emojiOpen = !emojiOpen }) {
+                                Icon(
+                                    Icons.Filled.EmojiEmotions,
+                                    contentDescription = "Emoji, stickers & GIFs",
+                                    tint = if (emojiOpen) MaterialTheme.colorScheme.primary else mutedText(0.45f),
+                                )
+                            }
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedBorderColor = mutedText(0.15f),
                         focusedBorderColor = MaterialTheme.colorScheme.primary,

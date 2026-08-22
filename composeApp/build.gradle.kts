@@ -160,6 +160,20 @@ kotlin {
     }
 }
 
+// GIPHY API key for the GIF picker (messaging/ui/GifPicker.kt) -- read from
+// local.properties (gitignored, never committed -- same file Android
+// Studio already generates per-checkout for sdk.dir) rather than hardcoded
+// in source, so a real per-developer/per-deployment key never ends up in
+// git history. Falls back to GIPHY's own public "beta" key (rate-limited,
+// shared across every app that hasn't set its own -- get a free key at
+// https://developers.giphy.com/dashboard) when local.properties has none,
+// matching d2m_web's own GifPicker.jsx fallback exactly.
+val localProperties = java.util.Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val giphyApiKey: String = (localProperties.getProperty("GIPHY_API_KEY") ?: "dc6zaTOxFJmzC")
+
 android {
     namespace = "com.d2m.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -170,6 +184,11 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "GIPHY_API_KEY", "\"$giphyApiKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     sourceSets["main"].apply {
