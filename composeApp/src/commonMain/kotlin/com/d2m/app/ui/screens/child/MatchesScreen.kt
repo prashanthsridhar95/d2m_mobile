@@ -48,6 +48,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.data.model.ThreadOut
 import com.d2m.app.data.network.friendlyError
@@ -209,7 +212,35 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     // without this, system back has nothing to intercept inside this single
     // route and falls through to the NavController, popping past the
     // conversation to Home instead of just closing it.
-    BackHandlerCompat(enabled = selected != null) { selected = null }
+    //
+    // "tapping on the user avatar & opening the profile & pressing back
+    // button takes me to matches. but it should be taking me back to the
+    // chat only." Root cause: this composable's back handler was gated only
+    // on `selected != null`, which stays true the whole time a profile
+    // pushed on top of it (via onOpenProfile -> navController.navigate(...))
+    // is showing -- opening a profile never clears `selected`. Compose
+    // Navigation does NOT dispose this screen's composition while it's
+    // merely stopped underneath another destination, so this BackHandler
+    // stays registered AND enabled the entire time ProfileDetailScreen is on
+    // top. androidx's OnBackPressedDispatcher has no awareness of which
+    // route is actually visible -- it just calls the most-recently-added
+    // enabled callback -- so pressing system back while looking at the
+    // profile was silently caught here instead: `selected = null` fired
+    // (invisibly, since ProfileDetailScreen was still the current nav
+    // destination), consuming that back press entirely. The SECOND back
+    // press then had nothing left enabled here (selected was already null)
+    // and fell through to NavController, which popped ProfileDetailScreen --
+    // landing back on this screen, but by then `selected` had already been
+    // reset, so it showed the bare thread list instead of the chat.
+    // isResumed (via the current NavBackStackEntry's own lifecycle, which
+    // Compose Navigation DOES correctly move between RESUMED/STARTED/CREATED
+    // as the back stack changes) closes that gap: this handler only
+    // intercepts back while this screen is actually the front-most,
+    // resumed destination, exactly like every other BackHandler using this
+    // check is expected to.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val isResumed = lifecycleState == Lifecycle.State.RESUMED
+    BackHandlerCompat(enabled = selected != null && isResumed) { selected = null }
 
     // A tapped in-app notification banner (messaging/ui/InAppNotificationLayer.kt)
     // records which peer to jump to -- once this screen's thread list is
