@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Send
@@ -93,9 +94,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -113,7 +116,6 @@ import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.theme.D2MRadius
-import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -130,6 +132,19 @@ import kotlin.math.roundToInt
 private const val TWO_PI = 6.283185307179586
 
 private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
+// "read double tick is not properly visible in the green bubble" -- the
+// theme's LocalD2MStatusPalette.info.fg (a fairly dark navy, #1A56B0 light /
+// a desaturated light blue #8AB2F5 dark) is tuned for text/badges on a
+// neutral surface, not for reading as a small icon against a saturated
+// accent-filled bubble -- against the Child flow's teal/green
+// (D2MAccents.ChildLight/ChildDark, see Color.kt) it still doesn't pop.
+// This is WhatsApp's own actual read-tick blue (#34B7F1-family), a
+// purpose-built bright cyan that's famously legible against exactly this
+// kind of saturated green -- used directly here instead of a theme token so
+// it stays visible regardless of which flow's accent the bubble is filled
+// with, mine-bubble color needing to differ, or light/dark mode.
+private val ReadTickColor = Color(0xFF4FC3F7)
 
 // ----- Date/time formatting for bubbles + day dividers -- matches d2m_web's
 // MessageBubble.jsx (fmtBubbleTime) and MessageList.jsx (dayLabel/sameDay)
@@ -223,13 +238,17 @@ fun ChatPane(
     // ChatPane already has everything (messagingRepo, peerUsername) needed.
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
 
-    var draft by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(TextFieldValue("")) }
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var menuForMessageId by remember { mutableStateOf<String?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var emojiOpen by remember { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
+    // "provide a image & video viewer - shouldnt be going outside the app" --
+    // tapping a media bubble sets this; MediaViewerDialog renders full-screen
+    // over the whole pane whenever it's non-null (see the outer Box below).
+    var viewerTarget by remember { mutableStateOf<MediaViewerTarget?>(null) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     // "When reply is pressed, focus should go to the chat box & keyboard
@@ -241,6 +260,18 @@ fun ChatPane(
     val keyboardController = LocalSoftwareKeyboardController.current
     LaunchedEffect(replyingTo) {
         if (replyingTo != null) {
+            composerFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+    // "edit should also open the keyboard. also the cursor should be at the
+    // end of the text" -- onEdit (below) already sets draft to a
+    // TextFieldValue with its selection at the end of the pre-filled text;
+    // this mirrors the replyingTo effect above so tapping Edit focuses the
+    // composer + opens the keyboard the same way Reply already does, rather
+    // than only updating the text and leaving focus wherever it was.
+    LaunchedEffect(editingId) {
+        if (editingId != null) {
             composerFocusRequester.requestFocus()
             keyboardController?.show()
         }
@@ -271,20 +302,41 @@ fun ChatPane(
         onDispose { messagingRepo.setActivePeer(null) }
     }
 
-    // Keyed on peerTyping too (matches web's identical effect dependency
-    // list) -- so the view also scrolls down when the typing bubble itself
-    // appears, not just when a real message lands.
+    // "everytime i open the chat, there is a scroll to end that happens. i
+    // shouldnt be seeing it. it should be opening with last message being
+    // shown." The list always started at index 0 (top) and this effect used
+    // an ANIMATED scroll down to the last item on every trigger, including
+    // the very first composition -- so opening a chat visibly played a
+    // scroll-down animation instead of simply already being at the bottom.
+    // hasScrolledInitially (per peer) draws the line: the first time
+    // messages appear for this conversation, jump there instantly (no
+    // visible motion); only NEW messages arriving afterwards -- while the
+    // person is actually looking at the conversation -- get the smooth
+    // animated scroll. Keyed on peerTyping too (matches web's identical
+    // effect dependency list) -- so the view also scrolls down when the
+    // typing bubble itself appears, not just when a real message lands.
+    var hasScrolledInitially by remember(peerId) { mutableStateOf(false) }
     LaunchedEffect(messages.size, peerTyping) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isEmpty()) return@LaunchedEffect
+        if (!hasScrolledInitially) {
+            listState.scrollToItem(messages.size - 1)
+            hasScrolledInitially = true
+        } else {
+            listState.animateScrollToItem(messages.size - 1)
+        }
     }
 
-    // "when keyboard opens, the last seen chat should move with the
-    // keyboard. so i dont have to scroll to see where i was." The message
-    // list already shrinks when the keyboard opens (imePadding() is applied
-    // by the caller, MatchesScreen.kt/ParentMessagesScreen.kt), but nothing
-    // told it to re-scroll -- the last message just ended up sitting
-    // wherever the shrunk viewport left it, sometimes hidden behind the
-    // keyboard, and needed a manual scroll to find again.
+    // "opening & closing the keyboard moves the chat a bit - it should stay
+    // as is. i should be able to see the exact offset before opening & after."
+    // The message list already shrinks when the keyboard opens (imePadding()
+    // is applied by the caller, MatchesScreen.kt/ParentMessagesScreen.kt),
+    // which can leave the last message sitting wherever the shrunk viewport
+    // left it (sometimes hidden behind the keyboard) -- this re-pins it to
+    // the bottom. It used to do that with an ANIMATED scroll, which is
+    // exactly the visible "moves a bit" motion being reported here -- a
+    // plain instant scrollToItem re-snaps to the same relative position
+    // (last message at the bottom) without any perceptible scrolling
+    // gesture, reading as "it just stayed there" instead of "it jumped."
     // WindowInsets.Companion.isImeVisible isn't resolvable in this KMP
     // Foundation artifact (Android-only in some Compose Multiplatform
     // versions) -- reading WindowInsets.ime's own bottom inset directly is
@@ -294,7 +346,7 @@ fun ChatPane(
     val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
     val imeVisible = imeBottomPx > 0
     LaunchedEffect(imeVisible) {
-        if (imeVisible && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (imeVisible && messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
     }
 
     // Don Norman "visibility of system status": a send/edit/delete/reaction
@@ -324,6 +376,7 @@ fun ChatPane(
     }
 
     Box(modifier = modifier) {
+        MediaViewerDialog(target = viewerTarget, onDismiss = { viewerTarget = null })
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 if (messages.isEmpty() && !peerTyping) {
@@ -382,10 +435,14 @@ fun ChatPane(
                                     onCloseMenu = { menuForMessageId = null },
                                     onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; menuForMessageId = null },
                                     onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
-                                    onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
+                                    // Cursor placed at the end of the pre-filled text (TextRange with
+                                    // a single offset = a collapsed cursor there, not a selection) --
+                                    // "the cursor should be at the end of the text."
+                                    onEdit = { editingId = m.id; draft = TextFieldValue(text = m.text, selection = TextRange(m.text.length)); replyingTo = null; menuForMessageId = null },
                                     onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
                                     onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
                                     onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
+                                    onOpenMedia = { viewerTarget = it },
                                 )
                             }
                         }
@@ -421,7 +478,7 @@ fun ChatPane(
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = { replyingTo = null; editingId = null; draft = "" }, modifier = Modifier.size(22.dp)) {
+                    IconButton(onClick = { replyingTo = null; editingId = null; draft = TextFieldValue("") }, modifier = Modifier.size(22.dp)) {
                         Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
                     }
                 }
@@ -439,7 +496,10 @@ fun ChatPane(
             ) {
                 EmojiGifPanel(
                     client = apiClient.client,
-                    onPickEmoji = { emoji -> draft += emoji },
+                    onPickEmoji = { emoji ->
+                        val newText = draft.text + emoji
+                        draft = TextFieldValue(text = newText, selection = TextRange(newText.length))
+                    },
                     onSendSticker = { emoji ->
                         val reply = replyContext()
                         scope.launch { messagingRepo.sendText(peerId, emoji, reply) }
@@ -484,16 +544,16 @@ fun ChatPane(
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { new ->
-                        val wasEmpty = draft.isEmpty()
+                        val wasEmpty = draft.text.isEmpty()
                         draft = new
                         if (editingId == null) {
-                            if (new.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
+                            if (new.text.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
                             typingJob?.cancel()
                             typingJob = scope.launch {
                                 delay(2_000)
                                 messagingRepo.sendTyping(peerId, false)
                             }
-                            if (new.isEmpty()) scope.launch { messagingRepo.sendTyping(peerId, false) }
+                            if (new.text.isEmpty()) scope.launch { messagingRepo.sendTyping(peerId, false) }
                         }
                     },
                     modifier = Modifier.weight(1f).focusRequester(composerFocusRequester),
@@ -526,7 +586,7 @@ fun ChatPane(
                         focusedContainerColor = mutedText(0.03f),
                     ),
                 )
-                val canSend = draft.isNotBlank()
+                val canSend = draft.text.isNotBlank()
                 // Animates instead of snapping so the button visibly "wakes up"
                 // the moment there's something to send -- a small but real
                 // affordance cue (Don Norman: the control's own appearance
@@ -537,8 +597,8 @@ fun ChatPane(
                         .clip(CircleShape)
                         .background(sendBg)
                         .combinedClickable(enabled = canSend, onClick = {
-                            val text = draft
-                            draft = ""
+                            val text = draft.text
+                            draft = TextFieldValue("")
                             val editing = editingId
                             val reply = replyingTo
                             editingId = null
@@ -581,12 +641,15 @@ private fun MessageTicks(status: MessageStatus, mine: Boolean) {
     // every call site), which are filled with MaterialTheme.colorScheme.
     // primary -- and the "read" branch here used that EXACT SAME color for
     // the tick. A read receipt wasn't subtly different, it was invisible:
-    // same color as the bubble it's sitting on. Web avoids this because its
-    // read-tick color (--info-fg) is a distinct blue token, never the same
-    // value as the bubble's own accent fill -- LocalD2MStatusPalette.info.fg
-    // is that same token on this side (see Color.kt/Theme.kt).
+    // same color as the bubble it's sitting on. First fix used the theme's
+    // info.fg token, which turned out to still be too low-contrast against
+    // the Child flow's teal/green bubble fill ("read double tick is not
+    // properly visible in the green bubble") -- ReadTickColor (declared
+    // above) is a dedicated, purpose-built bright blue instead, chosen
+    // specifically for legibility against a saturated fill, not a
+    // general-purpose semantic token repurposed for this.
     val color = if (status == MessageStatus.READ) {
-        LocalD2MStatusPalette.current.info.fg
+        ReadTickColor
     } else {
         LocalContentColor.current.copy(alpha = if (mine) 0.75f else 0.5f)
     }
@@ -697,6 +760,43 @@ private fun GifBubbleImage(url: String, contentDescription: String?) {
     )
 }
 
+/**
+ * Video attachment bubble -- no decoded thumbnail frame is available (see
+ * MessageRow's own comment on this), so this is a fixed-size dark card with
+ * a centered play affordance + duration, matching every chat app's fallback
+ * treatment for a video it hasn't generated a poster frame for. Tapping
+ * opens the real in-app player full-screen (MediaViewerDialog.kt).
+ */
+@Composable
+private fun VideoBubblePlaceholder(durationSec: Int?, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(220.dp)
+            .height(150.dp)
+            .clip(RoundedCornerShape(D2MRadius.sm))
+            .background(Color(0xFF1C1C1C))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.25f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(28.dp))
+        }
+        if (durationSec != null && durationSec > 0) {
+            Text(
+                "${durationSec / 60}:${(durationSec % 60).toString().padStart(2, '0')}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(D2MRadius.sm))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
@@ -713,6 +813,7 @@ private fun MessageRow(
     onDeleteForMe: () -> Unit,
     onDeleteForEveryone: () -> Unit,
     onRetry: () -> Unit,
+    onOpenMedia: (MediaViewerTarget) -> Unit,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         // BoxWithConstraints (not a fixed dp cap) to match d2m_web's
@@ -799,28 +900,38 @@ private fun MessageRow(
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(dragAnim.value.roundToInt(), 0) }
-                        .pointerInput(message.id) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    swipeScope.launch {
-                                        if (dragAnim.value > replyThresholdPx) onReply()
-                                        dragAnim.animateTo(0f, animationSpec = spring())
+                        // "replying/reacting to call logs shouldnt be
+                        // allowed" -- there's nothing meaningful to reply to
+                        // on a call-log entry, so the swipe gesture itself
+                        // is disabled for one rather than just no-oping
+                        // onReply, which would otherwise still let the
+                        // bubble visibly drag and reveal the reply icon.
+                        .then(
+                            if (message.callLog == null) {
+                                Modifier.pointerInput(message.id) {
+                                    detectHorizontalDragGestures(
+                                        onDragEnd = {
+                                            swipeScope.launch {
+                                                if (dragAnim.value > replyThresholdPx) onReply()
+                                                dragAnim.animateTo(0f, animationSpec = spring())
+                                            }
+                                        },
+                                        onDragCancel = { swipeScope.launch { dragAnim.animateTo(0f, animationSpec = spring()) } },
+                                    ) { change, dragAmount ->
+                                        // Rightward-only (coerced at 0f) -- matches
+                                        // WhatsApp, which never lets a bubble drag
+                                        // left. change.consume() here (rather than
+                                        // leaving it for combinedClickable below)
+                                        // is what keeps this gesture from also
+                                        // registering as a long-press once a real
+                                        // drag is underway.
+                                        change.consume()
+                                        val next = (dragAnim.value + dragAmount).coerceIn(0f, maxDragPx)
+                                        swipeScope.launch { dragAnim.snapTo(next) }
                                     }
-                                },
-                                onDragCancel = { swipeScope.launch { dragAnim.animateTo(0f, animationSpec = spring()) } },
-                            ) { change, dragAmount ->
-                                // Rightward-only (coerced at 0f) -- matches
-                                // WhatsApp, which never lets a bubble drag
-                                // left. change.consume() here (rather than
-                                // leaving it for combinedClickable below)
-                                // is what keeps this gesture from also
-                                // registering as a long-press once a real
-                                // drag is underway.
-                                change.consume()
-                                val next = (dragAnim.value + dragAmount).coerceIn(0f, maxDragPx)
-                                swipeScope.launch { dragAnim.snapTo(next) }
-                            }
-                        }
+                                }
+                            } else Modifier,
+                        )
                         .widthIn(max = maxBubbleWidth)
                         .then(
                             if (emojiOnly) Modifier
@@ -830,7 +941,11 @@ private fun MessageRow(
                         // Tap now also does something: FAILED messages retry
                         // on tap (Don Norman "error recovery" -- a stuck
                         // "Failed" label with no action was a dead end before).
-                        .combinedClickable(onClick = { if (message.status == MessageStatus.FAILED) onRetry() }, onLongClick = { if (!message.deleted) onOpenMenu() })
+                        // "replying/reacting to call logs shouldnt be
+                        // allowed" -- long-press (the react/reply/edit/
+                        // delete menu) is disabled entirely for a call-log
+                        // bubble, same reasoning as the swipe gesture above.
+                        .combinedClickable(onClick = { if (message.status == MessageStatus.FAILED) onRetry() }, onLongClick = { if (!message.deleted && message.callLog == null) onOpenMenu() })
                         .padding(if (emojiOnly) PaddingValues(horizontal = 2.dp, vertical = 1.dp) else PaddingValues(10.dp)),
                 ) {
                     CompositionLocalProvider(LocalContentColor provides bubbleContentColor) {
@@ -966,14 +1081,32 @@ private fun MessageRow(
                                         // upload with kind="image" (same as a plain photo
                                         // attachment) but mime="image/gif" -- mime is the
                                         // only reliable signal here for "this needs the
-                                        // special animated treatment", not kind.
-                                        if (message.media.mime == "image/gif") {
-                                            GifBubbleImage(url = message.mediaUrl, contentDescription = message.media.name)
-                                        } else {
-                                            AsyncImage(
+                                        // special animated treatment", not kind. GIFs keep
+                                        // their existing tap-to-replay behavior rather than
+                                        // opening the new full-screen viewer -- that's
+                                        // already the correct, previously-requested tap
+                                        // affordance for this specific media type.
+                                        when {
+                                            message.media.mime == "image/gif" -> GifBubbleImage(url = message.mediaUrl, contentDescription = message.media.name)
+                                            // "always the media bubble size is a defined
+                                            // height & width... provide a image & video
+                                            // viewer" -- video attachments previously fell
+                                            // through to the plain AsyncImage branch below,
+                                            // which can't decode a video file at all (silently
+                                            // broken). No decoded thumbnail is available yet
+                                            // (MediaMeta.thumb is never populated anywhere in
+                                            // this app today), so this is a fixed dark
+                                            // placeholder + play affordance -- tapping opens
+                                            // the real in-app player full-screen.
+                                            message.media.kind == "video" -> VideoBubblePlaceholder(
+                                                durationSec = message.media.duration,
+                                                onClick = { onOpenMedia(MediaViewerTarget.Video(message.mediaUrl)) },
+                                            )
+                                            else -> AsyncImage(
                                                 model = message.mediaUrl,
                                                 contentDescription = message.media.name,
-                                                modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm)),
+                                                modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm))
+                                                    .clickable { onOpenMedia(MediaViewerTarget.Image(message.mediaUrl, message.media.name)) },
                                             )
                                         }
                                     }

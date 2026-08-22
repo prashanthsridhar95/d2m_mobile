@@ -65,6 +65,12 @@ google-services-version = "4.4.2"
 # non-fatal/ANR reporting up to the same Firebase project push already uses.
 # Confirmed current on Firebase's own docs (firebase.google.com/docs/crashlytics/android/get-started) at implementation time.
 firebase-crashlytics-version = "3.0.7"
+# "provide a image & video viewer - shouldnt be going outside the app" --
+# AndroidX Media3's ExoPlayer + PlayerView, the standard in-app video
+# playback stack (successor to the old ExoPlayer2/exoplayer2-ui artifacts).
+# Android-only, same expect/actual pattern as stream-webrtc-android/coil-gif
+# above -- see messaging/ui/VideoPlayerView.android.kt.
+media3-version = "1.4.1"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -121,6 +127,8 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 stream-webrtc-android = { module = "io.getstream:stream-webrtc-android", version.ref = "stream-webrtc-android-version" }
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle-version" }
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3-version" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3-version" }
 
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }

@@ -165,6 +165,11 @@ kotlin {
                 // Animated-GIF decoding for chat media bubbles -- Android-only
                 // artifact (no iOS/Native variant), see messaging/ui/GifImageLoader.kt.
                 implementation(libs.coil.gif)
+                // In-app full-screen video playback for the media viewer
+                // ("provide a image & video viewer - shouldnt be going
+                // outside the app") -- see messaging/ui/VideoPlayerView.android.kt.
+                implementation(libs.media3.exoplayer)
+                implementation(libs.media3.ui)
             }
         }
 
