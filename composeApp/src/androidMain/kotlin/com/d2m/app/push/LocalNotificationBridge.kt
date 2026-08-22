@@ -14,6 +14,7 @@ import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import com.d2m.app.AppForegroundState
 import com.d2m.app.MainActivity
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
@@ -139,11 +140,20 @@ fun installLocalNotificationBridge(app: Application) {
         override fun onActivityStarted(activity: Activity) {
             startedActivities++
             isForeground = true
+            // Mirrors this same flag into AppForegroundState so commonMain UI
+            // (CallLayer.kt/ChatPane.kt/InAppNotificationLayer.kt's in-app
+            // sound-effects triggers) can read it too -- see that object's
+            // own doc comment on why exactly one of "in-app tone" or "OS
+            // notification sound" should ever fire for a given event.
+            AppForegroundState.set(true)
         }
 
         override fun onActivityStopped(activity: Activity) {
             startedActivities--
-            if (startedActivities <= 0) isForeground = false
+            if (startedActivities <= 0) {
+                isForeground = false
+                AppForegroundState.set(false)
+            }
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit

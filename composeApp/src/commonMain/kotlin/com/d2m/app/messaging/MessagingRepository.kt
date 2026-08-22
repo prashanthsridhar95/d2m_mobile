@@ -188,6 +188,8 @@ class MessagingRepository(
     // App.kt) so re-showing one stale banner on the rare remount is a
     // reasonable trade for never silently dropping a real one.
     private val _inboxNotifications = MutableSharedFlow<InboxNotification>(replay = 1, extraBufferCapacity = 8)
+    /** "when i'm in a chat & i receive messages in that chat, i want this tune to be played" -- web's useMessaging.js has an explicit else-branch for exactly this (playInChatTone(), see lib/sound.js) that mobile never had at all; this is that same signal. Emits the sender's username whenever a text/media message arrives for the peer whose thread is ALREADY open (the complementary case to inboxNotifications above, which only fires when it ISN'T) -- see markUnreadOrChime below. No replay: a stale "someone messaged the chat you have open" chime after a fresh subscribe would be actively wrong, unlike inboxNotifications' banner. */
+    private val _inChatMessageEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     /** Human-readable, transient failures for ChatPane to surface as a snackbar (Don Norman "visibility of system status" -- a send failure used to just vanish with no feedback at all). Not for call signaling failures, which have their own CallManager.errors -- see that class. */
     private val _sendErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val sendErrors: SharedFlow<String> = _sendErrors.asSharedFlow()
@@ -210,6 +212,7 @@ class MessagingRepository(
     val isProductionGradeEncryption: Boolean get() = cryptoProvider.isProductionGrade
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
     val inboxNotifications: SharedFlow<InboxNotification> = _inboxNotifications.asSharedFlow()
+    val inChatMessageEvents: SharedFlow<String> = _inChatMessageEvents.asSharedFlow()
 
     /** True only while wsClient actually has a live session -- see MessagingWsClient.isConnected's own doc comment. Exposed here mainly for [ensureConnected] below, but also useful directly (e.g. a "reconnecting…" indicator). */
     val isConnected: StateFlow<Boolean> get() = wsClient.isConnected
@@ -743,6 +746,12 @@ class MessagingRepository(
         if (activePeer != fromUsername) {
             _unreadByPeer.update { it + (fromUsername to ((it[fromUsername] ?: 0) + 1)) }
             _inboxNotifications.tryEmit(InboxNotification(fromUsername, preview, messageId))
+        } else {
+            // Mirrors useMessaging.js's else-branch exactly (no unread badge/
+            // toast -- the message just appends live into the already-open
+            // conversation -- just the in-chat chime). See ChatPane.kt's
+            // collector for where this actually plays.
+            _inChatMessageEvents.tryEmit(fromUsername)
         }
     }
 

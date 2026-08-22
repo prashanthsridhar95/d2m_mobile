@@ -36,8 +36,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.d2m.app.AppForegroundState
 import com.d2m.app.messaging.InboxNotification
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.delay
@@ -74,7 +76,17 @@ fun InAppNotificationLayer(onOpenPeer: (String) -> Unit) {
     var current by remember { mutableStateOf<InboxNotification?>(null) }
 
     LaunchedEffect(Unit) {
-        messagingRepo.inboxNotifications.collect { event -> current = event }
+        messagingRepo.inboxNotifications.collect { event ->
+            current = event
+            // "Why notification sounds are not working like how it's
+            // working on web?" -- web plays playMsgTone() in the exact same
+            // spot it sets incomingNotification (useMessaging.js), which
+            // mobile never had at all. Gated on isForeground (this
+            // LaunchedEffect itself keeps collecting even while backgrounded)
+            // so this doesn't double up with the background system
+            // notification's own channel sound for the same event.
+            if (AppForegroundState.isForeground.value) SoundEffects.playMsgTone()
+        }
     }
 
     LaunchedEffect(current) {

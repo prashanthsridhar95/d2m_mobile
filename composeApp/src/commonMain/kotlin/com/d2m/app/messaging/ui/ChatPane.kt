@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -93,10 +94,12 @@ import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
+import com.d2m.app.AppForegroundState
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatMessage
 import com.d2m.app.messaging.MessageStatus
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.theme.D2MRadius
@@ -257,6 +260,24 @@ fun ChatPane(
     // the rest of the OS uses for "this action didn't go through."
     LaunchedEffect(Unit) {
         messagingRepo.sendErrors.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
+
+    // "Why notification sounds are not working like how it's working on
+    // web?" -- web's playInChatTone() (useMessaging.js's else-branch, see
+    // lib/sound.js): a message arriving in the exact conversation you're
+    // already looking at gets its own distinct chime, separate from the
+    // other-chat notification tone (InAppNotificationLayer.kt). Filtered to
+    // this peer since MessagingRepository.inChatMessageEvents is shared
+    // across every open ChatPane instance's peer. Gated on isForeground for
+    // the same reason as InAppNotificationLayer's collector -- this
+    // LaunchedEffect keeps running even if the app is backgrounded mid-chat
+    // (activePeer isn't cleared on backgrounding, only on leaving the
+    // screen), and a silent-to-nobody tone playing in the background would
+    // be a new, worse bug, not a fix.
+    LaunchedEffect(peerUsername) {
+        messagingRepo.inChatMessageEvents.collect { from ->
+            if (from == peerUsername && AppForegroundState.isForeground.value) SoundEffects.playInChatTone()
+        }
     }
 
     Box(modifier = modifier) {

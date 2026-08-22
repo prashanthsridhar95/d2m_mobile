@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,7 +46,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.d2m.app.AppForegroundState
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.call.CallPhase
 import com.d2m.app.ui.components.D2MErrorBanner
@@ -90,6 +93,37 @@ fun CallLayer() {
 
     LaunchedEffect(currentView.callId, currentView.phase) {
         if (currentView.phase == CallPhase.INCOMING) requestPermissions()
+    }
+
+    // "Why notification sounds are not working like how it's working on
+    // web?" -- web's useMessaging.js plays/stops a real ringtone the moment
+    // callView.phase becomes/stops being "incoming" (lib/sound.js's
+    // playCallTone/stopCallTone), regardless of whether the tab is focused.
+    // This toast here was ALWAYS purely visual -- nothing in this file ever
+    // played audio. Gated on isForeground so this doesn't double up with
+    // the background CallStyle notification's own ringtone-stream sound
+    // (push/LocalNotificationBridge.android.kt) -- exactly one of the two
+    // should ever be audible for a given incoming call.
+    val isForeground by AppForegroundState.isForeground.collectAsState()
+    LaunchedEffect(currentView.phase, isForeground) {
+        if (currentView.phase == CallPhase.INCOMING && isForeground) {
+            SoundEffects.playCallTone()
+        } else {
+            SoundEffects.stopCallTone()
+        }
+    }
+    // Belt-and-suspenders for the one path the LaunchedEffect above can't
+    // cover: `view` going straight to null (call cancelled/torn down) exits
+    // this whole composable via the early return above in the SAME
+    // recomposition, which cancels that LaunchedEffect's coroutine without
+    // ever reaching its "stop" branch (playCallTone/stopCallTone aren't
+    // suspend calls, so there's no suspension point left to resume into and
+    // run cleanup from). A stuck looping ringtone with no call left on
+    // screen would be a much worse bug than the one this whole file is
+    // fixing. onDispose fires reliably whenever this subtree leaves
+    // composition, unlike a cancelled coroutine.
+    DisposableEffect(Unit) {
+        onDispose { SoundEffects.stopCallTone() }
     }
 
     if (currentView.phase == CallPhase.INCOMING) {
