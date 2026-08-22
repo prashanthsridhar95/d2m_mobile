@@ -2,14 +2,21 @@ package com.d2m.app.messaging.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,10 +75,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatMessage
 import com.d2m.app.messaging.MessageStatus
@@ -89,6 +100,9 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
+import kotlin.math.cos
+
+private const val TWO_PI = 6.283185307179586
 
 private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
 
@@ -174,6 +188,15 @@ fun ChatPane(
     val peerUsername = remember(peerId) { d2mIdToMessagingUsername(peerId) }
     val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
     val myUsername = remember(messages) { messagingRepo.currentUsername() }
+    // "typing notification is different in web & mobile - i want like web."
+    // The header's "typing…" subtitle (ConversationHeader in MatchesScreen.kt/
+    // ParentMessagesScreen.kt) already matched web -- what was missing is
+    // web's OTHER typing indicator: an animated three-dot bubble inside the
+    // message list itself (MessageList.jsx renders `{typing && <TypingIndicator />}`
+    // as the last list item), which mobile never had at all. Read directly
+    // here rather than threaded in as a prop from both callers, since
+    // ChatPane already has everything (messagingRepo, peerUsername) needed.
+    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
 
     var draft by remember { mutableStateOf("") }
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
@@ -211,7 +234,10 @@ fun ChatPane(
         onDispose { messagingRepo.setActivePeer(null) }
     }
 
-    LaunchedEffect(messages.size) {
+    // Keyed on peerTyping too (matches web's identical effect dependency
+    // list) -- so the view also scrolls down when the typing bubble itself
+    // appears, not just when a real message lands.
+    LaunchedEffect(messages.size, peerTyping) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
@@ -226,9 +252,17 @@ fun ChatPane(
     Box(modifier = modifier) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
-                if (messages.isEmpty()) {
+                if (messages.isEmpty() && !peerTyping) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+                    }
+                } else if (messages.isEmpty()) {
+                    // No real messages yet, but the peer is already typing --
+                    // matches web's `{sortedMessages.length === 0 && !peerTyping && (...)}`
+                    // gate: the empty-state copy hides in favor of just the
+                    // typing bubble, rather than showing both at once.
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        TypingIndicatorBubble(modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 12.dp, vertical = 8.dp))
                     }
                 } else {
                     val dayGroups = remember(messages) { groupByDay(messages) }
@@ -277,6 +311,11 @@ fun ChatPane(
                                     onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
                                     onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
                                 )
+                            }
+                        }
+                        if (peerTyping) {
+                            item(key = "typing-indicator") {
+                                TypingIndicatorBubble(modifier = Modifier.animateItem())
                             }
                         }
                     }
@@ -467,6 +506,100 @@ private fun MessageTicks(status: MessageStatus, mine: Boolean) {
     )
 }
 
+/**
+ * "typing notification is different in web & mobile - i want like web."
+ * Direct port of d2m_web's TypingIndicator.jsx: left-aligned, shaped like a
+ * received bubble (16/16/16/4 corner radii -- the sharp bottom-left corner
+ * is the same "notch" every received bubble in this app uses), three 6.dp
+ * dots pulsing in a staggered wave.
+ *
+ * Web drives this with a shared CSS keyframe (d2m-pulse: scale 1→1.4→1,
+ * opacity 1→0.35→1, 1.2s ease-in-out infinite, each dot delayed by 0.15s).
+ * Compose has no direct per-element animation-delay primitive, so this uses
+ * one shared `rememberInfiniteTransition` progress value (0f..1f over
+ * 1200ms, linear, restarting) and phase-shifts each dot's read of it by
+ * 0.125 (150ms / 1200ms) -- same net staggered wave, driven by one ticker
+ * instead of three independent ones.
+ */
+@Composable
+private fun TypingIndicatorBubble(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "typing")
+    val t by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+        label = "typing-progress",
+    )
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Row(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp))
+                .border(BorderStroke(1.dp, mutedText(0.15f)), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (i in 0..2) {
+                // Symmetric bump (0 at phase edges, 1 at phase center) approximates
+                // the CSS keyframe's 0%/50%/100% shape closely enough to read the
+                // same -- doesn't need to be pixel-identical easing, just the same
+                // "breathing dot" feel.
+                val phase = (t + i * 0.125f) % 1f
+                val bump = ((1 - cos(TWO_PI * phase)) / 2).toFloat()
+                val dotScale = 1f + 0.4f * bump
+                val dotAlpha = 1f - 0.65f * bump
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .graphicsLayer(scaleX = dotScale, scaleY = dotScale, alpha = dotAlpha)
+                        .background(mutedText(0.45f), CircleShape),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "GIF sent/received should be autoplaying in the bubble atleast for 2-3
+ * times. When tapped on the bubble, it should play again for 2-3 times."
+ *
+ * Two separate pieces had to be real for this to work at all:
+ *  1. An actual GIF decoder registered with Coil (see GifImageLoader.kt --
+ *     this app's Coil dependencies had none before this change, so a GIF
+ *     rendered as a static first-frame image regardless of anything below).
+ *  2. A capped repeat count (GIF_BUBBLE_REPEAT_COUNT, via
+ *     applyGifRepeatCount) -- without it, a typical authored/looping GIF's
+ *     own embedded loop metadata is usually infinite, which would autoplay
+ *     forever rather than "2-3 times."
+ *
+ * Replay-on-tap: Coil caches the decoded animated-drawable instance by
+ * request identity, so re-issuing the exact same request after it's
+ * finished its capped loops would just reattach the same already-stopped
+ * drawable, not restart it. Bumping `replayToken` into the request's
+ * memoryCacheKey forces Coil to treat a tap as a distinct request, which
+ * creates a fresh animated-drawable instance starting at frame 0.
+ */
+@Composable
+private fun GifBubbleImage(url: String, contentDescription: String?) {
+    val imageLoader: ImageLoader = koinInject()
+    val platformContext = LocalPlatformContext.current
+    var replayToken by remember(url) { mutableStateOf(0) }
+    val request = remember(url, replayToken) {
+        ImageRequest.Builder(platformContext)
+            .data(url)
+            .applyGifRepeatCount(GIF_BUBBLE_REPEAT_COUNT)
+            .memoryCacheKey("$url#replay=$replayToken")
+            .build()
+    }
+    AsyncImage(
+        model = request,
+        imageLoader = imageLoader,
+        contentDescription = contentDescription,
+        modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm))
+            .clickable { replayToken++ },
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
@@ -622,11 +755,23 @@ private fun MessageRow(
                                 }
                                 else -> {
                                     if (message.media != null && message.mediaUrl != null) {
-                                        AsyncImage(
-                                            model = message.mediaUrl,
-                                            contentDescription = message.media.name,
-                                            modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm)),
-                                        )
+                                        // "GIF sent/received should be autoplaying in the
+                                        // bubble atleast for 2-3 times. When tapped on the
+                                        // bubble, it should play again for 2-3 times."
+                                        // GIFs sent via the composer's GIF tab (GifPicker.kt)
+                                        // upload with kind="image" (same as a plain photo
+                                        // attachment) but mime="image/gif" -- mime is the
+                                        // only reliable signal here for "this needs the
+                                        // special animated treatment", not kind.
+                                        if (message.media.mime == "image/gif") {
+                                            GifBubbleImage(url = message.mediaUrl, contentDescription = message.media.name)
+                                        } else {
+                                            AsyncImage(
+                                                model = message.mediaUrl,
+                                                contentDescription = message.media.name,
+                                                modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm)),
+                                            )
+                                        }
                                     }
                                     if (message.uploading) {
                                         Column(modifier = Modifier.width(160.dp).padding(top = 4.dp)) {
