@@ -1,6 +1,8 @@
 package com.d2m.app.di
 
 import com.d2m.app.data.cache.ApiCache
+import com.d2m.app.data.local.ChatLocalStore
+import com.d2m.app.data.local.createSqlDriver
 import com.d2m.app.data.network.*
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.data.session.createSettings
@@ -70,8 +72,13 @@ val appModule = module {
     single { ArchiveKeyStore(createSettings()) }
     single { ArchiveManager(get(), get()) }
 
+    // Local persistent chat cache (SQLDelight) -- see data/local/ChatDatabase.sq's
+    // doc comment (tasks #56/#57: call-log bubbles vanishing on restart,
+    // "chats once retrieved should be stored locally").
+    single { ChatLocalStore(createSqlDriver()) }
+
     single { MessagingWsClient() }
-    single { MessagingRepository(get(), get(), get(), get()) }
+    single { MessagingRepository(get(), get(), get(), get(), get()) }
 
     // Shared UI-chrome flag (hide bottom nav while a chat is open, jump to a
     // thread from a tapped in-app notification banner) -- see ChatUiState.kt.

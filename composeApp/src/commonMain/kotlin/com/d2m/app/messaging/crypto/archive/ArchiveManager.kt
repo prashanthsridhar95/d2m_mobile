@@ -86,8 +86,13 @@ class ArchiveManager(
      * one up already and this device needs the PIN to restore it
      * ([ArchivePrompt.Restore]); if no, this is the very first device ever
      * for this account and should set one up now ([ArchivePrompt.Setup]).
+     *
+     * `since`: see [fetchMessagesHistory]'s doc comment -- the already-set-up
+     * (local keypair present) branch below is what runs on EVERY connect for
+     * a normal returning user, so this is the steady-state case that
+     * benefits from not re-pulling the entire history every time.
      */
-    suspend fun checkAfterConnect() {
+    suspend fun checkAfterConnect(since: Long? = null) {
         val me = username ?: return
         val local = keyStore.load(me)
         if (local != null) {
@@ -100,7 +105,7 @@ class ArchiveManager(
                 val publicPoint = xyToRawPoint(publicKeyJwk.x.fromBase64Url(), publicKeyJwk.y.fromBase64Url())
                 myKeypair = ArchiveCrypto.GeneratedKeypair(privateKeyPkcs8, publicPoint, publicKeyJwk)
                 println("ArchiveManager.checkAfterConnect: loaded local archive keypair for $me, backfilling from history")
-                restoreFromArchive(privateKeyPkcs8)
+                restoreFromArchive(privateKeyPkcs8, since)
                 return
             }
         }
@@ -141,9 +146,9 @@ class ArchiveManager(
      * already-set-up device) -- MessagingRepository's own appendMessage
      * dedup (by message id) makes replay idempotent.
      */
-    private suspend fun restoreFromArchive(privateKeyPkcs8: ByteArray) {
+    private suspend fun restoreFromArchive(privateKeyPkcs8: ByteArray, since: Long? = null) {
         val me = username ?: return
-        val history = fetchMessagesHistory(me) ?: return
+        val history = fetchMessagesHistory(me, since) ?: return
         for (msg in history) {
             val archive = msg.archive ?: continue // sent from a device that never set up an archive key
             val isMine = msg.from == me
@@ -273,11 +278,23 @@ class ArchiveManager(
         }
     }
 
-    private suspend fun fetchMessagesHistory(username: String): List<MessageEnvelope>? {
+    /**
+     * `since` (exclusive, epoch millis) is optional -- when the caller
+     * already has a local cache with a known latest timestamp (see
+     * MessagingRepository.start()'s ChatLocalStore.maxSentAt call), passing
+     * it here asks the relay server for only what's newer instead of this
+     * account's entire message history, matching the `since` param
+     * messaging-framework's /messages/history route now supports. Omitting
+     * it (null) preserves the original full-history behavior exactly --
+     * still used for a genuine new-device PIN restore (submitRestorePin),
+     * which really does need everything.
+     */
+    private suspend fun fetchMessagesHistory(username: String, since: Long? = null): List<MessageEnvelope>? {
         val client = httpClient ?: return null
         return try {
             val response = client.get("${MessagingConfig.httpBaseUrl}/messages/history") {
                 parameter("user", username)
+                if (since != null) parameter("since", since)
             }
             wireJson.decodeFromString(MessagesHistoryResponse.serializer(), response.bodyAsText()).messages
         } catch (e: Throwable) {

@@ -1,5 +1,6 @@
 package com.d2m.app.messaging
 
+import com.d2m.app.data.local.ChatLocalStore
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.crypto.CryptoProvider
 import com.d2m.app.messaging.crypto.archive.ArchiveManager
@@ -90,6 +91,11 @@ data class ChatMessage(
     val callLog: CallLogInfo? = null,
 )
 
+// @Serializable -- persisted to the local chat cache as JSON (see
+// data/local/ChatLocalStore.kt); needs no wire-protocol involvement (call
+// signals are ephemeral and never touch ChatPayload, see appendCallLogMessage's
+// doc comment below), this annotation is purely for that local disk format.
+@Serializable
 data class CallLogInfo(val media: String, val reason: String, val durationSec: Int, val incoming: Boolean)
 
 /**
@@ -128,6 +134,7 @@ class MessagingRepository(
     private val cryptoProvider: CryptoProvider,
     private val identityStore: IdentityStore,
     private val archiveManager: ArchiveManager,
+    private val localStore: ChatLocalStore,
 ) {
     init {
         // Wired once here rather than per-restore -- see ArchiveManager.restoreFromArchive's
@@ -315,6 +322,20 @@ class MessagingRepository(
         val myId = identity.primaryId ?: identity.sponsorId ?: return
         myUsername = d2mIdToMessagingUsername(myId)
         try {
+            // Reported directly: "chats once retrieved should be stored
+            // locally, so that it can just get updated as & when
+            // necessary" -- and separately, call-log bubbles (local-only,
+            // never reach the server, see appendCallLogMessage's doc
+            // comment) vanishing on restart because _messagesByPeer was
+            // purely in-memory. Hydrate from disk BEFORE the socket connects
+            // so the thread/chat UI has something to show immediately,
+            // rather than a blank screen until the WS handshake and (on an
+            // already-archive-set-up device) a full history re-fetch both
+            // complete. appendMessage's existing id-based dedup makes this
+            // safe to layer live/replayed messages on top of afterward.
+            runCatching { _messagesByPeer.value = localStore.loadAll(myUsername!!) }
+                .onFailure { e -> println("MessagingRepository.start: local chat hydration failed (non-fatal): ${e.message ?: e::class.simpleName}") }
+
             cryptoProvider.ensureIdentity(myUsername!!)
 
             wsClient.onEvent = { event -> handleEvent(event) }
@@ -334,7 +355,15 @@ class MessagingRepository(
             // mean.
             archiveManager.attach(httpClient, myUsername!!)
             scope.launch {
-                runCatching { archiveManager.checkAfterConnect() }
+                // Passing the local cache's own latest sentAt turns the
+                // steady-state case (an already-set-up device reconnecting,
+                // which happens on every single start()) from "re-fetch and
+                // re-decrypt this account's ENTIRE message history" into
+                // "fetch only what's new since what's already on disk" --
+                // see messaging-framework's /messages/history `since` param
+                // and ChatDatabase.sq's doc comment for the full reasoning.
+                val since = runCatching { localStore.maxSentAt(myUsername!!) }.getOrNull()
+                runCatching { archiveManager.checkAfterConnect(since) }
                     .onFailure { e -> println("MessagingRepository.start: archive keypair check failed (non-fatal): ${e.message ?: e::class.simpleName}") }
             }
         } catch (e: Throwable) {
@@ -517,6 +546,13 @@ class MessagingRepository(
         _messagesByPeer.update { current ->
             val existing = current[peerUsername].orEmpty()
             current + (peerUsername to existing.filterNot { it.id == messageId })
+        }
+        val owner = myUsername
+        if (owner != null) {
+            scope.launch {
+                runCatching { localStore.delete(owner, messageId) }
+                    .onFailure { e -> println("MessagingRepository.deleteForMe: failed to remove $messageId from local cache (non-fatal): ${e.message ?: e::class.simpleName}") }
+            }
         }
     }
 
@@ -766,16 +802,47 @@ class MessagingRepository(
     }
 
     private fun appendMessage(peerUsername: String, message: ChatMessage) {
+        var appended = false
         _messagesByPeer.update { current ->
             val existing = current[peerUsername].orEmpty()
             if (existing.any { it.id == message.id }) return@update current // dedup (e.g. resend after re-handshake)
+            appended = true
             current + (peerUsername to (existing + message))
         }
+        // Persist after the in-memory dedup check -- a message already on
+        // disk (replay/resend hitting the same id) shouldn't re-write a row
+        // that (for a call log, at least) may have since been locally
+        // edited/deleted, and skipping the write entirely for a no-op is
+        // also just less disk I/O for the common resend/replay case.
+        if (appended) persistMessage(peerUsername, message)
     }
 
     private fun updateMessage(id: String, transform: (ChatMessage) -> ChatMessage) {
+        var touchedPeer: String? = null
+        var touchedMessage: ChatMessage? = null
         _messagesByPeer.update { all ->
-            all.mapValues { (_, list) -> list.map { if (it.id == id) transform(it) else it } }
+            all.mapValues { (peer, list) ->
+                list.map {
+                    if (it.id == id) {
+                        val updated = transform(it)
+                        touchedPeer = peer
+                        touchedMessage = updated
+                        updated
+                    } else it
+                }
+            }
+        }
+        val peer = touchedPeer
+        val message = touchedMessage
+        if (peer != null && message != null) persistMessage(peer, message)
+    }
+
+    /** Fire-and-forget disk write on [scope] -- see ChatLocalStore.kt's doc comment on why this never blocks the caller. No-op before [start] has set [myUsername] (shouldn't happen in practice -- every mutation path above only runs after a live/hydrated session exists -- but guarded rather than assumed). */
+    private fun persistMessage(peerUsername: String, message: ChatMessage) {
+        val owner = myUsername ?: return
+        scope.launch {
+            runCatching { localStore.upsert(owner, peerUsername, message) }
+                .onFailure { e -> println("MessagingRepository.persistMessage: failed to persist ${message.id} (non-fatal, in-memory state unaffected): ${e.message ?: e::class.simpleName}") }
         }
     }
 }

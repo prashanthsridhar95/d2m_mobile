@@ -174,6 +174,28 @@ get a free key at https://developers.giphy.com/dashboard); read into
 `BuildConfig.GIPHY_API_KEY` at build time, see `composeApp/build.gradle.kts`'s
 `giphyApiKey` val.
 
+## Local chat cache
+
+Chat history (including call-log bubbles, which are local-only and never
+touch the server -- see below) is cached on-device via SQLDelight
+(`data/local/ChatDatabase.sq` -- the `D2MDatabase` SQLDelight was already a
+declared dependency for but not yet wired to anything). `MessagingRepository.start()`
+hydrates instantly from this cache before the WebSocket even connects, and
+every message mutation persists back to it, so history survives the process
+being killed instead of living purely in an in-memory `StateFlow`. The
+Archive Keypair cross-device restore (`messaging/crypto/archive/ArchiveManager.kt`)
+now also passes the cache's own latest timestamp as an optional `since` param
+to `GET /messages/history` (supported server-side in `messaging-framework`
+as of the same change), so an already-set-up device's normal reconnect asks
+for only what's new instead of re-fetching and re-decrypting this account's
+entire message history every single time.
+
+Call-log bubbles are architecturally local-only, matching d2m_web exactly:
+call signaling rides the messaging channel as `ephemeral: true` and never
+reaches the relay server's durable message log at all, so there's no
+server-side copy for a cross-device restore to pull them from -- only this
+device's own local cache remembers its own view of past calls.
+
 ## Project structure
 
 ```

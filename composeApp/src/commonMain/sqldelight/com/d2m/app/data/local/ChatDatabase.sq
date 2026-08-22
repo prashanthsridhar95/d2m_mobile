@@ -1,0 +1,75 @@
+-- Local persistent chat cache -- see ChatLocalStore.kt for the Kotlin API
+-- wrapping these generated queries, and MessagingRepository.kt for where
+-- it's actually wired in (hydrate _messagesByPeer on start(), persist every
+-- appendMessage/updateMessage/deleteForMe).
+--
+-- Reported directly (two bug reports that share this one root cause):
+--  1. "call related bubbles are not found in mobile -- when chat is
+--     retrieved from server" / "I dont know if i have missed any calls --
+--     when chat is retrieved from server."
+--  2. "chats once retrieved should be stored locally, so that it can just
+--     get updated as & when necessary."
+--
+-- Call-log bubbles (appendCallLogMessage) are, by design, local-only --
+-- ChatSignal messages are `ephemeral: true` and never reach the relay
+-- server's durable message log at all (see MessagingRepository.kt's
+-- applyArchivedPayload doc comment and messaging-framework/packages/server/
+-- src/ws.ts's own comment on ephemeral signaling), so there was never any
+-- server-side copy for a "restore" to pull them back from -- that part
+-- mirrors d2m_web's own architecture exactly, not a mobile regression.
+-- What WAS missing on mobile is what this table fixes: _messagesByPeer was
+-- purely an in-memory StateFlow, so a call-log bubble (or any message)
+-- vanished the instant the process died, and every cold start paid for a
+-- full network round-trip (WS connect, then -- on an already-archive-set-up
+-- device -- a full re-fetch-and-re-decrypt of this account's ENTIRE message
+-- history via GET /messages/history, see ArchiveManager.checkAfterConnect)
+-- before showing anything at all. Now: hydrate instantly from here on
+-- start(), persist every mutation as it happens, and only ask the server
+-- for messages newer than the latest locally-cached one (the `since` param
+-- messaging-framework's /messages/history now supports).
+--
+-- ownerUsername scopes every row to the LOCAL device account that cached it
+-- -- this app's dev-mode auth (see README.md's Auth section) makes
+-- switching identities on one device/build trivial, and without this scope
+-- a role/account switch would show one account's cached messages under
+-- another's.
+CREATE TABLE chatMessageEntity (
+    id TEXT NOT NULL,
+    ownerUsername TEXT NOT NULL,
+    peerUsername TEXT NOT NULL,
+    fromUsername TEXT NOT NULL,
+    toUsername TEXT NOT NULL,
+    text TEXT NOT NULL,
+    sentAt INTEGER NOT NULL,
+    isMine INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    reactionsJson TEXT NOT NULL,
+    replyToJson TEXT,
+    edited INTEGER NOT NULL,
+    deleted INTEGER NOT NULL,
+    mediaJson TEXT,
+    mediaUrl TEXT,
+    callLogJson TEXT,
+    PRIMARY KEY (id, ownerUsername)
+);
+
+CREATE INDEX chatMessageEntity_owner_peer ON chatMessageEntity(ownerUsername, peerUsername, sentAt);
+
+selectByOwner:
+SELECT * FROM chatMessageEntity WHERE ownerUsername = ? ORDER BY sentAt ASC;
+
+maxSentAtForOwner:
+SELECT MAX(sentAt) AS maxSentAt FROM chatMessageEntity WHERE ownerUsername = ?;
+
+upsert:
+INSERT OR REPLACE INTO chatMessageEntity(
+    id, ownerUsername, peerUsername, fromUsername, toUsername, text, sentAt,
+    isMine, status, reactionsJson, replyToJson, edited, deleted, mediaJson,
+    mediaUrl, callLogJson
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM chatMessageEntity WHERE ownerUsername = ? AND id = ?;
+
+clearForOwner:
+DELETE FROM chatMessageEntity WHERE ownerUsername = ?;
