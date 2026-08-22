@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -42,6 +43,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
@@ -81,12 +83,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,6 +110,7 @@ import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -221,6 +229,19 @@ fun ChatPane(
     var attaching by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    // "When reply is pressed, focus should go to the chat box & keyboard
+    // should open up" -- tapping Reply (in the long-press menu or a swipe)
+    // only ever set replyingTo before; nothing moved focus to the composer,
+    // so the reply-quote preview appeared above it but the keyboard stayed
+    // wherever it already was (usually closed).
+    val composerFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(replyingTo) {
+        if (replyingTo != null) {
+            composerFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     fun replyContext() = replyingTo?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) }
 
@@ -328,6 +349,7 @@ fun ChatPane(
                                 MessageRow(
                                     message = m,
                                     myUsername = myUsername,
+                                    peerDisplayName = peerName,
                                     menuOpen = menuForMessageId == m.id,
                                     // Automatic fade-in on arrival + smooth reflow when a bubble
                                     // above/below it changes size (edit, reaction, status tick) --
@@ -452,10 +474,18 @@ fun ChatPane(
                             if (new.isEmpty()) scope.launch { messagingRepo.sendTyping(peerId, false) }
                         }
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).focusRequester(composerFocusRequester),
                     placeholder = { Text("Message…", color = mutedText(0.4f)) },
                     shape = RoundedCornerShape(D2MRadius.pill),
                     textStyle = MaterialTheme.typography.bodyMedium,
+                    // "based on user keyboard settings, first letter
+                    // capitalisation should be triggered" -- Sentences mode
+                    // asks the IME to auto-capitalize the first letter of
+                    // each sentence, same as every other messaging app's
+                    // compose field (and the system's own default behavior
+                    // for a plain sentence-style input, which this field was
+                    // never actually opting into before).
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     trailingIcon = {
                         if (editingId == null) {
                             IconButton(onClick = { emojiOpen = !emojiOpen }) {
@@ -524,7 +554,20 @@ fun ChatPane(
 @Composable
 private fun MessageTicks(status: MessageStatus, mine: Boolean) {
     if (status == MessageStatus.SENDING || status == MessageStatus.FAILED) return
-    val color = if (status == MessageStatus.READ) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = if (mine) 0.75f else 0.5f)
+    // "sent & read double tick differentiation - i couldnt feel" -- the real
+    // bug: ticks only ever render on MY OWN sent bubbles (mine == true at
+    // every call site), which are filled with MaterialTheme.colorScheme.
+    // primary -- and the "read" branch here used that EXACT SAME color for
+    // the tick. A read receipt wasn't subtly different, it was invisible:
+    // same color as the bubble it's sitting on. Web avoids this because its
+    // read-tick color (--info-fg) is a distinct blue token, never the same
+    // value as the bubble's own accent fill -- LocalD2MStatusPalette.info.fg
+    // is that same token on this side (see Color.kt/Theme.kt).
+    val color = if (status == MessageStatus.READ) {
+        LocalD2MStatusPalette.current.info.fg
+    } else {
+        LocalContentColor.current.copy(alpha = if (mine) 0.75f else 0.5f)
+    }
     Icon(
         if (status == MessageStatus.SENT) Icons.Filled.Check else Icons.Filled.DoneAll,
         contentDescription = when (status) {
@@ -637,6 +680,7 @@ private fun GifBubbleImage(url: String, contentDescription: String?) {
 private fun MessageRow(
     message: ChatMessage,
     myUsername: String?,
+    peerDisplayName: String,
     menuOpen: Boolean,
     modifier: Modifier = Modifier,
     onOpenMenu: () -> Unit,
@@ -789,16 +833,48 @@ private fun MessageRow(
                         // MessageBubble.jsx's CSS (width: fit-content, max-width: ...).
                         Column(modifier = Modifier.width(IntrinsicSize.Max)) {
                             if (message.replyTo != null) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth()
+                                // "id shown in reply bubble - name should be
+                                // shown" -- message.replyTo.from is the raw
+                                // messaging username (same wire-level id every
+                                // other place in this app resolves before
+                                // display), never something to show directly.
+                                // Only two people are ever in this
+                                // conversation, so it's either me or this
+                                // chat's one peer -- matches web's own
+                                // `message.replyTo.from === me ? "You" :
+                                // peerName || "Them"` exactly.
+                                val replyFromLabel = if (message.replyTo.from == myUsername) "You" else peerDisplayName
+                                // "reply bubble ui doesnt sync with web" --
+                                // web's version (MessageBubble.jsx) has a
+                                // left accent stripe (borderLeft: 3px),
+                                // asymmetric 3/7 padding, and a single-line
+                                // ellipsized preview -- this was a plain
+                                // uniform-padding tinted box with no stripe
+                                // and a 2-line wrap, a visibly different shape.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
                                         .background(
                                             if (message.isMine) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                            RoundedCornerShape(D2MRadius.sm),
-                                        )
-                                        .padding(6.dp),
+                                            RoundedCornerShape(4.dp),
+                                        ),
                                 ) {
-                                    Text(message.replyTo.from, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                    Text(message.replyTo.preview, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                                    Box(
+                                        modifier = Modifier.fillMaxHeight().width(3.dp)
+                                            .background(
+                                                if (message.isMine) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
+                                                RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp),
+                                            ),
+                                    )
+                                    Column(modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)) {
+                                        Text(replyFromLabel, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = LocalContentColor.current.copy(alpha = 0.9f))
+                                        Text(
+                                            message.replyTo.preview,
+                                            fontSize = 12.5.sp,
+                                            color = LocalContentColor.current.copy(alpha = 0.8f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                                 Spacer(Modifier.padding(top = 4.dp))
                             }
@@ -942,7 +1018,12 @@ private fun MessageRow(
                 // One long press now surfaces both at once: a quick-reaction
                 // row at the top of the same popup, then the option list
                 // below it, exactly like WhatsApp's combined long-press sheet.
-                DropdownMenu(expanded = menuOpen, onDismissRequest = onCloseMenu) {
+                // "the long press menu we receive for bubble can be rounded
+                // corner" -- Material3's DropdownMenu defaults to a small
+                // (4dp) corner radius; bumped to match this app's own
+                // generally-rounder D2MRadius.lg language used elsewhere
+                // (bubbles, banners).
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onCloseMenu, shape = RoundedCornerShape(D2MRadius.lg)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
