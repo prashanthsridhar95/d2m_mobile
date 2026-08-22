@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
@@ -207,7 +209,11 @@ fun ChatPane(
                     }
                 } else {
                     val dayGroups = remember(messages) { groupByDay(messages) }
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // 6.dp, not 4 -- matches d2m_web's MessageList.jsx exactly
+                    // (`.d2m-msg-row { marginBottom: 6 }`), part of the same
+                    // "make the messaging screen match web" pass as the
+                    // bubble-width fix above.
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         for ((groupKey, groupMessages) in dayGroups) {
                             // Matches d2m_web's sticky day pill exactly (MessageList.jsx)
                             // -- one real stickyHeader per day, so it lets go the moment
@@ -398,7 +404,20 @@ private fun MessageRow(
     onRetry: () -> Unit,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
+        // BoxWithConstraints (not a fixed dp cap) to match d2m_web's
+        // MessageBubble.jsx exactly -- web caps a bubble at `max-width: 72%`
+        // of the message-list container, a RELATIVE limit, not a fixed
+        // pixel one. This used to be a flat `widthIn(max = 280.dp)`, which
+        // reads completely differently depending on screen size: on a
+        // narrow phone 280dp is most of the available width (bubbles look
+        // "elongated," reported directly against exactly this screen), and
+        // on a wide layout the same 280dp looks disproportionately narrow
+        // next to web's 72%. Computing the cap from the actual available
+        // width here reproduces web's relative sizing instead of a
+        // one-size-that-fits-no-screens constant.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val maxBubbleWidth = maxWidth * 0.72f
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
             Box {
                 // Bubble shape + fill matches d2m_web's MessageBubble.jsx exactly:
                 // mine = solid accent fill, "tail" corner bottom-right (sharp 4dp
@@ -417,7 +436,7 @@ private fun MessageRow(
                 val bubbleContentColor = if (message.isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                 Box(
                     modifier = Modifier
-                        .widthIn(max = 280.dp)
+                        .widthIn(max = maxBubbleWidth)
                         .background(if (message.isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, bubbleShape)
                         .then(if (message.isMine) Modifier else Modifier.border(1.dp, mutedText(0.15f), bubbleShape))
                         // Tap now also does something: FAILED messages retry
@@ -429,17 +448,18 @@ private fun MessageRow(
                     CompositionLocalProvider(LocalContentColor provides bubbleContentColor) {
                         // width(IntrinsicSize.Max) is the fix for a real bug (reported
                         // with a screenshot: every bubble stretched out to the full
-                        // widthIn(max=280.dp) cap regardless of how short the text was,
-                        // instead of hugging its content the way web's bubbles do). The
-                        // outer Box only constrains the MAX width (280.dp) -- a plain
+                        // widthIn(max=maxBubbleWidth) cap regardless of how short the text
+                        // was, instead of hugging its content the way web's bubbles do).
+                        // The outer Box only constrains the MAX width (maxBubbleWidth,
+                        // computed above as 72% of the available row width) -- a plain
                         // Column has no opinion of its own on width beyond that, but
                         // several children below (the timestamp/ticks row, the reply-quote
                         // background, the upload progress bar) use fillMaxWidth() so their
                         // OWN background/alignment spans the bubble's full resolved width
                         // rather than just their own text's width. Without an explicit
                         // width on this Column, "fill max width" for those children meant
-                        // literally the incoming 280.dp constraint, forcing the WHOLE
-                        // bubble to that width for every message. IntrinsicSize.Max makes
+                        // literally the incoming maxBubbleWidth constraint, forcing the
+                        // WHOLE bubble to that width for every message. IntrinsicSize.Max makes
                         // this Column measure itself to its widest child's natural
                         // (non-fillMaxWidth) size first -- i.e. the message text -- and
                         // THEN the fillMaxWidth() children below fill relative to that
@@ -465,15 +485,56 @@ private fun MessageRow(
                                 message.deleted -> Text("This message was deleted", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
                                 message.callLog != null -> {
                                     val info = message.callLog
+                                    // "No answer"/declined/busy/failed all read as
+                                    // "nobody actually talked" -- matches web's own
+                                    // CallLogContent noAnswer check exactly (same four
+                                    // reasons), which is what decides the icon (phone-off
+                                    // vs phone/video) AND its color (danger vs normal).
+                                    val noAnswer = info.reason == "declined" || info.reason == "busy" || info.reason == "failed" ||
+                                        (info.durationSec == 0 && info.incoming && info.reason != "ended")
                                     val label = when (info.reason) {
-                                        "ended" -> "${if (info.media == "video") "Video" else "Voice"} call · ${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}"
+                                        "ended" -> "${if (info.media == "video") "Video" else "Voice"} call"
                                         "busy", "failed" -> "Call failed"
                                         "declined" -> "Call declined"
                                         else -> if (info.incoming) "Missed call" else "No answer"
                                     }
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Icon(if (info.media == "video") Icons.Filled.Videocam else Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                                    val durationLabel = if (info.durationSec > 0) "${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}" else null
+                                    // Circular icon badge, not a bare small icon -- matches
+                                    // d2m_web's CallLogContent exactly (30dp circle, soft
+                                    // accent fill, danger tint only for the no-answer
+                                    // states). Reported directly ("the width of the bubble
+                                    // for call history... doesn't match web"): the old bare
+                                    // 16dp icon made a call-log bubble read as visibly
+                                    // smaller/plainer than every other bubble type, not an
+                                    // actual width bug in this bubble's own container (which
+                                    // already shares the same widthIn/IntrinsicSize.Max
+                                    // machinery as every other message).
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                        Box(
+                                            modifier = Modifier.size(30.dp)
+                                                .background(
+                                                    if (message.isMine) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                    CircleShape,
+                                                ),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                when {
+                                                    noAnswer -> Icons.Filled.CallEnd
+                                                    info.media == "video" -> Icons.Filled.Videocam
+                                                    else -> Icons.Filled.Call
+                                                },
+                                                contentDescription = null,
+                                                tint = if (noAnswer) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                                                modifier = Modifier.size(15.dp),
+                                            )
+                                        }
+                                        Column {
+                                            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                            durationLabel?.let {
+                                                Text(it, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.75f))
+                                            }
+                                        }
                                     }
                                 }
                                 else -> {
@@ -552,6 +613,7 @@ private fun MessageRow(
                         }
                     }
                 }
+            }
             }
         }
 
