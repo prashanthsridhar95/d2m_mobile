@@ -404,6 +404,24 @@ class MessagingRepository(
         val peerUsername = d2mIdToMessagingUsername(peerD2mId)
         val message = _messagesByPeer.value[peerUsername]?.firstOrNull { it.id == messageId } ?: return
         if (message.status != MessageStatus.FAILED) return
+        // A failed media/attachment upload (sendMedia's own catch block --
+        // see that function -- leaves `uploadFailed = true` with the ORIGINAL
+        // bytes still sitting in `localBytesPreview`, but never stores the
+        // fileName/mime/kind anywhere on the ChatMessage itself; those only
+        // ever existed as sendMedia's own function parameters, gone the
+        // moment that suspend call returned). Retrying via sendTextInternal
+        // (the ONLY path this used to fall through to, unconditionally) sent
+        // `message.text` -- which sendMedia always creates as an EMPTY
+        // string -- as a brand-new blank text message, while the actually-
+        // failed attachment stayed stuck with no way to retry it at all.
+        // Guarded here rather than silently sending a stray blank message:
+        // tell the person to re-attach instead of pretending a retry
+        // happened. Full re-upload retry would need fileName/mime/kind
+        // persisted on ChatMessage itself, which they aren't today.
+        if (message.uploadFailed || (message.localBytesPreview != null && message.media == null)) {
+            _sendErrors.tryEmit("Couldn't retry that attachment -- please attach it again")
+            return
+        }
         updateMessage(messageId) { it.copy(status = MessageStatus.SENDING) }
         sendTextInternal(messageId, me, peerUsername, message.text, message.replyTo)
     }

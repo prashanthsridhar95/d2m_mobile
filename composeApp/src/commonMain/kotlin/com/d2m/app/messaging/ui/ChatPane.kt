@@ -335,8 +335,18 @@ fun ChatPane(
                         emojiOpen = false
                         val reply = replyContext()
                         scope.launch {
-                            runCatching {
-                                val bytes = fetchGifBytes(apiClient.client, gif)
+                            // fetchGifBytes can fail (network) BEFORE sendMedia
+                            // ever creates a message row -- unlike every other
+                            // failure path in this screen, that would have
+                            // nothing to show a "failed, tap to retry" bubble
+                            // on, so it needs its own explicit feedback rather
+                            // than silently doing nothing when tapped. sendMedia
+                            // itself still handles its own failure (uploadFailed
+                            // bubble) once bytes are actually in hand.
+                            val bytes = runCatching { fetchGifBytes(apiClient.client, gif) }
+                                .onFailure { snackbarHostState.showSnackbar("Couldn't load that GIF -- try again") }
+                                .getOrNull()
+                            if (bytes != null) {
                                 messagingRepo.sendMedia(peerId, bytes, "gif.gif", "image/gif", "image", gif.width, gif.height, reply)
                             }
                             replyingTo = null
