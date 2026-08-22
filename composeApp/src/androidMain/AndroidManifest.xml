@@ -17,6 +17,13 @@
          foregrounded) is unaffected either way, this only covers the
          backgrounded/locked case. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- push/ui/BatteryOptimizationCompat.android.kt -- required for
+         ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS to show its direct
+         per-app dialog instead of throwing a SecurityException. Reported
+         directly: killed-app notifications still not received even with
+         server/client FCM config confirmed matching -- OEM battery
+         management is the most common remaining cause of exactly that. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".D2MApplication"
@@ -26,10 +33,23 @@
         android:theme="@style/Theme.D2M"
         android:supportsRtl="true">
 
+        <!-- windowSoftInputMode: left unspecified before, which several
+             OEM/Android-version combinations resolve to adjustPan by
+             default -- the OS then pans the ENTIRE window up to keep the
+             focused EditText visible, on top of (not instead of) ChatPane's
+             own imePadding() already pushing the composer up via inset
+             padding (see ChatPane.kt/MatchesScreen.kt's imePadding comment).
+             That double-shift is what produced a blank gap roughly the
+             height of the keyboard between the composer and the keyboard
+             itself (reported directly, with a screenshot). adjustResize
+             makes the OS resize the window instead of panning it, which is
+             the correct pairing with edge-to-edge (enableEdgeToEdge() in
+             MainActivity.kt) + Compose's own insets-driven imePadding(). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboard|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.D2M">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
