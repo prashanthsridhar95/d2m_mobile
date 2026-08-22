@@ -1,5 +1,7 @@
 package com.d2m.app.messaging.ui
 
+import com.d2m.app.messaging.protocol.MediaMeta
+
 // Ported verbatim from d2m_web's lib/messaging/emoji.js (EMOJIS/STICKERS) --
 // pure data, no UI-specific handling needed on this side beyond rendering a
 // grid of these strings. See EmojiGifPanel.kt for the picker UI itself.
@@ -65,6 +67,21 @@ private fun isEmojiComponentCodePoint(cp: Int): Boolean =
         cp == 0xFE0F || // variation selector-16 (emoji presentation)
         cp == 0x20E3 || // combining enclosing keycap
         cp in 0x1F1E6..0x1F1FF // regional indicators (flag sequences)
+
+// Ported verbatim from d2m_web's emoji.js mediaLabel() -- short human label
+// for a media attachment, used both as a reply-quote preview (already done
+// on mobile via a similar inline check) and, newly, as the Matches list's
+// last-message preview when the last message was media rather than text
+// (see MatchesScreen.kt's ThreadRow).
+fun mediaLabel(m: MediaMeta?): String {
+    if (m == null) return ""
+    return when {
+        m.kind == "image" -> if (m.mime == "image/gif") "🎞️ GIF" else "📷 Photo"
+        m.kind == "audio" -> "🎤 Voice note"
+        m.kind == "video" || m.mime.startsWith("video/") -> "🎬 Video"
+        else -> "📎 ${m.name}"
+    }
+}
 
 fun isEmojiOnly(text: String?): Boolean {
     val t = text?.trim() ?: return false

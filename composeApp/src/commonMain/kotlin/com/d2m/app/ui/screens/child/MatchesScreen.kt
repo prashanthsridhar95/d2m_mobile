@@ -59,8 +59,7 @@ import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
-import com.d2m.app.ui.components.D2MBadge
-import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.messaging.ui.mediaLabel
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.theme.D2MFlow
@@ -339,8 +338,32 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
     val messagingRepo: MessagingRepository = koinInject()
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
+    val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
+    // "In matches view, last sent/received message is shown below the name
+    // in web. in mobile - matched is shown. i want same as web." Web's
+    // sidebar row (MatchesScreen.jsx's sortedThreads/_preview) derives this
+    // from the same messagesByPeer state the open conversation reads, not a
+    // separate fetch -- messagingRepo.messagesFor() is the mobile equivalent
+    // (already loaded from local cache + live updates, see
+    // MessagingRepository.kt's messagesFor doc comment), so this row just
+    // needs to pick the newest message and format it the same way web does:
+    // typing (highest priority) > last message preview > the old static
+    // status label as a fallback for a fresh match with no messages yet.
+    val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
 
     LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
+
+    val lastMessage = remember(messages) { messages.maxByOrNull { it.sentAt } }
+    val previewText = remember(lastMessage) {
+        when {
+            lastMessage == null -> ""
+            lastMessage.deleted -> "This message was deleted"
+            lastMessage.media != null -> mediaLabel(lastMessage.media)
+            else -> lastMessage.text
+        }
+    }
+    val subtitleBase = if (peerTyping) "typing…" else previewText.ifBlank { threadStatusLabel(thread.status) }
+    val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) "$subtitleBase · Serious Mode pending" else subtitleBase
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -356,16 +379,14 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(thread.otherParticipantName, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (peerOnline) {
-                    D2MBadge("Online", D2MBadgeTone.SUCCESS)
-                } else {
-                    D2MBadge(threadStatusLabel(thread.status), threadStatusTone(thread.status))
-                }
-                if (thread.pendingSeriousModeRequestId != null) {
-                    D2MBadge("Serious Mode pending", D2MBadgeTone.INFO)
-                }
-            }
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (peerTyping) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (peerTyping) MaterialTheme.colorScheme.primary else mutedText(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -497,12 +518,4 @@ private fun threadStatusLabel(status: String): String = when (status) {
     "sunsetting" -> "Sunsetting"
     "closed" -> "Closed"
     else -> status
-}
-
-private fun threadStatusTone(status: String): D2MBadgeTone = when (status) {
-    "active" -> D2MBadgeTone.INFO
-    "exclusive" -> D2MBadgeTone.SUCCESS
-    "sunsetting" -> D2MBadgeTone.WARNING
-    "closed" -> D2MBadgeTone.NEUTRAL
-    else -> D2MBadgeTone.NEUTRAL
 }
