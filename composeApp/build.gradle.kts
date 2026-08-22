@@ -2,6 +2,16 @@
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+// Explicit import (rather than the fully-qualified java.util.Properties()
+// inline) -- the Android/Java Gradle plugin (applied below via
+// androidApplication) exposes its own top-level `java { ... }` extension
+// accessor (JavaPluginExtension), which shadows the bare `java` package
+// identifier at this script's top level. A bare `java.util.Properties()`
+// reference resolves `java` to THAT accessor first, not the java.util
+// package, and fails with "Unresolved reference: util" -- a known Gradle
+// Kotlin DSL gotcha in any AGP/Java-plugin project, not specific to this
+// file. Importing the class directly sidesteps the ambiguity entirely.
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -176,7 +186,7 @@ kotlin {
 // shared across every app that hasn't set its own -- get a free key at
 // https://developers.giphy.com/dashboard) when local.properties has none,
 // matching d2m_web's own GifPicker.jsx fallback exactly.
-val localProperties = java.util.Properties().apply {
+val localProperties = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
