@@ -51,6 +51,7 @@ import com.d2m.app.messaging.contactQualifier
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
+import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
@@ -117,6 +118,15 @@ fun ParentMessagesScreen() {
         LaunchedEffect(myUsername) { contactsStore.attach(myUsername) }
         val contacts by contactsStore.contacts.collectAsState()
 
+        // Same fix as MatchesScreen.kt: feed every known contact's real name
+        // into messagingRepo as soon as the contacts list is available, so a
+        // notification for a peer this device hasn't opened a chat with yet
+        // (this session) still shows their real name instead of falling back
+        // to the raw messaging username -- see rememberPeerName's doc comment.
+        LaunchedEffect(contacts) {
+            contacts.values.forEach { messagingRepo.rememberPeerName(it.d2mId, it.name) }
+        }
+
         var selectedUsername by remember { mutableStateOf<String?>(null) }
 
         // Same "hide the bottom tab bar while a conversation is open" flag
@@ -125,6 +135,10 @@ fun ParentMessagesScreen() {
         // identical wiring.
         LaunchedEffect(selectedUsername) { chatUiState.setConversationOpen(selectedUsername != null) }
         DisposableEffect(Unit) { onDispose { chatUiState.setConversationOpen(false) } }
+
+        // Same system-back fix as MatchesScreen.kt -- see
+        // BackHandlerCompat.kt's doc comment.
+        BackHandlerCompat(enabled = selectedUsername != null) { selectedUsername = null }
 
         // A tapped in-app notification banner or a "Message their parent"
         // button records which peer to jump to -- opens it directly, same

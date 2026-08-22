@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.data.model.ThreadOut
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
@@ -126,6 +127,7 @@ fun MatchesScreen() {
         if (primaryId == null) return
         try {
             threads = seriousModeRepo.getThreads(primaryId, forceRefresh = true)
+            threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
             actionError = friendlyError(e, "Couldn't refresh your matches.")
         }
@@ -137,6 +139,19 @@ fun MatchesScreen() {
         error = null
         try {
             threads = seriousModeRepo.getThreads(primaryId)
+            // Reported directly: "When notification is received, I get the id
+            // in the title of who is sending." messagingRepo.peerDisplayName()
+            // (used by both the in-app banner and LocalNotificationBridge's
+            // background notifications) falls back to the raw messaging
+            // username whenever rememberPeerName() has never been called for
+            // that peer -- previously that only happened once ChatPane itself
+            // composed for a peer, i.e. only after this device had actually
+            // opened that specific conversation THIS session. A message from
+            // any other match -- realistic right after a fresh app launch --
+            // showed a raw id as the notification title. Feeding the whole
+            // thread list's names in as soon as it loads means every match's
+            // real name is known before any notification for them can arrive.
+            threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
             error = friendlyError(e, "Couldn't load your matches.")
         } finally {
@@ -153,6 +168,13 @@ fun MatchesScreen() {
     // than a nav-graph change.
     LaunchedEffect(selected) { chatUiState.setConversationOpen(selected != null) }
     DisposableEffect(Unit) { onDispose { chatUiState.setConversationOpen(false) } }
+
+    // Reported directly: "Going into a chat & pressing back takes me home -
+    // should take me to matches." See BackHandlerCompat.kt's doc comment --
+    // without this, system back has nothing to intercept inside this single
+    // route and falls through to the NavController, popping past the
+    // conversation to Home instead of just closing it.
+    BackHandlerCompat(enabled = selected != null) { selected = null }
 
     // A tapped in-app notification banner (messaging/ui/InAppNotificationLayer.kt)
     // records which peer to jump to -- once this screen's thread list is
