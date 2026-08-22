@@ -16,15 +16,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -80,6 +83,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,9 +93,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
@@ -106,6 +112,7 @@ import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
+import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import com.d2m.app.AppForegroundState
 import com.d2m.app.data.session.IdentityStore
@@ -115,6 +122,7 @@ import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
+import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
@@ -276,6 +284,19 @@ fun ChatPane(
             keyboardController?.show()
         }
     }
+    // "when editing, i press back, edit mode should be cancelled - not
+    // trigger back navigation." Without this, system back while editing had
+    // nothing to intercept at this level and fell straight through to the
+    // caller's own BackHandlerCompat (MatchesScreen.kt/ParentMessagesScreen.kt),
+    // closing the whole conversation instead of just exiting edit mode --
+    // same "handle the most specific thing first" pattern those screens
+    // already use for closing an open chat. Registered here (nested inside
+    // the caller's composition), so while enabled it takes priority over
+    // the caller's own handler, same as any nested BackHandler.
+    BackHandlerCompat(enabled = editingId != null) {
+        editingId = null
+        draft = TextFieldValue("")
+    }
 
     fun replyContext() = replyingTo?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) }
 
@@ -326,27 +347,42 @@ fun ChatPane(
         }
     }
 
-    // "opening & closing the keyboard moves the chat a bit - it should stay
-    // as is. i should be able to see the exact offset before opening & after."
-    // The message list already shrinks when the keyboard opens (imePadding()
-    // is applied by the caller, MatchesScreen.kt/ParentMessagesScreen.kt),
-    // which can leave the last message sitting wherever the shrunk viewport
-    // left it (sometimes hidden behind the keyboard) -- this re-pins it to
-    // the bottom. It used to do that with an ANIMATED scroll, which is
-    // exactly the visible "moves a bit" motion being reported here -- a
-    // plain instant scrollToItem re-snaps to the same relative position
-    // (last message at the bottom) without any perceptible scrolling
-    // gesture, reading as "it just stayed there" instead of "it jumped."
+    // "open close of keyboard - it lodges to the top of the item i'm
+    // viewing. maintain offset exactly the same. no janking." The previous
+    // attempt (an instant scrollToItem(lastIndex) whenever the keyboard
+    // became visible) was itself the bug this describes: scrollToItem
+    // always jumps to a fixed INDEX and pins that item's TOP to the
+    // viewport's top edge -- a completely different scroll position from
+    // "wherever I actually was," and it always jumped to the last message
+    // regardless of whether the person was scrolled up reading history.
+    //
+    // The fix that actually preserves exact continuity is a running DELTA,
+    // not a jump to an index: as the keyboard rises, the viewport's bottom
+    // edge moves up by some number of px each frame (WindowInsets.ime's own
+    // animated inset) -- scrolling the list FORWARD by that exact same delta
+    // keeps whatever content was sitting at the bottom edge still sitting at
+    // the (now higher) bottom edge, frame for frame. That's it: no jump, no
+    // index math, and it works identically whether the person was at the
+    // very bottom (keeps the last message in view, satisfying the earlier
+    // "shouldn't have to scroll to see where I was" ask too) or scrolled up
+    // reading older messages (keeps THAT position exactly where it was,
+    // instead of yanking them down to the newest message like the old
+    // scrollToItem(lastIndex) call did). Closing the keyboard just runs the
+    // same delta in reverse, symmetrically.
+    //
     // WindowInsets.Companion.isImeVisible isn't resolvable in this KMP
     // Foundation artifact (Android-only in some Compose Multiplatform
     // versions) -- reading WindowInsets.ime's own bottom inset directly is
     // the more fundamental, universally-available API imePadding() itself
-    // is already built on (see this project's existing imePadding() calls),
-    // and >0 means the same thing isImeVisible would have.
+    // is already built on (see this project's existing imePadding() calls).
     val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
-    val imeVisible = imeBottomPx > 0
-    LaunchedEffect(imeVisible) {
-        if (imeVisible && messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+    var previousImeBottomPx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(imeBottomPx) {
+        val delta = imeBottomPx - previousImeBottomPx
+        previousImeBottomPx = imeBottomPx
+        if (delta != 0 && messages.isNotEmpty()) {
+            listState.scrollBy(delta.toFloat())
+        }
     }
 
     // Don Norman "visibility of system status": a send/edit/delete/reaction
@@ -426,11 +462,13 @@ fun ChatPane(
                                     myUsername = myUsername,
                                     peerDisplayName = peerName,
                                     menuOpen = menuForMessageId == m.id,
-                                    // Automatic fade-in on arrival + smooth reflow when a bubble
-                                    // above/below it changes size (edit, reaction, status tick) --
-                                    // the single highest-value animation for a chat list, and Compose
-                                    // provides it for free once items are keyed (they already are).
-                                    modifier = Modifier.animateItem(),
+                                    // Smooth reflow when a bubble above/below it changes size (edit,
+                                    // reaction, status tick) -- kept. "when opening, animation of
+                                    // the bubbles is not required" -- fadeInSpec (the part that
+                                    // played an appear animation on EVERY bubble, including all of
+                                    // them at once on first chat open) is now null'd off; placement
+                                    // animation for genuine position/size changes stays.
+                                    modifier = Modifier.animateItem(fadeInSpec = null),
                                     onOpenMenu = { menuForMessageId = m.id },
                                     onCloseMenu = { menuForMessageId = null },
                                     onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; menuForMessageId = null },
@@ -757,6 +795,43 @@ private fun GifBubbleImage(url: String, contentDescription: String?) {
         contentDescription = contentDescription,
         modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm))
             .clickable { replayToken++ },
+    )
+}
+
+/**
+ * "media bubble height shouldnt be more than the width of the bubble" --
+ * plain AsyncImage with only a widthIn(max) cap let a tall portrait photo
+ * render at its full natural height (which can be many times its width),
+ * turning the bubble into a long vertical strip. The fix has to be an
+ * ASPECT RATIO clamp, not just another max-height cap: scaling an image
+ * down while preserving its aspect ratio never changes whether height
+ * exceeds width, so a portrait source has to be cropped, not just shrunk.
+ * Landscape/square sources are completely unaffected (their aspect ratio is
+ * already >= 1, so `coerceAtLeast(1f)` is a no-op and nothing gets cropped)
+ * -- only a portrait photo gets clamped to a square frame, same fallback
+ * every mainstream chat app uses for this exact case. Aspect starts at 1
+ * (square) before the real image has loaded (intrinsicSize is Unspecified
+ * until then) and settles once it has -- a brief, normal-looking pop, not a
+ * layout bug.
+ */
+@Composable
+private fun ChatImageBubble(url: String, contentDescription: String?, onClick: () -> Unit) {
+    val painter = rememberAsyncImagePainter(url)
+    val intrinsic = painter.intrinsicSize
+    val aspect = if (intrinsic.isSpecified && intrinsic.width > 0f && intrinsic.height > 0f) {
+        (intrinsic.width / intrinsic.height).coerceAtLeast(1f)
+    } else {
+        1f
+    }
+    Image(
+        painter = painter,
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .widthIn(max = 240.dp)
+            .aspectRatio(aspect)
+            .clip(RoundedCornerShape(D2MRadius.sm))
+            .clickable(onClick = onClick),
     )
 }
 
@@ -1102,11 +1177,10 @@ private fun MessageRow(
                                                 durationSec = message.media.duration,
                                                 onClick = { onOpenMedia(MediaViewerTarget.Video(message.mediaUrl)) },
                                             )
-                                            else -> AsyncImage(
-                                                model = message.mediaUrl,
+                                            else -> ChatImageBubble(
+                                                url = message.mediaUrl,
                                                 contentDescription = message.media.name,
-                                                modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(D2MRadius.sm))
-                                                    .clickable { onOpenMedia(MediaViewerTarget.Image(message.mediaUrl, message.media.name)) },
+                                                onClick = { onOpenMedia(MediaViewerTarget.Image(message.mediaUrl, message.media.name)) },
                                             )
                                         }
                                     }
