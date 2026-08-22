@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,6 +80,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -635,6 +637,18 @@ private fun MessageRow(
             val maxBubbleWidth = maxWidth * 0.72f
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
             Box {
+                // "If a sticker is sent, the ui is different in web - without
+                // bubbles & bigger in size." A sticker isn't its own message
+                // type -- it's a plain text message containing one emoji (see
+                // EmojiGifPanel.onSendSticker) -- so this mirrors d2m_web's
+                // MessageBubble.jsx exactly: ANY short emoji-only text message
+                // (not just ones sent via the sticker tab) drops the bubble
+                // chrome and renders the emoji large, same as iMessage/
+                // WhatsApp's convention. See EmojiData.kt's isEmojiOnly for the
+                // detection port.
+                val hasMedia = message.media != null && message.mediaUrl != null
+                val emojiOnly = !hasMedia && !message.deleted && message.callLog == null && isEmojiOnly(message.text)
+
                 // Bubble shape + fill matches d2m_web's MessageBubble.jsx exactly:
                 // mine = solid accent fill, "tail" corner bottom-right (sharp 4dp
                 // vs 16dp everywhere else); theirs = card surface + a subtle
@@ -649,17 +663,29 @@ private fun MessageRow(
                     bottomEnd = if (message.isMine) 4.dp else D2MRadius.md,
                     bottomStart = if (message.isMine) D2MRadius.md else 4.dp,
                 )
-                val bubbleContentColor = if (message.isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                // emojiOnly bubbles sit directly on the page (transparent, no
+                // fill) so they always need the normal page-text color, not the
+                // accent-contrast color that's tuned for a solid `mine` fill --
+                // matches web's own comment on this exact case ("sent emoji-only
+                // timestamp unreadable in dark mode").
+                val bubbleContentColor = when {
+                    emojiOnly -> MaterialTheme.colorScheme.onSurface
+                    message.isMine -> MaterialTheme.colorScheme.onPrimary
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
                 Box(
                     modifier = Modifier
                         .widthIn(max = maxBubbleWidth)
-                        .background(if (message.isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, bubbleShape)
-                        .then(if (message.isMine) Modifier else Modifier.border(1.dp, mutedText(0.15f), bubbleShape))
+                        .then(
+                            if (emojiOnly) Modifier
+                            else Modifier.background(if (message.isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, bubbleShape),
+                        )
+                        .then(if (!emojiOnly && !message.isMine) Modifier.border(1.dp, mutedText(0.15f), bubbleShape) else Modifier)
                         // Tap now also does something: FAILED messages retry
                         // on tap (Don Norman "error recovery" -- a stuck
                         // "Failed" label with no action was a dead end before).
                         .combinedClickable(onClick = { if (message.status == MessageStatus.FAILED) onRetry() }, onLongClick = { if (!message.deleted) onOpenMenu() })
-                        .padding(10.dp),
+                        .padding(if (emojiOnly) PaddingValues(horizontal = 2.dp, vertical = 1.dp) else PaddingValues(10.dp)),
                 ) {
                     CompositionLocalProvider(LocalContentColor provides bubbleContentColor) {
                         // width(IntrinsicSize.Max) is the fix for a real bug (reported
@@ -781,7 +807,14 @@ private fun MessageRow(
                                     }
                                     if (message.uploadFailed) Text("Attachment failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                     if (message.text.isNotBlank()) {
-                                        Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                                        if (emojiOnly) {
+                                            // Matches web's emojiOnly text styling exactly: fontSize
+                                            // 38 / lineHeight 1.1, no bubble chrome around it (handled
+                                            // above by the outer Box's background/border/padding).
+                                            Text(message.text, fontSize = 38.sp, lineHeight = 42.sp)
+                                        } else {
+                                            Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                                        }
                                     }
                                 }
                             }
