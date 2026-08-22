@@ -46,14 +46,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.d2m.app.AppForegroundState
+import com.d2m.app.data.network.ApiClient
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.call.CallPhase
+import com.d2m.app.messaging.call.PendingCallAccept
 import com.d2m.app.ui.components.D2MErrorBanner
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
 
 /**
@@ -67,6 +70,7 @@ import org.koin.compose.koinInject
 fun CallLayer() {
     val callManager: CallManager = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
+    val apiClient: ApiClient = koinInject()
     val view by callManager.view.collectAsState()
     val streams by callManager.streams.collectAsState()
     val error by callManager.errors.collectAsState()
@@ -84,6 +88,42 @@ fun CallLayer() {
     // instead of a visible failure.
     CallErrorToast(error = error, onDismiss = { callManager.clearError() })
 
+    // The incoming-call notification's Accept action opens the app via a
+    // direct Activity-launch PendingIntent carrying just the callId (see
+    // PendingCallAccept.kt's doc comment for why it can't do the actual
+    // accept() work itself, from a BroadcastReceiver). MainActivity.kt reads
+    // that extra and publishes it here; this effect is deliberately placed
+    // ABOVE the `view == null` early-return below, since it needs to keep
+    // running (waiting for CallManager to actually reflect this exact,
+    // still-incoming call) even on the very first composition, where `view`
+    // may still be null for a moment (e.g. the FCM handler's own decrypt/
+    // live-drain race hadn't resolved yet when the Activity opened).
+    //
+    // PendingCallAccept.clear() MUST run LAST, not first: this effect is
+    // keyed on pendingAcceptCallId itself (read via collectAsState()), so
+    // clearing it early flips that key to null mid-block, which recomposes
+    // and makes Compose cancel THIS running coroutine (to launch a fresh
+    // LaunchedEffect(null) that immediately no-ops) -- cancelling it while
+    // it's in the middle of ensureConnected()/accept(). That surfaced live
+    // as "Could not answer call: ..." (a CancellationException caught by
+    // accept()'s catch-all, with a message to the effect of the coroutine
+    // having left its own scope) even though everything else about Accept
+    // was otherwise working. Clearing only after accept() has already
+    // returned means the cancellation lands on an already-completed job,
+    // which is a harmless no-op.
+    val pendingAcceptCallId by PendingCallAccept.pendingCallId.collectAsState()
+    LaunchedEffect(pendingAcceptCallId) {
+        val id = pendingAcceptCallId ?: return@LaunchedEffect
+        val matched = withTimeoutOrNull(8_000) {
+            callManager.view.first { it != null && it.callId == id && it.phase == CallPhase.INCOMING }
+        }
+        if (matched != null) {
+            runCatching { messagingRepo.ensureConnected(apiClient.client) }
+            runCatching { callManager.accept() }
+        }
+        PendingCallAccept.clear()
+    }
+
     LaunchedEffect(view) {
         if (view == null) minimized = false
     }
@@ -95,33 +135,20 @@ fun CallLayer() {
         if (currentView.phase == CallPhase.INCOMING) requestPermissions()
     }
 
-    // "Why notification sounds are not working like how it's working on
-    // web?" -- web's useMessaging.js plays/stops a real ringtone the moment
-    // callView.phase becomes/stops being "incoming" (lib/sound.js's
-    // playCallTone/stopCallTone), regardless of whether the tab is focused.
-    // This toast here was ALWAYS purely visual -- nothing in this file ever
-    // played audio. Gated on isForeground so this doesn't double up with
-    // the background CallStyle notification's own ringtone-stream sound
-    // (push/LocalNotificationBridge.android.kt) -- exactly one of the two
-    // should ever be audible for a given incoming call.
-    val isForeground by AppForegroundState.isForeground.collectAsState()
-    LaunchedEffect(currentView.phase, isForeground) {
-        if (currentView.phase == CallPhase.INCOMING && isForeground) {
-            SoundEffects.playCallTone()
-        } else {
-            SoundEffects.stopCallTone()
-        }
-    }
-    // Belt-and-suspenders for the one path the LaunchedEffect above can't
-    // cover: `view` going straight to null (call cancelled/torn down) exits
-    // this whole composable via the early return above in the SAME
-    // recomposition, which cancels that LaunchedEffect's coroutine without
-    // ever reaching its "stop" branch (playCallTone/stopCallTone aren't
-    // suspend calls, so there's no suspension point left to resume into and
-    // run cleanup from). A stuck looping ringtone with no call left on
-    // screen would be a much worse bug than the one this whole file is
-    // fixing. onDispose fires reliably whenever this subtree leaves
-    // composition, unlike a cancelled coroutine.
+    // The real looping ringtone (SoundEffects.playCallTone/stopCallTone)
+    // used to be triggered from HERE, gated on isForeground, on the
+    // assumption that the background CallStyle notification
+    // (push/LocalNotificationBridge.android.kt) would provide its own real
+    // looping ring while backgrounded. Confirmed directly that assumption
+    // was wrong -- NotificationCompat.CallStyle + a ringtone-usage
+    // AudioAttributes channel does NOT actually loop like a real phone call
+    // without a full Telecom ConnectionService integration; it just plays
+    // the configured sound once, same as any other notification. The
+    // trigger now lives in installLocalNotificationBridge's own
+    // callManager.view collector instead -- a single, process-wide source
+    // that plays/stops regardless of foreground state (covering this
+    // Composable never even existing yet, e.g. a cold FCM-triggered
+    // process), so there's nothing left to do here.
     DisposableEffect(Unit) {
         onDispose { SoundEffects.stopCallTone() }
     }
@@ -185,7 +212,7 @@ private fun IncomingCallToast(peerName: String, isVideo: Boolean, onAccept: () -
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 PulsingAvatar(initial = peerName.take(1).uppercase(), size = 88.dp)
                 Text(peerName, style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(top = 16.dp))
-                Text(if (isVideo) "Incoming video call" else "Incoming call", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
+                Text(if (isVideo) "Incoming video call" else "Incoming audio call", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
 
                 Row(modifier = Modifier.padding(top = 48.dp), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                     RoundActionButton(icon = Icons.Filled.CallEnd, background = Color(0xFFE53935), onClick = onDecline, label = "Decline")

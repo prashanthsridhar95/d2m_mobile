@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -17,11 +22,11 @@
          foregrounded) is unaffected either way, this only covers the
          backgrounded/locked case. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- push/ui/BatteryOptimizationCompat.android.kt -- required for
+    <!-- push/ui/BatteryOptimizationCompat.android.kt - required for
          ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS to show its direct
          per-app dialog instead of throwing a SecurityException. Reported
          directly: killed-app notifications still not received even with
-         server/client FCM config confirmed matching -- OEM battery
+         server/client FCM config confirmed matching - OEM battery
          management is the most common remaining cause of exactly that. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -35,7 +40,7 @@
 
         <!-- windowSoftInputMode: left unspecified before, which several
              OEM/Android-version combinations resolve to adjustPan by
-             default -- the OS then pans the ENTIRE window up to keep the
+             default - the OS then pans the ENTIRE window up to keep the
              focused EditText visible, on top of (not instead of) ChatPane's
              own imePadding() already pushing the composer up via inset
              padding (see ChatPane.kt/MatchesScreen.kt's imePadding comment).
@@ -61,8 +66,20 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="d2m.app" android:pathPrefix="/claim" />
-                <data android:scheme="d2m" android:host="claim" />
+                <data android:scheme="https" />
+                <data android:host="claim"
+                    tools:ignore="AppLinkUrlError" />
+                <data android:host="d2m.app" />
+                <data android:pathPrefix="/claim" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="d2m" />
+                <data android:host="claim" />
+                <data android:host="d2m.app" />
+                <data android:pathPrefix="/claim" />
             </intent-filter>
         </activity>
 
@@ -80,6 +97,7 @@
              own PendingIntents target them. -->
         <receiver android:name=".push.CallActionReceiver" android:exported="false" />
         <receiver android:name=".push.MessageReplyReceiver" android:exported="false" />
+        <receiver android:name=".push.MarkReadReceiver" android:exported="false" />
 
     </application>
 </manifest>

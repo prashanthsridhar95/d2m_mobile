@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlin.uuid.ExperimentalUuidApi
@@ -203,6 +204,34 @@ class MessagingRepository(
     private var started = false
     private var httpClient: HttpClient? = null
 
+    // Second, in-memory-only dedup layer for decryptAndPersistIncoming --
+    // see that function's doc comment. The disk-backed _messagesByPeer check
+    // there only protects Text/Media (the only payload types appendMessage
+    // ever persists); a CallSignal.Invite never touches _messagesByPeer at
+    // all, so without this a call invite decrypted directly from an FCM push
+    // payload (D2MFirebaseMessagingService.kt's handleIncomingCallPush)
+    // could be decrypted AGAIN moments later when that same handler's
+    // ensureConnected() call brings the socket up and the server replays the
+    // exact same invite from pending_call_invites (see messaging-framework's
+    // store.ts) -- two concurrent decrypt attempts on the same ciphertext,
+    // which would corrupt the Signal ratchet on whichever one loses the
+    // race. Bounded (drops the oldest id past MAX_PROCESSED_ENVELOPE_IDS) --
+    // this only needs to cover "two attempts on the same envelope within
+    // roughly the same connect cycle," not a permanent record (that's what
+    // the disk-backed check and the server's own single-use queue are for).
+    private val processedEnvelopeIdsMutex = kotlinx.coroutines.sync.Mutex()
+    private val processedEnvelopeIds = LinkedHashSet<String>()
+
+    private suspend fun claimEnvelopeForProcessing(id: String): Boolean = processedEnvelopeIdsMutex.withLock {
+        if (!processedEnvelopeIds.add(id)) return@withLock false
+        if (processedEnvelopeIds.size > 500) {
+            val oldest = processedEnvelopeIds.iterator()
+            oldest.next()
+            oldest.remove()
+        }
+        true
+    }
+
     /** Registered by call/CallManager.kt at DI-construction time -- routes incoming ChatPayload.Call signals here instead of into chat history. */
     var callSignalHandler: (suspend (fromUsername: String, signal: CallSignal) -> Unit)? = null
 
@@ -246,6 +275,22 @@ class MessagingRepository(
         } ?: false
     }
 
+    /**
+     * "Mark as read" notification action support (MarkReadReceiver.kt) --
+     * sends a real read receipt for one specific message (the same protocol
+     * effect opening the chat and reading it has: turns the SENDER's tick
+     * blue) and clears this peer's unread badge, without needing
+     * [setActivePeer]/any UI to have ever run. Needs a live socket -- same
+     * as every other wsClient.send call, silently no-ops if disconnected
+     * (see MessagingWsClient.send's own doc comment) -- so callers
+     * (MarkReadReceiver) call [ensureConnected] first, identical to
+     * MessageReplyReceiver.kt's reply action.
+     */
+    suspend fun markMessageRead(peerUsername: String, messageId: String) {
+        wsClient.send(ClientToServer.ReceiptRead(messageId, peerUsername))
+        _unreadByPeer.update { if ((it[peerUsername] ?: 0) != 0) it + (peerUsername to 0) else it }
+    }
+
     // ---- Archive Keypair (cross-device history restore) -- delegates straight to ArchiveManager; see that class + ArchivePinDialog.kt for the PIN UI this drives. ----
     val archivePrompt: StateFlow<ArchivePrompt?> get() = archiveManager.archivePrompt
     val archiveBusy: StateFlow<Boolean> get() = archiveManager.archiveBusy
@@ -259,6 +304,23 @@ class MessagingRepository(
     /** Called by ChatPane whenever it composes with a known (peerId, peerName) pair -- lets the globally-mounted CallLayer show a real display name on an incoming-call toast instead of the raw username, for any peer whose chat has been opened this session. */
     fun rememberPeerName(peerD2mId: String, name: String) {
         _peerDisplayNames.update { it + (d2mIdToMessagingUsername(peerD2mId) to name) }
+    }
+
+    /**
+     * Same cache as [rememberPeerName], keyed directly by messaging username
+     * instead of a hyphenated d2m id -- for callers that only ever have the
+     * username form and no reason to derive a d2m id, specifically
+     * D2MFirebaseMessagingService: it already resolves a real display name
+     * (via resolveDisplayName) for a push notification's `sender`, and on a
+     * cold FCM-woken process [_peerDisplayNames] is otherwise completely
+     * empty (nothing has composed a ChatPane yet) -- [peerDisplayName] would
+     * silently fall back to the raw id, which is exactly what CallLayer.kt
+     * showed for a call answered straight from a killed-app notification.
+     * Seeding this here means that by the time the app actually opens (and
+     * CallLayer/ChatPane compose), the name is already correct.
+     */
+    fun cachePeerDisplayName(peerUsername: String, name: String) {
+        _peerDisplayNames.update { it + (peerUsername to name) }
     }
 
     fun peerDisplayName(peerUsername: String): String = _peerDisplayNames.value[peerUsername] ?: peerUsername
@@ -654,59 +716,7 @@ class MessagingRepository(
         when (event) {
             is ServerToClient.MessageNew -> scope.launch {
                 println("MessagingRepository.handleEvent: MessageNew ${event.msg.id} from ${event.msg.from}")
-                val plaintext = runCatching {
-                    cryptoProvider.decrypt(event.msg.from, event.msg.ciphertextType, event.msg.body)
-                }.onFailure { e ->
-                    println("MessagingRepository.handleEvent: decrypt failed for ${event.msg.id} from ${event.msg.from}: ${e.message ?: e::class.simpleName}")
-                }.getOrNull()
-                if (plaintext == null) {
-                    // Session desync -- our side is just as broken as theirs (that's
-                    // WHY decrypt failed), so reset our own session before asking them
-                    // to re-handshake, exactly like d2m_web's useMessaging.js does
-                    // (`await crypto.resetPeer(msg.from)` before sending session.reset).
-                    // Skipping this was a real bug: without it, our NEXT encrypt() to
-                    // this peer kept reusing the same stale session that just failed
-                    // to decrypt, so their next decrypt failed too, and they'd send
-                    // another session.reset right back -- a reset loop that never
-                    // actually recovers instead of a real re-handshake.
-                    println("MessagingRepository.handleEvent: null plaintext for ${event.msg.id}, resetting our session with ${event.msg.from} and requesting they reset too")
-                    runCatching { cryptoProvider.resetSession(event.msg.from) }
-                    wsClient.send(ClientToServer.SessionReset(event.msg.from))
-                    return@launch
-                }
-                val payload = runCatching {
-                    messagingProtocolJson.decodeFromString(ChatPayload.serializer(), plaintext)
-                }.getOrElse { e ->
-                    println("MessagingRepository.handleEvent: failed to decode ChatPayload for ${event.msg.id}: ${e.message ?: e::class.simpleName}")
-                    null
-                }
-
-                when (payload) {
-                    is ChatPayload.Text -> {
-                        appendMessage(event.msg.from, ChatMessage(event.msg.id, event.msg.from, event.msg.to, payload.text, event.msg.sentAt, isMine = false, status = MessageStatus.DELIVERED, replyTo = payload.replyTo))
-                        markUnreadOrChime(event.msg.from, payload.text, event.msg.id)
-                    }
-                    is ChatPayload.Media -> {
-                        appendMessage(
-                            event.msg.from,
-                            ChatMessage(event.msg.id, event.msg.from, event.msg.to, payload.caption.orEmpty(), event.msg.sentAt, isMine = false, status = MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
-                        )
-                        markUnreadOrChime(event.msg.from, payload.caption?.takeIf { it.isNotBlank() } ?: "Sent a photo", event.msg.id)
-                    }
-                    is ChatPayload.Edit -> updateMessage(payload.targetId) { it.copy(text = payload.text, edited = true) }
-                    is ChatPayload.Delete -> updateMessage(payload.targetId) { it.copy(deleted = true) }
-                    is ChatPayload.Reaction -> updateMessage(payload.targetId) { applyReaction(it, payload.emoji, event.msg.from, payload.action) }
-                    is ChatPayload.Call -> {
-                        val isStaleInvite = payload.call is CallSignal.Invite && (Clock.System.now().toEpochMilliseconds() - event.msg.sentAt) > 60_000
-                        if (!isStaleInvite) callSignalHandler?.invoke(event.msg.from, payload.call)
-                    }
-                    null -> Unit
-                }
-
-                wsClient.send(ClientToServer.ReceiptDelivered(event.msg.id, event.msg.from))
-                if ((payload is ChatPayload.Text || payload is ChatPayload.Media) && activePeer == event.msg.from) {
-                    wsClient.send(ClientToServer.ReceiptRead(event.msg.id, event.msg.from))
-                }
+                decryptAndPersistIncoming(event.msg)
             }
             is ServerToClient.MessageAck -> updateMessage(event.messageId) { if (it.status == MessageStatus.SENDING) it.copy(status = MessageStatus.SENT) else it }
             is ServerToClient.ReceiptUpdate -> updateMessage(event.messageId) {
@@ -740,6 +750,142 @@ class MessagingRepository(
             }
             else -> Unit
         }
+    }
+
+    /**
+     * Enough of [start] to safely call [decryptAndPersistIncoming] from a
+     * process that never ran the real [start] -- specifically,
+     * D2MFirebaseMessagingService, which can be woken cold by FCM (app fully
+     * killed, no Composable has run, App.kt's LaunchedEffect that normally
+     * calls start() never fired) with no httpClient/wsClient/archiveManager
+     * available or needed for a one-off decrypt. Sets [myUsername] (from
+     * IdentityStore, same derivation start() uses), ensures the local Signal
+     * identity exists (idempotent -- safe even if start() already did this),
+     * and hydrates [_messagesByPeer] from disk so the id-based dedup guard
+     * in decryptAndPersistIncoming actually has something to check against.
+     *
+     * No-ops (just returns the existing value) if [myUsername] is already
+     * set -- either a real start() already ran (warm background case), or
+     * this was already called once earlier in this process's lifetime.
+     * Conversely, a real start() called afterward is equally safe: same
+     * myUsername gets recomputed identically, ensureIdentity/hydration both
+     * just redo idempotent work, and connect/archive proceed as normal --
+     * this function is a strict subset of start(), never a conflicting path.
+     */
+    suspend fun ensurePassiveIdentity(): String? {
+        myUsername?.let { return it }
+        val identity = identityStore.identity.value
+        val myId = identity.primaryId ?: identity.sponsorId ?: return null
+        val username = d2mIdToMessagingUsername(myId)
+        runCatching { cryptoProvider.ensureIdentity(username) }
+            .onFailure { e -> println("MessagingRepository.ensurePassiveIdentity: ensureIdentity failed: ${e.message ?: e::class.simpleName}") }
+        runCatching { _messagesByPeer.value = localStore.loadAll(username) }
+            .onFailure { e -> println("MessagingRepository.ensurePassiveIdentity: local chat hydration failed: ${e.message ?: e::class.simpleName}") }
+        myUsername = username
+        return username
+    }
+
+    /**
+     * The one real decrypt+persist implementation for an incoming
+     * MessageEnvelope -- shared by handleEvent's MessageNew branch (live
+     * socket) and D2MFirebaseMessagingService (FCM data payload, no live
+     * socket, see [ensurePassiveIdentity]). Previously this logic lived
+     * inline in handleEvent only; pulling it out here is what makes it safe
+     * for D2MFirebaseMessagingService to show a real decrypted preview in a
+     * push notification, rather than reimplementing decrypt separately --
+     * two independent decrypt call sites on the SAME ciphertext would each
+     * try to consume the Signal ratchet's message key for that index, and
+     * the second one to run would fail (the key is deleted after first use,
+     * by design -- that's forward secrecy working correctly, not a bug),
+     * likely triggering the SessionReset-loop failure path below for a
+     * message that actually decrypted fine the first time.
+     *
+     * The id-based dedup check up front is what makes it safe to call this
+     * on the same envelope from BOTH paths (e.g. FCM decrypts it while the
+     * app is killed; the app is then opened, start() hydrates
+     * _messagesByPeer from the local store FCM already wrote to, socket
+     * connects, server redelivers the same envelope from its durable queue
+     * since it was never acked while offline) -- whichever path gets here
+     * first "wins" and actually decrypts; the other sees the id already
+     * present and returns null without touching the ratchet at all.
+     *
+     * Returns the decoded ChatPayload on a fresh, successful decrypt (so a
+     * caller building a notification preview has real content to show), or
+     * null if this id was already processed, decrypt failed, or the
+     * plaintext wasn't a valid ChatPayload.
+     *
+     * Two dedup layers, deliberately: the disk-backed _messagesByPeer check
+     * covers Text/Media across a process restart (appendMessage persists
+     * those); [claimEnvelopeForProcessing]'s in-memory set additionally
+     * covers everything else (notably CallSignal.Invite, which never touches
+     * _messagesByPeer at all) against a race WITHIN the same process -- see
+     * that function's own doc comment for the concrete scenario this
+     * prevents (a push-triggered decrypt racing the same envelope's replay
+     * once ensureConnected() brings the socket up).
+     */
+    suspend fun decryptAndPersistIncoming(envelope: MessageEnvelope): ChatPayload? {
+        if (_messagesByPeer.value[envelope.from]?.any { it.id == envelope.id } == true) {
+            println("MessagingRepository.decryptAndPersistIncoming: ${envelope.id} from ${envelope.from} already processed, skipping decrypt")
+            return null
+        }
+        if (!claimEnvelopeForProcessing(envelope.id)) {
+            println("MessagingRepository.decryptAndPersistIncoming: ${envelope.id} already claimed by a concurrent call, skipping decrypt")
+            return null
+        }
+        val plaintext = runCatching {
+            cryptoProvider.decrypt(envelope.from, envelope.ciphertextType, envelope.body)
+        }.onFailure { e ->
+            println("MessagingRepository.decryptAndPersistIncoming: decrypt failed for ${envelope.id} from ${envelope.from}: ${e.message ?: e::class.simpleName}")
+        }.getOrNull()
+        if (plaintext == null) {
+            // Session desync -- our side is just as broken as theirs (that's
+            // WHY decrypt failed), so reset our own session before asking them
+            // to re-handshake, exactly like d2m_web's useMessaging.js does
+            // (`await crypto.resetPeer(msg.from)` before sending session.reset).
+            // Skipping this was a real bug: without it, our NEXT encrypt() to
+            // this peer kept reusing the same stale session that just failed
+            // to decrypt, so their next decrypt failed too, and they'd send
+            // another session.reset right back -- a reset loop that never
+            // actually recovers instead of a real re-handshake.
+            println("MessagingRepository.decryptAndPersistIncoming: null plaintext for ${envelope.id}, resetting our session with ${envelope.from} and requesting they reset too")
+            runCatching { cryptoProvider.resetSession(envelope.from) }
+            wsClient.send(ClientToServer.SessionReset(envelope.from))
+            return null
+        }
+        val payload = runCatching {
+            messagingProtocolJson.decodeFromString(ChatPayload.serializer(), plaintext)
+        }.getOrElse { e ->
+            println("MessagingRepository.decryptAndPersistIncoming: failed to decode ChatPayload for ${envelope.id}: ${e.message ?: e::class.simpleName}")
+            null
+        }
+
+        when (payload) {
+            is ChatPayload.Text -> {
+                appendMessage(envelope.from, ChatMessage(envelope.id, envelope.from, envelope.to, payload.text, envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, replyTo = payload.replyTo))
+                markUnreadOrChime(envelope.from, payload.text, envelope.id)
+            }
+            is ChatPayload.Media -> {
+                appendMessage(
+                    envelope.from,
+                    ChatMessage(envelope.id, envelope.from, envelope.to, payload.caption.orEmpty(), envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
+                )
+                markUnreadOrChime(envelope.from, payload.caption?.takeIf { it.isNotBlank() } ?: "Sent a photo", envelope.id)
+            }
+            is ChatPayload.Edit -> updateMessage(payload.targetId) { it.copy(text = payload.text, edited = true) }
+            is ChatPayload.Delete -> updateMessage(payload.targetId) { it.copy(deleted = true) }
+            is ChatPayload.Reaction -> updateMessage(payload.targetId) { applyReaction(it, payload.emoji, envelope.from, payload.action) }
+            is ChatPayload.Call -> {
+                val isStaleInvite = payload.call is CallSignal.Invite && (Clock.System.now().toEpochMilliseconds() - envelope.sentAt) > 60_000
+                if (!isStaleInvite) callSignalHandler?.invoke(envelope.from, payload.call)
+            }
+            null -> Unit
+        }
+
+        wsClient.send(ClientToServer.ReceiptDelivered(envelope.id, envelope.from))
+        if ((payload is ChatPayload.Text || payload is ChatPayload.Media) && activePeer == envelope.from) {
+            wsClient.send(ClientToServer.ReceiptRead(envelope.id, envelope.from))
+        }
+        return payload
     }
 
     private fun markUnreadOrChime(fromUsername: String, preview: String, messageId: String) {

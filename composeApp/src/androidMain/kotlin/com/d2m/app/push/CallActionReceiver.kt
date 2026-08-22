@@ -4,25 +4,26 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.d2m.app.MainActivity
-import com.d2m.app.data.network.ApiClient
-import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.CallManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
 
 const val ACTION_ACCEPT_CALL = "com.d2m.app.action.ACCEPT_CALL"
 const val ACTION_DECLINE_CALL = "com.d2m.app.action.DECLINE_CALL"
 const val EXTRA_CALL_ID = "call_id"
 const val EXTRA_NOTIFICATION_ID = "notification_id"
+/** MainActivity intent extra carrying the callId to accept -- see PendingCallAccept.kt's doc comment for why Accept is a direct Activity-launch PendingIntent (LocalNotificationBridge.kt) instead of a broadcast through this receiver. */
+const val EXTRA_ACCEPT_CALL_ID = "accept_call_id"
 
 /**
- * Answer/Decline actions on the incoming-call notification's
+ * Decline action on the incoming-call notification's
  * NotificationCompat.CallStyle (see LocalNotificationBridge.kt's
- * postIncomingCallNotification) -- point 5 of the follow-up UX request:
- * "when receiving a call through notif, quick actions not shown."
+ * postIncomingCallNotification). Answer used to be handled here too, but
+ * moved to a direct PendingIntent.getActivity targeting MainActivity (see
+ * PendingCallAccept.kt) -- confirmed directly that a BroadcastReceiver
+ * launching an Activity, even via PendingIntent.send(), does not reliably
+ * inherit the "user just tapped this notification" background-activity-
+ * start exemption on Android 10+. Decline never needs to open the app at
+ * all, so it has no such reliability concern and stays a plain broadcast.
  *
  * Not exported (AndroidManifest.xml) -- only this app's own PendingIntents
  * can fire it. `callManager.view.value?.callId != callId` guards against a
@@ -42,40 +43,8 @@ class CallActionReceiver : BroadcastReceiver() {
         val callManager = GlobalContext.get().get<CallManager>()
         if (callManager.view.value?.callId != callId) return
 
-        when (intent.action) {
-            ACTION_DECLINE_CALL -> callManager.decline() // synchronous (fires its own coroutine internally) -- see CallManager.decline().
-            ACTION_ACCEPT_CALL -> {
-                // accept() is suspend -- goAsync() keeps the receiver (and the
-                // process) alive long enough for it to actually run; a bare
-                // fire-and-forget launch risks the system tearing this
-                // receiver down mid-handshake.
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.Default).launch {
-                    // ensureConnected before accept(): the socket may have gone
-                    // silently stale in the time between the call starting to
-                    // ring and this action firing (same class of bug as
-                    // MessageReplyReceiver.kt's -- see MessagingRepository.
-                    // ensureConnected's doc comment) -- accept() needs a live
-                    // socket to actually send CallSignal.Accept back.
-                    runCatching {
-                        val koin = GlobalContext.get()
-                        koin.get<MessagingRepository>().ensureConnected(koin.get<ApiClient>().client)
-                    }
-                    runCatching { callManager.accept() }
-                    // Bring the app to the foreground so CallLayer's actual
-                    // in-call UI (mute/camera/hangup controls) is visible --
-                    // answering from a notification with no follow-up UI
-                    // would leave the user staring at their home screen mid-call.
-                    runCatching {
-                        context.startActivity(
-                            Intent(context, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                            },
-                        )
-                    }
-                    pending.finish()
-                }
-            }
+        if (intent.action == ACTION_DECLINE_CALL) {
+            callManager.decline() // synchronous (fires its own coroutine internally) -- see CallManager.decline().
         }
     }
 }
