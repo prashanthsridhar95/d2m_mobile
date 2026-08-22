@@ -40,4 +40,26 @@ class ChatUiState {
     fun clearPendingOpenPeer() {
         _pendingOpenPeerUsername.value = null
     }
+
+    // "open profile & trigger system back - moves to matches page - should
+    // go to chat only." The actual root cause (a second one, separate from
+    // the back-handler-priority fix in MatchesScreen.kt): MatchesScreen's
+    // own `selected` thread was plain `remember` state, which does NOT
+    // survive Compose Navigation disposing MatchesScreen's composition when
+    // a different destination (ProfileDetailScreen, pushed by tapping the
+    // avatar) is on top -- NavHost only guarantees restoring state that's
+    // routed through a saveable-state registry, not arbitrary `remember`
+    // values. The result: navigating to the profile and back recomposed
+    // MatchesScreen from scratch with `selected` reset to null, landing on
+    // the bare thread list regardless of which back-press handler fired.
+    // Storing just the id here (this Koin singleton survives navigation the
+    // same way it already does for pendingOpenPeerUsername above) lets
+    // MatchesScreen re-derive `selected` from `threads` on every
+    // recomposition instead of depending on in-memory state surviving.
+    private val _activeThreadId = MutableStateFlow<String?>(null)
+    val activeThreadId: StateFlow<String?> = _activeThreadId.asStateFlow()
+
+    fun setActiveThreadId(threadId: String?) {
+        _activeThreadId.value = threadId
+    }
 }

@@ -148,7 +148,17 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
 
     var threads by remember { mutableStateOf<List<ThreadOut>>(emptyList()) }
-    var selected by remember { mutableStateOf<ThreadOut?>(null) }
+    // "open profile & trigger system back - moves to matches page - should
+    // go to chat only." `selected` used to be its own plain `remember` --
+    // see ChatUiState.kt's activeThreadId doc comment for why that doesn't
+    // survive navigating to the avatar-tapped profile and back. Deriving it
+    // from the persisted id + the loaded thread list instead means this
+    // screen re-finds the right thread on every recomposition, including
+    // the fresh one Compose Navigation creates when this screen is
+    // recomposed after being disposed. Every place that used to write
+    // `selected = ...` now calls chatUiState.setActiveThreadId(...) instead.
+    val activeThreadId by chatUiState.activeThreadId.collectAsState()
+    val selected = remember(activeThreadId, threads) { threads.firstOrNull { it.threadId == activeThreadId } }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -240,7 +250,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     // check is expected to.
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val isResumed = lifecycleState == Lifecycle.State.RESUMED
-    BackHandlerCompat(enabled = selected != null && isResumed) { selected = null }
+    BackHandlerCompat(enabled = selected != null && isResumed) { chatUiState.setActiveThreadId(null) }
 
     // A tapped in-app notification banner (messaging/ui/InAppNotificationLayer.kt)
     // records which peer to jump to -- once this screen's thread list is
@@ -250,7 +260,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
         val pending = pendingOpenPeer ?: return@LaunchedEffect
         val match = threads.firstOrNull { d2mIdToMessagingUsername(it.otherParticipantId) == pending }
         if (match != null) {
-            selected = match
+            chatUiState.setActiveThreadId(match.threadId)
             chatUiState.clearPendingOpenPeer()
         }
     }
@@ -276,7 +286,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                     visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                         items(visibleThreads) { thread ->
-                            ThreadRow(thread = thread, onClick = { selected = thread })
+                            ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
                         }
                     }
                 }
@@ -293,7 +303,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             Column(modifier = Modifier.fillMaxSize()) {
                 ConversationHeader(
                     thread = t,
-                    onBack = { selected = null },
+                    onBack = { chatUiState.setActiveThreadId(null) },
                     onOpenProfile = { onOpenProfile(t.otherParticipantId) },
                     onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
                     onStartVideoCall = { scope.launch { callManager.startCall(peerUsername, "video") } },
@@ -327,7 +337,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                                 scope.launch {
                                     try {
                                         seriousModeRepo.unmatch(pid, t.threadId)
-                                        selected = null
+                                        chatUiState.setActiveThreadId(null)
                                     } catch (e: Exception) {
                                         actionError = friendlyError(e, "Couldn't unmatch.")
                                     }
