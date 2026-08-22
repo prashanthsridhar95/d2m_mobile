@@ -2,11 +2,13 @@ package com.d2m.app.messaging.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -18,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,10 +50,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -77,8 +82,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
@@ -103,6 +111,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.math.cos
+import kotlin.math.roundToInt
 
 private const val TWO_PI = 6.283185307179586
 
@@ -204,7 +213,6 @@ fun ChatPane(
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var menuForMessageId by remember { mutableStateOf<String?>(null) }
-    var reactionPickerFor by remember { mutableStateOf<String?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var emojiOpen by remember { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
@@ -272,7 +280,11 @@ fun ChatPane(
                     // (`.d2m-msg-row { marginBottom: 6 }`), part of the same
                     // "make the messaging screen match web" pass as the
                     // bubble-width fix above.
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // "vertical space between bubbles can be a bit more" --
+                    // bumped from web's own 6.dp match up to 12.dp, a
+                    // deliberate mobile-only divergence per that direct ask
+                    // rather than a parity fix.
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         for ((groupKey, groupMessages) in dayGroups) {
                             // Matches d2m_web's sticky day pill exactly (MessageList.jsx)
                             // -- one real stickyHeader per day, so it lets go the moment
@@ -296,7 +308,6 @@ fun ChatPane(
                                     message = m,
                                     myUsername = myUsername,
                                     menuOpen = menuForMessageId == m.id,
-                                    reactionPickerOpen = reactionPickerFor == m.id,
                                     // Automatic fade-in on arrival + smooth reflow when a bubble
                                     // above/below it changes size (edit, reaction, status tick) --
                                     // the single highest-value animation for a chat list, and Compose
@@ -304,9 +315,7 @@ fun ChatPane(
                                     modifier = Modifier.animateItem(),
                                     onOpenMenu = { menuForMessageId = m.id },
                                     onCloseMenu = { menuForMessageId = null },
-                                    onOpenReactionPicker = { reactionPickerFor = m.id; menuForMessageId = null },
-                                    onCloseReactionPicker = { reactionPickerFor = null },
-                                    onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; reactionPickerFor = null },
+                                    onReact = { emoji -> scope.launch { messagingRepo.toggleReaction(peerId, m, emoji) }; menuForMessageId = null },
                                     onReply = { replyingTo = m; editingId = null; menuForMessageId = null },
                                     onEdit = { editingId = m.id; draft = m.text; replyingTo = null; menuForMessageId = null },
                                     onDeleteForMe = { messagingRepo.deleteForMe(peerId, m.id); menuForMessageId = null },
@@ -608,12 +617,9 @@ private fun MessageRow(
     message: ChatMessage,
     myUsername: String?,
     menuOpen: Boolean,
-    reactionPickerOpen: Boolean,
     modifier: Modifier = Modifier,
     onOpenMenu: () -> Unit,
     onCloseMenu: () -> Unit,
-    onOpenReactionPicker: () -> Unit,
-    onCloseReactionPicker: () -> Unit,
     onReact: (String) -> Unit,
     onReply: () -> Unit,
     onEdit: () -> Unit,
@@ -637,6 +643,18 @@ private fun MessageRow(
             val maxBubbleWidth = maxWidth * 0.72f
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start) {
             Box {
+                // "swipe right on a bubble to reply should be provided" --
+                // WhatsApp-style: drag the bubble right, a reply icon fades in
+                // underneath/behind it, release past replyThresholdPx to fire
+                // onReply and spring the bubble back to rest. Horizontal drag
+                // only (detectHorizontalDragGestures), so this never competes
+                // with the LazyColumn's own vertical scroll gesture.
+                val swipeScope = rememberCoroutineScope()
+                val density = LocalDensity.current
+                val replyThresholdPx = remember(density) { with(density) { 56.dp.toPx() } }
+                val maxDragPx = remember(density) { with(density) { 96.dp.toPx() } }
+                val dragAnim = remember(message.id) { Animatable(0f) }
+
                 // "If a sticker is sent, the ui is different in web - without
                 // bubbles & bigger in size." A sticker isn't its own message
                 // type -- it's a plain text message containing one emoji (see
@@ -673,8 +691,49 @@ private fun MessageRow(
                     message.isMine -> MaterialTheme.colorScheme.onPrimary
                     else -> MaterialTheme.colorScheme.onSurface
                 }
+
+                // Reply icon reveal -- sits underneath the bubble (declared
+                // before it, so it draws first/behind) at this Box's start
+                // edge; fades and scales in as dragAnim approaches the
+                // reply threshold, same as WhatsApp's own affordance.
+                if (dragAnim.value > 1f) {
+                    val revealProgress = (dragAnim.value / replyThresholdPx).coerceIn(0f, 1f)
+                    Icon(
+                        Icons.Filled.Reply,
+                        contentDescription = null,
+                        tint = mutedText(0.5f),
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(20.dp)
+                            .graphicsLayer(alpha = revealProgress, scaleX = 0.6f + 0.4f * revealProgress, scaleY = 0.6f + 0.4f * revealProgress),
+                    )
+                }
+
                 Box(
                     modifier = Modifier
+                        .offset { IntOffset(dragAnim.value.roundToInt(), 0) }
+                        .pointerInput(message.id) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    swipeScope.launch {
+                                        if (dragAnim.value > replyThresholdPx) onReply()
+                                        dragAnim.animateTo(0f, animationSpec = spring())
+                                    }
+                                },
+                                onDragCancel = { swipeScope.launch { dragAnim.animateTo(0f, animationSpec = spring()) } },
+                            ) { change, dragAmount ->
+                                // Rightward-only (coerced at 0f) -- matches
+                                // WhatsApp, which never lets a bubble drag
+                                // left. change.consume() here (rather than
+                                // leaving it for combinedClickable below)
+                                // is what keeps this gesture from also
+                                // registering as a long-press once a real
+                                // drag is underway.
+                                change.consume()
+                                val next = (dragAnim.value + dragAmount).coerceIn(0f, maxDragPx)
+                                swipeScope.launch { dragAnim.snapTo(next) }
+                            }
+                        }
                         .widthIn(max = maxBubbleWidth)
                         .then(
                             if (emojiOnly) Modifier
@@ -813,7 +872,11 @@ private fun MessageRow(
                                             // above by the outer Box's background/border/padding).
                                             Text(message.text, fontSize = 38.sp, lineHeight = 42.sp)
                                         } else {
-                                            Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                                            // "Text size can be a bit bigger" -- bumped from web's
+                                            // own 14.5sp match (MaterialTheme.typography.bodyMedium)
+                                            // up to 16sp, a deliberate mobile-only divergence per
+                                            // that direct ask, not a parity fix.
+                                            Text(message.text, fontSize = 16.sp, lineHeight = 23.sp)
                                         }
                                     }
                                 }
@@ -851,8 +914,30 @@ private fun MessageRow(
                     }
                 }
 
+                // "long press a bubble - show emojis for react & show a
+                // dropdown with other options - like how whatsapp does" --
+                // previously a two-step interaction (long-press -> "React"
+                // menu item -> a SECOND popup with the actual emoji row).
+                // One long press now surfaces both at once: a quick-reaction
+                // row at the top of the same popup, then the option list
+                // below it, exactly like WhatsApp's combined long-press sheet.
                 DropdownMenu(expanded = menuOpen, onDismissRequest = onCloseMenu) {
-                    DropdownMenuItem(text = { Text("React") }, onClick = onOpenReactionPicker)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        QUICK_REACTIONS.forEach { emoji ->
+                            Text(
+                                emoji,
+                                fontSize = 24.sp,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .combinedClickable(onClick = { onReact(emoji) })
+                                    .padding(4.dp),
+                            )
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     DropdownMenuItem(text = { Text("Reply") }, onClick = onReply)
                     if (message.isMine && message.media == null) {
                         DropdownMenuItem(text = { Text("Edit") }, onClick = onEdit)
@@ -860,18 +945,6 @@ private fun MessageRow(
                     DropdownMenuItem(text = { Text("Delete for me") }, onClick = onDeleteForMe)
                     if (message.isMine) {
                         DropdownMenuItem(text = { Text("Delete for everyone") }, onClick = onDeleteForEveryone)
-                    }
-                }
-
-                DropdownMenu(expanded = reactionPickerOpen, onDismissRequest = onCloseReactionPicker) {
-                    Row(modifier = Modifier.padding(horizontal = 8.dp)) {
-                        QUICK_REACTIONS.forEach { emoji ->
-                            Text(
-                                emoji,
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(4.dp).combinedClickable(onClick = { onReact(emoji) }),
-                            )
-                        }
                     }
                 }
             }
@@ -883,16 +956,20 @@ private fun MessageRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     message.reactions.forEach { (emoji, users) ->
                         val mine = myUsername != null && users.contains(myUsername)
                         Box(
                             modifier = Modifier
                                 .background(if (mine) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else mutedText(0.08f), RoundedCornerShape(D2MRadius.sm))
                                 .combinedClickable(onClick = { onReact(emoji) })
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                         ) {
-                            Text("$emoji ${users.size}", style = MaterialTheme.typography.labelSmall)
+                            // "reaction display below the bubbles also should be a
+                            // bit bigger - looks too tiny now" -- bumped from
+                            // labelSmall (11sp) to 14sp, up from 6/2dp to 8/4dp
+                            // padding to match.
+                            Text("$emoji ${users.size}", fontSize = 14.sp)
                         }
                     }
                 }
