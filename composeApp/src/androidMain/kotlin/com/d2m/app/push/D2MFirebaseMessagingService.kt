@@ -69,6 +69,16 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val type = message.data["type"]
+        // Diagnostic breadcrumb for "notifications not received when app is
+        // not live" reports -- this line running at all (check via `adb
+        // logcat` while the app is killed) confirms the message reached
+        // this device and this callback fired; if a future report says
+        // nothing arrives, but this line never appears in logcat either,
+        // that rules out everything downstream (channel/permission/
+        // battery-optimization) and points back at FCM delivery itself
+        // (token validity, server-side send, or OS-level throttling before
+        // this process ever wakes) rather than anything in this method.
+        println("D2MFirebaseMessagingService.onMessageReceived: type=$type from=${message.data["from"]} priority=${message.priority} originalPriority=${message.originalPriority}")
         val title = message.data["title"] ?: message.notification?.title ?: "New notification"
         val body = message.data["body"] ?: message.notification?.body ?: "You have a new notification."
         val channel = if (type == "incoming_call") NOTIFICATION_CHANNEL_CALLS else NOTIFICATION_CHANNEL_MESSAGES

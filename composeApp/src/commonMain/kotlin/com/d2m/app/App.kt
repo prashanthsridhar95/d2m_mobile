@@ -32,6 +32,7 @@ import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
+import com.d2m.app.push.ui.rememberBatteryOptimizationRequester
 import com.d2m.app.push.ui.rememberNotificationPermissionLauncher
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.navigation.ChildTabs
@@ -120,8 +121,16 @@ fun App() {
     // POST_NOTIFICATIONS is a runtime permission; declaring it in the
     // manifest alone never prompts anyone -- see push/ui/NotificationPermission.kt).
     val requestNotificationPermission = rememberNotificationPermissionLauncher {}
+    // Reported directly: "runs in the same machine - but notifications not
+    // received when app is not live" -- after confirming client/server FCM
+    // config already matched. OEM battery management (Xiaomi/Samsung/
+    // OnePlus etc.) killing the process or throttling FCM delivery well
+    // beyond stock Android's Doze exceptions is the most common remaining
+    // cause of exactly that symptom. See BatteryOptimizationCompat.kt.
+    val requestBatteryOptimizationExemption = rememberBatteryOptimizationRequester()
     LaunchedEffect(Unit) {
         requestNotificationPermission()
+        requestBatteryOptimizationExemption()
     }
 
     val navController = rememberNavController()
