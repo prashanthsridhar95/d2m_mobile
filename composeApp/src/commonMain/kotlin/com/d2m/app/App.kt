@@ -27,8 +27,11 @@ import androidx.navigation.compose.rememberNavController
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.SeriousModeRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.ParentContactsStore
+import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
@@ -69,6 +72,8 @@ fun App() {
     val chatUiState: ChatUiState = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
     val apiClient: ApiClient = koinInject()
+    val seriousModeRepo: SeriousModeRepository = koinInject()
+    val parentContactsStore: ParentContactsStore = koinInject()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
     val messagingStartupError by messagingRepo.startupError.collectAsState()
@@ -112,6 +117,39 @@ fun App() {
             // token fetch is cheap/idempotent so re-firing on every identity
             // change (login, role switch) is harmless.
             runCatching { pushInitializer.initialize() }
+
+            // "In app notification still shows id instead of name." Root
+            // cause: messagingRepo.peerDisplayName() only ever gets fed a
+            // real name via rememberPeerName() -- and that call previously
+            // only happened inside MatchesScreen.kt (child) or
+            // ParentMessagesScreen.kt (parent), i.e. only once THAT specific
+            // screen had actually composed this session. InAppNotificationLayer
+            // (mounted globally, can fire from any tab) and
+            // LocalNotificationBridge both read the exact same map -- a
+            // message arriving while the user's sitting on Home/Discover/
+            // Settings, having never opened Matches this session, fell back
+            // to the raw derived username. Hoisting this here (same
+            // identity-gated effect as messagingRepo.start()/pushInitializer
+            // above) means every match/contact's real name is known as soon
+            // as identity loads, regardless of which screen is showing --
+            // SeriousModeRepository.getThreads is already cache-backed
+            // (15s TTL, see that class), and ParentContactsStore.attach is a
+            // synchronous local read, so neither adds a real network hit
+            // beyond what those screens would do anyway.
+            runCatching {
+                identity.primaryId?.let { primaryId ->
+                    seriousModeRepo.getThreads(primaryId).forEach { t ->
+                        messagingRepo.rememberPeerName(t.otherParticipantId, t.otherParticipantName)
+                    }
+                }
+                identity.sponsorId?.let { sponsorId ->
+                    val myUsername = d2mIdToMessagingUsername(sponsorId)
+                    parentContactsStore.attach(myUsername)
+                    parentContactsStore.contacts.value.values.forEach { c ->
+                        messagingRepo.rememberPeerName(c.d2mId, c.name)
+                    }
+                }
+            }
         }
     }
 
