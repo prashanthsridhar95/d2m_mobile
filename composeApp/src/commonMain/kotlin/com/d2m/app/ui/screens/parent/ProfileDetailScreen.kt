@@ -28,7 +28,11 @@ import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.messaging.ChatUiState
+import com.d2m.app.messaging.ParentContactsStore
+import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
@@ -48,9 +52,12 @@ import org.koin.compose.koinInject
  * action row: parent gets Suggest to child, child gets Accept/Snooze/Pass.
  */
 @Composable
-fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
+fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages: () -> Unit = {}) {
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
+    val identityRepo: IdentityRepository = koinInject()
+    val contactsStore: ParentContactsStore = koinInject()
+    val chatUiState: ChatUiState = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
@@ -59,6 +66,49 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var actionInFlight by remember { mutableStateOf(false) }
+    var messageParentBusy by remember { mutableStateOf(false) }
+    var messageParentError by remember { mutableStateOf<String?>(null) }
+
+    // Open, no request/accept gate -- mirrors ProfileDetailScreen.jsx's
+    // handleMessageParent exactly, see that file's own comment: "there is no
+    // match policy in parent to parent... when a parent sees a profile &
+    // thinks it's a viable profile, they can initiate a conversation with
+    // the child's parent, they dont need a request/accept flow." candidateId
+    // here is the CHILD's own D2M id (this screen's whole subject), never
+    // their Sponsor's -- resolved via GET /primaries/{id}/sponsor first,
+    // same two-step lookup web does, since the candidate payload never
+    // carries the Sponsor's id directly.
+    fun messageParent() {
+        val mySponsorId = identity.sponsorId ?: return
+        scope.launch {
+            messageParentBusy = true
+            messageParentError = null
+            try {
+                val sponsor = identityRepo.getPrimarySponsor(candidateId)
+                val sponsorProfile = identityRepo.getSponsorProfile(sponsor.sponsorId)
+                val myUsername = d2mIdToMessagingUsername(mySponsorId)
+                val peerUsername = d2mIdToMessagingUsername(sponsor.sponsorId)
+                // name is ALWAYS the Sponsor's OWN name (never the candidate's) --
+                // see ParentContactsStore.kt's doc comment for why that distinction
+                // matters (a real reported bug on web when it was seeded wrong).
+                contactsStore.registerContact(
+                    myUsername = myUsername,
+                    peerUsername = peerUsername,
+                    peerD2mId = sponsor.sponsorId,
+                    name = sponsorProfile.name,
+                    kind = "parent",
+                    childId = candidateId,
+                    childName = sponsorProfile.childName,
+                )
+                chatUiState.requestOpenPeer(peerUsername)
+                onOpenMessages()
+            } catch (e: Exception) {
+                messageParentError = friendlyError(e, "Couldn't start that conversation.")
+            } finally {
+                messageParentBusy = false
+            }
+        }
+    }
 
     val viewerPrimaryId = identity.primaryId ?: identity.childPrimaryId
 
@@ -97,6 +147,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
 
                     D2MProfileTabsPanel(candidateId = candidateId, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
 
+                    messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
+
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (identity.role == D2MRole.PARENT) {
                             D2MButton(
@@ -110,6 +162,17 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit) {
                                         actionInFlight = false
                                     }
                                 },
+                            )
+                            // Parent-to-parent only (no request/accept gate, see
+                            // messageParent()'s own doc comment above). Parent-to-
+                            // child messaging deliberately isn't offered here yet --
+                            // it needs the consent-unlock gate, which isn't built on
+                            // mobile (see ParentMessagesScreen.kt's doc comment).
+                            D2MButton(
+                                text = if (messageParentBusy) "Opening…" else "Message their parent",
+                                variant = D2MButtonVariant.OUTLINE,
+                                enabled = !messageParentBusy,
+                                onClick = { messageParent() },
                             )
                         } else {
                             listOf("accept" to "Send request", "snooze" to "Snooze", "reject" to "Pass").forEach { (action, label) ->

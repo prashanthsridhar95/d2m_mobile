@@ -119,7 +119,15 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             arguments = listOf(navArgument(Routes.PROFILE_ARG_CANDIDATE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
             val candidateId = backStackEntry.arguments?.getString(Routes.PROFILE_ARG_CANDIDATE_ID).orEmpty()
-            ProfileDetailScreen(candidateId = candidateId, onBack = { navController.popBackStack() })
+            ProfileDetailScreen(
+                candidateId = candidateId,
+                onBack = { navController.popBackStack() },
+                // Same plain navigate() ParentHomeScreen's own onOpenMessages
+                // already uses -- "Message their parent" leaves this profile
+                // on the back stack, same as any other forward navigation
+                // here, so Back from Messages returns to it.
+                onOpenMessages = { navController.navigate(Routes.PARENT_MESSAGES) },
+            )
         }
 
         composable(Routes.NOTIFICATIONS) { NotificationsScreen() }

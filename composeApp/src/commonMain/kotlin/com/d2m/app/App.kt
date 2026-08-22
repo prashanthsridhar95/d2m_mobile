@@ -179,14 +179,27 @@ fun App() {
             // Instagram-style in-app message banner (point 4 of the
             // notification request) -- mounted the same way as CallLayer so
             // it can show up regardless of which screen is on top. Tapping
-            // it records the peer via ChatUiState and navigates to Matches;
-            // MatchesScreen.kt picks the pending peer up once its thread
-            // list is loaded and opens that conversation directly.
-            if (identity.role == D2MRole.CHILD) {
+            // it records the peer via ChatUiState and navigates to the
+            // right role's messaging surface; that screen (MatchesScreen.kt
+            // for Child, ParentMessagesScreen.kt for Parent) picks the
+            // pending peer up once its list is loaded and opens that
+            // conversation directly.
+            //
+            // Previously gated to `identity.role == D2MRole.CHILD` only --
+            // Parent had ZERO foreground notification signal at all as a
+            // result (reported directly: "when app is not in the
+            // background, notifications are not received" -- traced to this
+            // gate, not a bug in the banner mechanism itself, see
+            // ParentMessagesScreen.kt's doc comment on why Parent messaging
+            // didn't exist to notify about in the first place). Now that
+            // Parent has a real messaging screen, both roles get the same
+            // foreground signal.
+            if (identity.role != null) {
                 InAppNotificationLayer(
                     onOpenPeer = { peerUsername ->
                         chatUiState.requestOpenPeer(peerUsername)
-                        navController.navigate(Routes.MATCHES) {
+                        val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
+                        navController.navigate(target) {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true

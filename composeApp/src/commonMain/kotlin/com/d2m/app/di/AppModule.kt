@@ -7,6 +7,7 @@ import com.d2m.app.data.session.createSettings
 import com.d2m.app.domain.repository.*
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.ParentContactsStore
 import com.d2m.app.messaging.call.CallManager
 import com.d2m.app.messaging.call.WebRtcEngine
 import com.d2m.app.messaging.call.createWebRtcEngine
@@ -75,6 +76,10 @@ val appModule = module {
     // Shared UI-chrome flag (hide bottom nav while a chat is open, jump to a
     // thread from a tapped in-app notification banner) -- see ChatUiState.kt.
     single { ChatUiState() }
+
+    // Parent-to-parent contact registry (no backend "threads" concept exists
+    // for this relationship) -- see ParentContactsStore.kt's doc comment.
+    single { ParentContactsStore(createSettings()) }
 
     // Audio/video calling -- see messaging/call/CallManager.kt +
     // WebRtcEngine.android.kt (real) / WebRtcEngine.ios.kt (not implemented

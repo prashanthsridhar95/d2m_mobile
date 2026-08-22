@@ -160,7 +160,21 @@ class MessagingRepository(
     private val _presenceByUser = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val _unreadByPeer = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val _peerDisplayNames = MutableStateFlow<Map<String, String>>(emptyMap())
-    private val _inboxNotifications = MutableSharedFlow<InboxNotification>(extraBufferCapacity = 8)
+    // replay = 1 (not just extraBufferCapacity): SharedFlow's extra buffer
+    // only smooths delivery for collectors that are ALREADY subscribed when
+    // an event is emitted -- a collector that attaches AFTER the emission
+    // (e.g. InAppNotificationLayer.kt's LaunchedEffect(Unit), which races
+    // cold-start identity/role resolution in App.kt) starts its cursor at
+    // "now" and never sees anything buffered before it joined, silently
+    // losing the notification with the app foregrounded and no system
+    // notification either (see D2MFirebaseMessagingService's isForeground
+    // check) -- nothing shown to the user at all. replay = 1 means a
+    // late-attaching collector immediately receives the most recent inbox
+    // event on subscribe, closing that window; InAppNotificationLayer is
+    // effectively a permanent singleton (mounted once per CHILD session in
+    // App.kt) so re-showing one stale banner on the rare remount is a
+    // reasonable trade for never silently dropping a real one.
+    private val _inboxNotifications = MutableSharedFlow<InboxNotification>(replay = 1, extraBufferCapacity = 8)
     /** Human-readable, transient failures for ChatPane to surface as a snackbar (Don Norman "visibility of system status" -- a send failure used to just vanish with no feedback at all). Not for call signaling failures, which have their own CallManager.errors -- see that class. */
     private val _sendErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val sendErrors: SharedFlow<String> = _sendErrors.asSharedFlow()
@@ -232,6 +246,9 @@ class MessagingRepository(
     }
 
     fun peerDisplayName(peerUsername: String): String = _peerDisplayNames.value[peerUsername] ?: peerUsername
+
+    /** Cheap synchronous snapshot (no Flow/collector created, unlike [messagesFor]) -- safe to call repeatedly, e.g. inside a sort comparator for ParentMessagesScreen.kt's thread list. */
+    fun lastMessageAt(peerUsername: String): Long? = _messagesByPeer.value[peerUsername]?.maxOfOrNull { it.sentAt }
 
     fun messagesFor(peerUsername: String): StateFlow<List<ChatMessage>> {
         val flow = MutableStateFlow(_messagesByPeer.value[peerUsername].orEmpty())
