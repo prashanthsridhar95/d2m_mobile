@@ -88,20 +88,40 @@ fun App() {
     LaunchedEffect(identity.primaryId, identity.sponsorId) {
         if (identity.primaryId != null || identity.sponsorId != null) {
             runCatching { messagingRepo.start(apiClient.client) }
+            // Reported directly: "When app is not alive, I don't receive
+            // notification (even now)." Root cause: this used to live in the
+            // LaunchedEffect(Unit) below, firing exactly once at first
+            // composition -- BEFORE identity is guaranteed to be loaded (a
+            // fresh install has no identity at all until onboarding
+            // finishes; even a returning user's IdentityStore restore can
+            // race the async FirebaseMessaging.getInstance().token callback
+            // this kicks off). PushTokenRegistrar.registerCurrentToken reads
+            // identityStore.identity.value at the moment the token callback
+            // resolves and silently no-ops if there's no accountId yet --
+            // and since it's only ever invoked from that one FCM token
+            // fetch (onNewToken fires again only when the token itself
+            // rotates, e.g. months later), a registration that lost that
+            // race was never retried. This device's DeviceToken row was
+            // simply never created server-side, so every push attempt is
+            // "no_device_token" regardless of whether the backend's own FCM
+            // config (D2M_FCM_SERVICE_ACCOUNT_JSON) is correct. Re-running
+            // here, keyed on identity like messagingRepo.start() above,
+            // guarantees at least one registration attempt happens at a
+            // point identity is guaranteed non-null; FirebaseMessaging's
+            // token fetch is cheap/idempotent so re-firing on every identity
+            // change (login, role switch) is harmless.
+            runCatching { pushInitializer.initialize() }
         }
     }
 
-    // Fire-once: push permission/token registration shouldn't block first
-    // paint and isn't tied to any particular screen's lifecycle. Request the
-    // OS notification permission FIRST -- reported directly: "Notification
-    // allow is not asked on launch" (Android 13+'s POST_NOTIFICATIONS is a
-    // runtime permission; declaring it in the manifest alone never prompts
-    // anyone -- see push/ui/NotificationPermission.kt). Token fetch/
-    // registration doesn't depend on this permission and proceeds either way.
+    // Fire-once: the OS notification permission prompt isn't tied to
+    // identity or any particular screen's lifecycle -- reported directly:
+    // "Notification allow is not asked on launch" (Android 13+'s
+    // POST_NOTIFICATIONS is a runtime permission; declaring it in the
+    // manifest alone never prompts anyone -- see push/ui/NotificationPermission.kt).
     val requestNotificationPermission = rememberNotificationPermissionLauncher {}
     LaunchedEffect(Unit) {
         requestNotificationPermission()
-        runCatching { pushInitializer.initialize() }
     }
 
     val navController = rememberNavController()
