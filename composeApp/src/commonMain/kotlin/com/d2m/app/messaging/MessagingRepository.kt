@@ -153,6 +153,12 @@ class MessagingRepository(
      */
     private val exceptionHandler = CoroutineExceptionHandler { _, e ->
         println("MessagingRepository: uncaught coroutine exception (recovered, not fatal): $e")
+        // Recovered-from doesn't mean "fine" -- this IS the last line of
+        // defense catching something no individual call site's own
+        // try/catch anticipated. println alone vanishes the moment nobody's
+        // watching logcat; reportNonFatal surfaces it in Crashlytics so it's
+        // still visible after the fact (see CrashReporter.kt).
+        reportNonFatal(e, "MessagingRepository uncaught coroutine exception")
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
     private val _messagesByPeer = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap())

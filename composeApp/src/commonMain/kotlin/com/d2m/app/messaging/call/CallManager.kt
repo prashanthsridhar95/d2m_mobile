@@ -4,6 +4,7 @@ import com.d2m.app.messaging.CallLogInfo
 import com.d2m.app.messaging.ChatMessage
 import com.d2m.app.messaging.MessageStatus
 import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.messaging.reportNonFatal
 import com.d2m.app.messaging.protocol.CallSignal
 import com.d2m.app.messaging.protocol.IceCandidateData
 import com.d2m.app.messaging.protocol.SdpDescription
@@ -79,6 +80,7 @@ class CallManager(
     /** Safety net matching MessagingRepository's own -- see that class's `exceptionHandler` doc comment. hangup()/decline()/mid-call-state updates below fire signals from bare `scope.launch { }` blocks with no local try/catch (call signaling is best-effort), so anything that still slips through needs somewhere to land besides "crash the app." */
     private val exceptionHandler = CoroutineExceptionHandler { _, e ->
         println("CallManager: uncaught coroutine exception (recovered, not fatal): $e")
+        reportNonFatal(e, "CallManager uncaught coroutine exception")
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
 

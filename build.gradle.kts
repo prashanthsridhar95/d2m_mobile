@@ -11,4 +11,7 @@ plugins {
     // Push notifications don't work at all without this (no FCM token can
     // ever be minted), so this alone isn't sufficient -- see README.md.
     alias(libs.plugins.googleServices) apply false
+    // Same conditional-apply pattern as googleServices above -- Crashlytics
+    // needs the same real google-services.json to actually report anywhere.
+    alias(libs.plugins.firebaseCrashlytics) apply false
 }

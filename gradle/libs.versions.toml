@@ -60,6 +60,11 @@ bouncycastle-version = "1.85.2"
 # applied when that file is actually present, so a checkout without your own
 # Firebase project's json still builds cleanly) and README.md's push section.
 google-services-version = "4.4.2"
+# Crashlytics Gradle plugin -- reads the same google-services.json (applied
+# conditionally alongside it, see composeApp/build.gradle.kts) to wire crash/
+# non-fatal/ANR reporting up to the same Firebase project push already uses.
+# Confirmed current on Firebase's own docs (firebase.google.com/docs/crashlytics/android/get-started) at implementation time.
+firebase-crashlytics-version = "3.0.7"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -105,6 +110,7 @@ sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions", 
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version = "1.9.2" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom-version" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 stream-webrtc-android = { module = "io.getstream:stream-webrtc-android", version.ref = "stream-webrtc-android-version" }
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle-version" }
 
@@ -120,3 +126,4 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 googleServices = { id = "com.google.gms.google-services", version.ref = "google-services-version" }
+firebaseCrashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics-version" }

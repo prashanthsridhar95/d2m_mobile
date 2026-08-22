@@ -151,6 +151,29 @@ the live in-app notification (open socket, real `CallSignal`) can.
 iOS-side (`apns` tokens) still registers cleanly but has no real send
 implemented -- no APNs SDK integration exists yet.
 
+## Crash & error reporting
+
+Firebase Crashlytics rides the same `google-services.json` push already
+needs (see above) -- nothing extra to configure once that file is in place.
+The `com.google.firebase.crashlytics` Gradle plugin is applied conditionally
+alongside `com.google.gms.google-services`, same reasoning: a checkout with
+no Firebase project still builds cleanly, it just doesn't report anywhere.
+Every coroutine's last-line-of-defense `CoroutineExceptionHandler`
+(`MessagingRepository.kt`, `CallManager.kt`) forwards to
+`reportNonFatal()` (`messaging/CrashReporter.kt`) in addition to its
+existing `println`, so a recovered-from bug is still visible in the
+Crashlytics dashboard after the fact, not just in a live logcat session.
+
+## GIF picker
+
+The composer's GIF tab (`messaging/ui/GifPicker.kt`) calls GIPHY directly.
+Falls back to GIPHY's own public "beta" key (rate-limited, shared across
+every app that hasn't set its own) if none is configured. To use a real
+key: add `GIPHY_API_KEY=<your key>` to `local.properties` (gitignored --
+get a free key at https://developers.giphy.com/dashboard); read into
+`BuildConfig.GIPHY_API_KEY` at build time, see `composeApp/build.gradle.kts`'s
+`giphyApiKey` val.
+
 ## Project structure
 
 ```

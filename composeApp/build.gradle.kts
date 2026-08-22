@@ -33,6 +33,10 @@ plugins {
 // google-services.json to this directory).
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+    // Crash/non-fatal/ANR reporting -- same conditional-apply reasoning as
+    // google-services above (this plugin also needs a real Firebase project
+    // to report anywhere, and would break a checkout with no google-services.json).
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 kotlin {
@@ -137,6 +141,10 @@ kotlin {
                 // not depend on that accessor working correctly again.
                 implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
                 implementation(libs.firebase.messaging)
+                // Crash/non-fatal/ANR reporting -- see GifConfig.android.kt's
+                // sibling, messaging/CrashReporter.android.kt, for where
+                // recordException actually gets called from commonMain code.
+                implementation(libs.firebase.crashlytics)
                 // Real WebRTC (audio/video calling) -- see messaging/call/WebRtcEngine.android.kt.
                 implementation(libs.stream.webrtc.android)
                 // Real Signal Protocol crypto primitives (X25519/AES/HMAC) --
