@@ -437,7 +437,31 @@ fun ChatPane(
                     // bumped from web's own 6.dp match up to 12.dp, a
                     // deliberate mobile-only divergence per that direct ask
                     // rather than a parity fix.
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // "still theres some animation in the bubbles when
+                    // opening a chat - it feels like theres something being
+                    // dropped." Root cause of THIS residual motion: the
+                    // scroll-to-bottom correction below (hasScrolledInitially)
+                    // only runs in a LaunchedEffect, which fires AFTER the
+                    // list's very first frame -- so that first frame briefly
+                    // draws scrolled to the TOP (index 0, wherever a fresh
+                    // LazyListState always starts), then an instant jump to
+                    // the bottom lands a frame or two later. Even an
+                    // un-animated jump reads as "stuff dropping into place"
+                    // when it happens across two visibly different frames.
+                    // Drawing the list at alpha=0 until that first correction
+                    // has actually completed (scrollToItem returns, then
+                    // hasScrolledInitially flips true, in that order) means
+                    // the very first frame the user ever SEES already has
+                    // the right scroll position baked in -- no jump to
+                    // perceive at all, just the chat appearing already
+                    // settled. Layout/scrolling still happens normally while
+                    // invisible; only drawing is suppressed.
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)
+                            .graphicsLayer(alpha = if (hasScrolledInitially) 1f else 0f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         for ((groupKey, groupMessages) in dayGroups) {
                             // Matches d2m_web's sticky day pill exactly (MessageList.jsx)
                             // -- one real stickyHeader per day, so it lets go the moment
