@@ -24,8 +24,25 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
 
-const val NOTIFICATION_CHANNEL_MESSAGES = "d2m_messages"
-const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
+// Versioned ids ("_v2", not "d2m_messages") -- reported directly:
+// "Notification ringtones not working." Android notification channels are
+// immutable after first creation: NotificationManager.createNotificationChannel
+// is a documented no-op for any settings (sound/importance/vibration) on a
+// channel id that already exists on the device. These two channels were
+// first created (by an earlier build, before per-channel sound was wired up
+// -- see task history) with no explicit sound, so on any device that already
+// had the app installed, the setSound() calls below silently never took
+// effect -- the channel already existed with "default" (often silent/no
+// custom ringtone) settings baked in, and re-running createNotificationChannel
+// with the same id can't change that. Bumping the id forces Android to treat
+// this as a brand-new channel, so the real sound config actually applies.
+// The stale old-id channels are explicitly deleted right below so they don't
+// linger as dead duplicate entries in the user's system notification
+// settings.
+const val NOTIFICATION_CHANNEL_MESSAGES = "d2m_messages_v2"
+const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls_v2"
+private const val LEGACY_NOTIFICATION_CHANNEL_MESSAGES = "d2m_messages"
+private const val LEGACY_NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
 
 /**
  * Answers point 3 ("Notifications will be received? If not, handle that")
@@ -77,6 +94,11 @@ const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
  */
 fun installLocalNotificationBridge(app: Application) {
     val notificationManager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    // Safe no-op if the legacy channel was never created (fresh install) --
+    // only matters for upgrades from a build that used the un-versioned ids.
+    runCatching { notificationManager.deleteNotificationChannel(LEGACY_NOTIFICATION_CHANNEL_MESSAGES) }
+    runCatching { notificationManager.deleteNotificationChannel(LEGACY_NOTIFICATION_CHANNEL_CALLS) }
 
     // Ringtone-style audio usage (not a plain notification sound) -- this is
     // what actually makes Android treat it like an incoming call: played at
