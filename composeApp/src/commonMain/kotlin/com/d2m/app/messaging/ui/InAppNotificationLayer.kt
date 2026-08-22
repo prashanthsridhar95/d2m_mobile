@@ -8,10 +8,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -89,18 +92,22 @@ fun InAppNotificationLayer(onOpenPeer: (String) -> Unit) {
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             if (event != null) {
-                // A fixed top offset rather than precise WindowInsets.statusBars()
-                // -- keeps this composable free of platform-specific inset
-                // wiring (the app enables edge-to-edge on Android; iOS has no
-                // real target to verify against yet, see WebRtcEngine.ios.kt),
-                // generous enough to clear the status bar on real devices.
+                // WindowInsets.statusBars gives the real system-bar height on
+                // this device/orientation (edge-to-edge is enabled, so Compose
+                // draws under the status bar by default -- a fixed dp offset
+                // undershoots on taller status bars, e.g. devices with a
+                // notch/punch-hole/dynamic island equivalent, and the banner
+                // rendered underneath the system clock/icons). windowInsetsPadding
+                // applies that real inset as top padding; the extra 10.dp is
+                // just breathing room below the status bar, same as before.
                 Surface(
                     shape = RoundedCornerShape(D2MRadius.lg),
                     color = MaterialTheme.colorScheme.surface,
                     shadowElevation = 10.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 40.dp, start = 10.dp, end = 10.dp)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 10.dp, start = 10.dp, end = 10.dp)
                         .clickable {
                             onOpenPeer(event.peerUsername)
                             current = null
