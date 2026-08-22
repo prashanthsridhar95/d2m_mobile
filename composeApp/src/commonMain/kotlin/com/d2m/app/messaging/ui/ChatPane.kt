@@ -29,10 +29,13 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -273,6 +276,25 @@ fun ChatPane(
     // appears, not just when a real message lands.
     LaunchedEffect(messages.size, peerTyping) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+
+    // "when keyboard opens, the last seen chat should move with the
+    // keyboard. so i dont have to scroll to see where i was." The message
+    // list already shrinks when the keyboard opens (imePadding() is applied
+    // by the caller, MatchesScreen.kt/ParentMessagesScreen.kt), but nothing
+    // told it to re-scroll -- the last message just ended up sitting
+    // wherever the shrunk viewport left it, sometimes hidden behind the
+    // keyboard, and needed a manual scroll to find again.
+    // WindowInsets.Companion.isImeVisible isn't resolvable in this KMP
+    // Foundation artifact (Android-only in some Compose Multiplatform
+    // versions) -- reading WindowInsets.ime's own bottom inset directly is
+    // the more fundamental, universally-available API imePadding() itself
+    // is already built on (see this project's existing imePadding() calls),
+    // and >0 means the same thing isImeVisible would have.
+    val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
+    val imeVisible = imeBottomPx > 0
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     // Don Norman "visibility of system status": a send/edit/delete/reaction
