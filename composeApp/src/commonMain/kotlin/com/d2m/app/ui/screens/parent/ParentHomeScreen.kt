@@ -1,5 +1,6 @@
 package com.d2m.app.ui.screens.parent
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +33,10 @@ import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.FieldSkeleton
 import com.d2m.app.ui.components.MatchCard
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.SubHeading
+import com.d2m.app.ui.components.MetaText
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -94,7 +98,7 @@ fun ParentHomeScreen(
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Text("Your child's matches", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            PageTitle("Your child's matches")
 
             when {
                 loading -> Column { repeat(3) { FieldSkeleton(modifier = Modifier.padding(bottom = 12.dp)) } }
@@ -151,19 +155,19 @@ fun ParentHomeScreen(
 
 @Composable
 private fun ProfileSummaryCard(name: String, subtitle: String, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    D2MCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, color = mutedText(0.55f), style = MaterialTheme.typography.bodyMedium)
+            SubHeading(name)
+            MetaText(subtitle, Modifier.padding(top = 2.dp))
         }
     }
 }
 
 @Composable
 private fun ConsentStatusCard(statusLabel: String, pendingCount: Int, onOpenMessages: () -> Unit) {
-    Card(onClick = onOpenMessages, modifier = Modifier.fillMaxWidth()) {
+    D2MCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenMessages)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Status: $statusLabel", fontWeight = FontWeight.Bold)
+            SubHeading("Status: $statusLabel")
             if (pendingCount > 0) {
                 D2MBadge("$pendingCount unread", D2MBadgeTone.INFO)
             }

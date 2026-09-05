@@ -25,6 +25,7 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.Taxonomy
+import com.d2m.app.ui.components.SectionHeading
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -65,12 +66,12 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             when (step) {
                 0 -> {
-                    Text("Someone set this up for you 💌", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    SectionHeading("Someone set this up for you 💌")
                     Text("Claim it to make it yours.", color = mutedText(0.55f))
                     D2MButton(text = "Claim your profile", onClick = { step = 1 })
                 }
                 1 -> {
-                    Text("Let's make sure it's really you.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    SectionHeading("Let's make sure it's really you.")
                     D2MTextField("Your name", name, { name = it })
                     D2MTextField("Contact info (phone or email)", contactInfo, { contactInfo = it })
                     D2MSelectField("Gender", gender, Taxonomy.GENDERS, { gender = it }, optionLabel = Taxonomy::toLabel)
@@ -109,7 +110,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                     )
                 }
                 2 -> {
-                    Text("Who are you hoping to meet?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    SectionHeading("Who are you hoping to meet?")
                     androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         D2MTextField("Min age", minAge, { minAge = it }, modifier = Modifier.weight(1f))
                         D2MTextField("Max age", maxAge, { maxAge = it }, modifier = Modifier.weight(1f))

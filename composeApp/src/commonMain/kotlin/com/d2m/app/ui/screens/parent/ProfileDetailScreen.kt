@@ -2,12 +2,14 @@ package com.d2m.app.ui.screens.parent
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
@@ -37,8 +38,17 @@ import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MProfileTabsPanel
+import com.d2m.app.ui.components.D2MBadge
+import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.LinkText
+import com.d2m.app.ui.components.MetaText
+import com.d2m.app.ui.components.PersonName
+import com.d2m.app.ui.components.ProfilePhoto
+import com.d2m.app.ui.components.RefNoText
 import com.d2m.app.ui.components.ScoreBadge
 import com.d2m.app.ui.theme.D2MFlow
+import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
@@ -51,6 +61,7 @@ import org.koin.compose.koinInject
  * really is shared, moving it wouldn't change what it does). Role-aware
  * action row: parent gets Suggest to child, child gets Accept/Snooze/Pass.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages: () -> Unit = {}) {
     val identityStore: IdentityStore = koinInject()
@@ -127,23 +138,71 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
 
     D2MTheme(flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            D2MButton("Back", variant = D2MButtonVariant.GHOST, onClick = onBack)
+            // A quiet text link, not a maroon GHOST button -- the comps
+            // open this screen on a breadcrumb row, and the first thing on
+            // the page should be the person, not a control.
+            LinkText("← Back", onClick = onBack, modifier = Modifier.padding(bottom = 4.dp))
 
             when {
-                loading -> Text("Loading…", color = mutedText(0.55f))
+                // The shape of what's coming, not a word -- the header
+                // block, then the photograph, then the panel.
+                loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    D2MSkeleton(width = 110.dp, height = 11.dp)
+                    D2MSkeleton(width = 220.dp, height = 26.dp)
+                    D2MSkeleton(width = 160.dp, height = 14.dp)
+                    D2MSkeleton(height = 260.dp, modifier = Modifier.padding(top = 6.dp))
+                }
                 error != null -> D2MErrorBanner(error!!)
                 candidate != null -> {
                     val c = candidate!!
-                    AsyncImage(
-                        model = c.photoUrl?.let(apiClient::resolveMediaUrl),
-                        contentDescription = c.candidateName,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(1.2f),
-                    )
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${c.candidateName}${c.age?.let { ", $it" } ?: ""}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    /*
+                     * Header, per the Profile-detail comp: the registration
+                     * id in tracked small caps, the name in the display
+                     * serif on its own line, then one meta line. The old
+                     * version put "Name, 27" in bold sans on the same row as
+                     * the score badge, under a full-bleed image -- which
+                     * meant the name and the rating competed for the same
+                     * emphasis, and the id (the thing families actually
+                     * quote on the phone) wasn't shown at all.
+                     */
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        RefNoText(c.candidateId, Modifier.weight(1f))
                         ScoreBadge(c.compositeScore)
                     }
-                    Text(listOfNotNull(c.city, c.occupationTitle).joinToString(" · "), color = mutedText(0.55f))
+                    PersonName(c.candidateName, Modifier.padding(top = 4.dp))
+                    val meta = listOfNotNull(
+                        c.age?.let { "$it years" },
+                        c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") }
+                            ?: c.gothram,
+                        c.nativity ?: c.city,
+                    )
+                    if (meta.isNotEmpty()) {
+                        MetaText(meta.joinToString(" · "), Modifier.padding(top = 5.dp))
+                    }
+
+                    ProfilePhoto(
+                        photoUrl = c.photoUrl?.let(apiClient::resolveMediaUrl),
+                        contentDescription = "Photograph of ${c.candidateName}",
+                        ratio = 1f,
+                        caption = if (c.photoUrl == null) "No photograph on file" else null,
+                        glyphSize = 52.dp,
+                        shape = RoundedCornerShape(D2MRadius.lg),
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+
+                    if (c.doshaFlags.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                        ) {
+                            c.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
+                        }
+                    }
 
                     D2MProfileTabsPanel(candidateId = candidateId, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
 

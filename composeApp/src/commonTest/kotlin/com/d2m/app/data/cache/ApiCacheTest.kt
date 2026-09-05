@@ -35,14 +35,18 @@ class ApiCacheTest {
 
     @Test
     fun expiredEntry_isTreatedAsStale_andReturnsOldValueImmediately() = runTest {
-        val cache = ApiCache(defaultTtlMillis = 1_000)
+        // Drive the cache's clock explicitly rather than through
+        // advanceTimeBy: ApiCache reads wall-clock time, which the virtual
+        // test scheduler does not control (see ApiCache's nowMillis param).
+        var clock = 0L
+        val cache = ApiCache(defaultTtlMillis = 1_000, nowMillis = { clock })
         var fetchCount = 0
         val fetch: suspend () -> String = { fetchCount++; "value-$fetchCount" }
 
         val first = cache.get("k", ttlMillis = 1_000, fetch = fetch)
         assertEquals("value-1", first.value)
 
-        advanceTimeBy(2_000)
+        clock += 2_000
 
         // The stale hit must hand back the OLD value right away (this is the
         // ApiCache.kt bug fixed in this pass: triggerBackgroundRefresh() was

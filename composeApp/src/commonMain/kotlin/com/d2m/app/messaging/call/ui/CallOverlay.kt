@@ -163,10 +163,10 @@ private fun statusLabel(view: CallView): String = when (view.phase) {
 
 @Composable
 private fun formatDuration(startedAtMs: Long): String {
-    var now by remember { mutableStateOf(kotlinx.datetime.Clock.System.now().toEpochMilliseconds()) }
+    var now by remember { mutableStateOf(kotlin.time.Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(startedAtMs) {
         while (true) {
-            now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            now = kotlin.time.Clock.System.now().toEpochMilliseconds()
             delay(1000)
         }
     }

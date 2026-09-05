@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,9 +61,13 @@ import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.components.SubHeading
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -278,7 +282,7 @@ fun ChildHomeScreen(
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Hey $firstName 👋", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        PageTitle("Hey $firstName 👋")
                         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
                     }
                     IconButton(onClick = onOpenSettings) {
@@ -320,7 +324,7 @@ fun ChildHomeScreen(
             }
 
             item {
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(D2MRadius.lg)) {
+                D2MCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         if (!requestsLoaded || !suggestionsLoaded || !profileLoaded) {
                             SkeletonHomeRow()
@@ -451,7 +455,7 @@ private fun HeroBanner(
                 .clip(shape)
                 .then(
                     if (resolvedPhoto == null) {
-                        Modifier.background(Brush.linearGradient(colors = listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2))))
+                        Modifier.background(SolidColor(d2m.surfaceSunken))
                     } else Modifier,
                 )
                 .clickable(onClick = onOpenChat),
@@ -468,7 +472,7 @@ private fun HeroBanner(
                     (activeThread.otherParticipantName.trim().firstOrNull() ?: '?').uppercaseChar().toString(),
                     fontSize = 56.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF8A7554),
+                    color = d2m.label,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
@@ -504,18 +508,18 @@ private fun HeroBanner(
                 .fillMaxWidth()
                 .height(220.dp)
                 .clip(shape)
-                .background(Brush.linearGradient(colors = listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2))))
+                .background(SolidColor(d2m.surfaceSunken))
                 .then(if (!discoverDisabled) Modifier.clickable(onClick = onOpenDiscover) else Modifier)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Text("✨", fontSize = 40.sp)
-            Text("Your person's out there", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF3A3226), modifier = Modifier.padding(top = 10.dp))
+            SubHeading("Your person's out there", Modifier.padding(top = 10.dp))
             Text(
                 "No matches yet -- let's find someone worth a hello.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF6B5F4D),
+                color = d2m.meta,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -584,7 +588,7 @@ private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiCli
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.linearGradient(colors = listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))),
+            .background(SolidColor(d2m.surfaceSunken)),
         contentAlignment = Alignment.Center,
     ) {
         if (resolved != null) {
@@ -594,7 +598,7 @@ private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiCli
                 (name?.trim()?.firstOrNull() ?: '?').uppercaseChar().toString(),
                 fontWeight = FontWeight.Bold,
                 fontSize = (size.value * 0.36f).sp,
-                color = Color(0xFF8A7554),
+                color = d2m.label,
             )
         }
     }
@@ -607,7 +611,7 @@ private fun GlyphCircle(glyph: String, size: Dp = 40.dp) {
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.linearGradient(colors = listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))),
+            .background(SolidColor(d2m.surfaceSunken)),
         contentAlignment = Alignment.Center,
     ) {
         Text(glyph, fontSize = (size.value * 0.45f).sp)

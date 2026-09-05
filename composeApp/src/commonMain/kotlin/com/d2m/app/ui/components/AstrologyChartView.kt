@@ -29,6 +29,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.d2m.app.ui.theme.d2m
 
 /**
  * South Indian D1 (Rasi) / D9 (Navamsa) chart renderer -- the one design
@@ -131,6 +132,18 @@ fun AstrologyChartView(
 
 @Composable
 private fun SingleChartGrid(title: String, data: ChartData, summary: String?, modifier: Modifier = Modifier) {
+    /*
+     * Retheme pass: the grid was ruled in a fixed #8A5A3B (the old
+     * entry-flow brown) over fixed #201D1A text, which made the chart
+     * light-mode-only and the one element in the app that sat outside the
+     * theme entirely. Gold rules and body ink now -- also what the
+     * reference comps use for anything horoscope-adjacent.
+     *
+     * Read here, in composition, and passed into drawChartGrid: that runs
+     * in the draw phase, where CompositionLocals aren't available.
+     */
+    val gridColor = d2m.goldStrong
+    val textColor = d2m.textPrimary
     val textMeasurer = rememberTextMeasurer()
     Column(modifier = modifier) {
         Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -140,15 +153,22 @@ private fun SingleChartGrid(title: String, data: ChartData, summary: String?, mo
                 .aspectRatio(1f)
                 .padding(top = 6.dp),
         ) {
-            drawChartGrid(this, textMeasurer, data, title, summary)
+            drawChartGrid(this, textMeasurer, data, title, summary, gridColor, textColor)
         }
     }
 }
 
-private fun drawChartGrid(scope: DrawScope, textMeasurer: TextMeasurer, data: ChartData, centerLabel: String, summary: String?) {
+private fun drawChartGrid(
+    scope: DrawScope,
+    textMeasurer: TextMeasurer,
+    data: ChartData,
+    centerLabel: String,
+    summary: String?,
+    gridColor: Color,
+    textColor: Color,
+) {
     val cell = scope.size.minDimension / 4f
-    val gridColor = Color(0xFF8A5A3B)
-    val textColor = Color(0xFF201D1A)
+
 
     scope.drawRect(
         color = gridColor,

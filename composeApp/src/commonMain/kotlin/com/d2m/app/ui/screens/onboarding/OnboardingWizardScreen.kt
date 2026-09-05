@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SponsorCreateRequest
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.*
+import com.d2m.app.ui.components.SectionHeading
+import com.d2m.app.ui.components.DataRow
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.components.D2MStepper
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -78,24 +82,37 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-            LinearProgressIndicator(progress = { (step + 1) / totalSteps.toFloat() }, modifier = Modifier.fillMaxWidth())
-            Text("Question ${step + 1} of $totalSteps", style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f), modifier = Modifier.padding(top = 8.dp))
+            /*
+             * The comps' named horizontal stepper, replacing a progress
+             * bar plus a "Question 3 of 5" caption -- see Stepper.kt for
+             * why naming the steps is the point. Completed steps are
+             * tappable; upcoming ones are not, since this wizard's
+             * validation runs forward (step 2's coordinate guard below
+             * depends on it).
+             */
+            PageTitle("Set up the profile")
+            D2MStepper(
+                steps = listOf("About you", "About them", "Birth details", "Preferences", "Review"),
+                activeIndex = step,
+                onStepClick = { step = it },
+                modifier = Modifier.padding(top = 14.dp),
+            )
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (step) {
                     0 -> {
-                        Text("A little about you first.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        SectionHeading("A little about you first.")
                         D2MTextField("Your name", form.yourName, { update { copy(yourName = it) } })
                         D2MSelectField("Your relationship to them", form.relationship, listOf("Mother", "Father", "Guardian", "Other relative"), { update { copy(relationship = it) } })
                     }
                     1 -> {
-                        Text("Tell us about your child.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        SectionHeading("Tell us about your child.")
                         D2MTextField("Name", form.childName, { update { copy(childName = it) } })
                         D2MSelectField("Gender", form.childGender, Taxonomy.GENDERS, { update { copy(childGender = it) } }, optionLabel = Taxonomy::toLabel)
                         D2MSelectField("Seeking", form.childSeekingGender, Taxonomy.GENDERS, { update { copy(childSeekingGender = it) } }, optionLabel = Taxonomy::toLabel)
                     }
                     2 -> {
-                        Text("When was she born?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        SectionHeading("When was she born?")
                         D2MTextField("Date (YYYY-MM-DD)", form.childDob, { update { copy(childDob = it) } })
                         D2MTextField("Time (HH:MM, 24h)", form.childTob, { update { copy(childTob = it) } })
                         CityAutocomplete(
@@ -110,7 +127,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                         }
                     }
                     3 -> {
-                        Text("A few more details.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        SectionHeading("A few more details.")
                         D2MSelectField("Religion", form.ownReligion, Taxonomy.RELIGIONS, { update { copy(ownReligion = it) } })
                         D2MSelectField("Your community", form.ownCasteCommunity, Taxonomy.COMMUNITIES, { update { copy(ownCasteCommunity = it) } }, optionLabel = Taxonomy::toLabel)
                         D2MChipGroup("Acceptable religions", Taxonomy.RELIGIONS, form.acceptReligions, { update { copy(acceptReligions = it) } })
@@ -122,7 +139,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                         D2MChipGroup("Acceptable marital status", Taxonomy.MARITAL_STATUSES, form.maritalStatusFilter, { update { copy(maritalStatusFilter = it) } }, optionLabel = Taxonomy::toLabel)
                     }
                     4 -> {
-                        Text("Before we save this.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        SectionHeading("Before we save this.")
                         listOf(
                             "Name" to form.childName,
                             "Gender" to Taxonomy.toLabel(form.childGender),
@@ -132,10 +149,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                             "Community" to Taxonomy.toLabel(form.ownCasteCommunity),
                             "Match age range" to "${form.minAge}–${form.maxAge}",
                         ).forEach { (label, value) ->
-                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(label, color = mutedText(0.55f))
-                                Text(value, fontWeight = FontWeight.Bold)
-                            }
+                            DataRow(label, value)
                         }
                         error?.let { D2MErrorBanner(it) }
                     }

@@ -65,20 +65,37 @@ import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.messaging.ui.mediaLabel
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- deprecated kotlinx.datetime.Clock
+// typealias, actually resolves to kotlin.time.Clock in the 0.7.1 that this
+// project really compiles against.
+import kotlin.time.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 
-/** Same two-tone gradient d2m_web hardcodes for every match avatar (MatchesScreen.jsx's `linear-gradient(135deg,#DCEEEA,#FBEAD2)`) -- there's no real profile photo on a Thread on either platform (ThreadOut/app/schemas.py's ThreadOut has no photo field at all), so this gradient squircle IS the design, not a placeholder standing in for a missing photo. */
-private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+/*
+ * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
+ * (#DCEEEA -> #FBEAD2), left over from the old per-flow palettes and the
+ * one place in this app with a colour baked in rather than read from the
+ * theme. It's now the same warm sunken surface a missing photograph gets
+ * everywhere else (see ProfilePhoto.kt), so an avatar with no photo and a
+ * card with no photo read as the same material. A composable accessor
+ * rather than a top-level val, since a CompositionLocal can only be read
+ * inside composition.
+ */
+@Composable
+private fun avatarPlaceholder() = d2m.surfaceSunken
+
 
 private val SHORT_MONTH_NAMES = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -279,7 +296,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
         if (t == null) {
             // Thread list, full width -- default pane.
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Matches", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                PageTitle("Matches")
                 when {
                     loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                     error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
@@ -452,7 +469,7 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
             .padding(vertical = 8.dp),
     ) {
         Box(modifier = Modifier.size(48.dp)) {
-            Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+            Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
             PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -529,7 +546,7 @@ private fun ConversationHeader(
             modifier = Modifier.weight(1f).clickable(onClick = onOpenProfile),
         ) {
             Box(modifier = Modifier.size(40.dp)) {
-                Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+                Box(modifier = Modifier.size(40.dp).background(avatarPlaceholder(), RoundedCornerShape(12.dp)))
                 PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
             }
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
@@ -608,7 +625,7 @@ private fun PresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(11.dp)
-            .background(if (online) Color(0xFF3DBE6C) else mutedText(0.3f), CircleShape)
+            .background(if (online) LocalD2MStatusPalette.current.success.fg else mutedText(0.3f), CircleShape)
             .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape),
     )
 }

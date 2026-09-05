@@ -28,6 +28,8 @@ import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.mutedText
+import com.d2m.app.ui.components.D2MTabs
+import com.d2m.app.ui.components.D2MCard
 import kotlinx.serialization.json.JsonObject
 import org.koin.compose.koinInject
 
@@ -106,12 +108,9 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
         chartLoaded = true
     }
 
-    Card(modifier = modifier, shape = RoundedCornerShape(D2MRadius.lg)) {
+    D2MCard(modifier = modifier) {
         Column {
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bio data") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Chart") })
-            }
+            D2MTabs(listOf("Bio data", "Chart"), tab, { tab = it })
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 when (tab) {
                     0 -> BioDataTab(bio, bioLoaded)

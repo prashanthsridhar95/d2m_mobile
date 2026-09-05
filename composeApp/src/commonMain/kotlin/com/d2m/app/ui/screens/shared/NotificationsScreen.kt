@@ -1,5 +1,6 @@
 package com.d2m.app.ui.screens.shared
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +28,8 @@ import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.NotificationsRepository
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -71,16 +73,15 @@ fun NotificationsScreen() {
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Notifications", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            PageTitle("Notifications")
             when {
                 loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                 error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
                 notifications.isEmpty() -> D2MEmptyState("Nothing yet", "New suggestions, requests, and match updates will show up here.")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
                     items(notifications) { n ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
+                        D2MCard(
+                            modifier = Modifier.fillMaxWidth().clickable {
                                 if (n.readAt == null && accountId != null) {
                                     scope.launch { runCatching { notificationsRepo.markRead(accountId, n.notificationId) } }
                                 }

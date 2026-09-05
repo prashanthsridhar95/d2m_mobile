@@ -1,0 +1,57 @@
+# Generated/maintained by hand to match the KMP wizard's standard
+# CocoaPods + Xcode wiring (see composeApp/build.gradle.kts's cocoapods {}
+# block) -- run `pod install` from this directory (iosApp/) once a real
+# Xcode project exists here (see README.md's setup steps). That first
+# `pod install` also runs `./gradlew :composeApp:podspec` under the hood
+# via the Kotlin CocoaPods plugin's own Xcode build-phase integration, which
+# regenerates composeApp/ComposeApp.podspec from build.gradle.kts --
+# nothing to hand-write there.
+#
+# Both targets link the SAME ComposeApp pod (the KMP shared module) --
+# NotificationServiceExtension needs it to call IosPushBridge.kt's decrypt
+# functions (see NotificationServiceExtension/NotificationService.swift),
+# not to run the whole app. One side effect: GoogleWebRTC (declared as
+# ComposeApp's own pod dependency, not listed separately here) gets linked
+# into the extension too, even though the extension never touches calling --
+# a real but minor bloat/startup-time cost on that target, not a
+# correctness problem. Splitting WebRTC into a separate KMP source set the
+# extension doesn't depend on is possible but a bigger restructuring than
+# this pass -- fine to leave for later if the extension's binary size
+# becomes an actual issue.
+
+platform :ios, '15.0'
+use_frameworks!
+
+target 'iosApp' do
+  pod 'ComposeApp', :path => '../composeApp'
+end
+
+target 'NotificationServiceExtension' do
+  pod 'ComposeApp', :path => '../composeApp'
+end
+
+# ComposeApp.framework's SQLDelight driver (co.touchlab.sqliter) links
+# straight against the system libsqlite3 C symbols -- the main iosApp
+# target apparently gets this for free (via Xcode's default app-target
+# settings/other linked deps), but app extension targets don't
+# automatically inherit library linking, confirmed directly: a real link
+# failure ("symbol(s) not found for architecture arm64" for a long list of
+# sqlite3_* symbols) only on NotificationServiceExtension. CocoaPods'
+# `pod` DSL has no direct "add a system library to this target" primitive,
+# so this reaches into the actual iosApp.xcodeproj (not just the
+# Pods.xcodeproj CocoaPods normally manages) via the xcodeproj gem it
+# already depends on, and adds -lsqlite3 to every native target's
+# OTHER_LDFLAGS. Harmless/idempotent for targets that already link it.
+post_install do |installer|
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.user_project.native_targets.each do |native_target|
+      native_target.build_configurations.each do |config|
+        ldflags = config.build_settings['OTHER_LDFLAGS']
+        ldflags = ldflags.is_a?(String) ? [ldflags] : (ldflags || ['$(inherited)'])
+        ldflags << '-lsqlite3' unless ldflags.include?('-lsqlite3')
+        config.build_settings['OTHER_LDFLAGS'] = ldflags
+      end
+    end
+    aggregate_target.user_project.save
+  end
+end

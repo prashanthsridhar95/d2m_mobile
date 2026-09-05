@@ -7,7 +7,18 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
+// kotlinx-datetime 0.7.x deprecated kotlinx.datetime.Clock in favor of the
+// new stdlib kotlin.time.Clock (stable since Kotlin 2.3) -- confirmed
+// directly via `klib dump-metadata` that kotlinx.datetime.Clock is now just
+// `public typealias Clock = kotlin.time.Clock`. Compose Multiplatform's own
+// material3-uikitsimarm64 artifact transitively pulls kotlinx-datetime 0.7.1
+// regardless of this project's own (older) 0.6.1 catalog pin, via Gradle's
+// normal highest-version-wins conflict resolution -- so this project was
+// always actually compiling against 0.7.1, never the 0.6.1 its own catalog
+// declared. kotlin.time.Instant (the now() return type) keeps the identical
+// toEpochMilliseconds() method, so no call-site changes are needed here,
+// only this import.
+import kotlin.time.Clock
 
 /**
  * Direct port of d2m_web/src/lib/apiCache.js's design: an in-memory,
@@ -23,7 +34,21 @@ import kotlinx.datetime.Clock
  * apiCache.js) -- see plan §8 Phase 5 for the SQLDelight-backed persistence
  * option if real usage patterns warrant it later.
  */
-class ApiCache(private val defaultTtlMillis: Long = 2 * 60 * 1000) {
+class ApiCache(
+    private val defaultTtlMillis: Long = 2 * 60 * 1000,
+    /**
+     * Injectable clock, defaulting to the real one so every production call
+     * site is unchanged. This exists because TTL expiry is otherwise
+     * untestable: `Clock.System.now()` is wall-clock, and
+     * kotlinx-coroutines-test's `advanceTimeBy` moves only the virtual
+     * scheduler clock, so a test could never actually age an entry past its
+     * TTL. ApiCacheTest's stale-while-revalidate case was silently failing
+     * for exactly that reason -- it advanced virtual time by 2s against a
+     * 1s TTL and the entry stayed fresh, so the assertion that a stale hit
+     * returns the OLD value was never really exercised.
+     */
+    private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+) {
 
     private data class Entry<T>(val value: T, val fetchedAt: Long)
 
@@ -37,7 +62,7 @@ class ApiCache(private val defaultTtlMillis: Long = 2 * 60 * 1000) {
     // any other in-flight refresh.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private fun now(): Long = Clock.System.now().toEpochMilliseconds()
+    private fun now(): Long = nowMillis()
 
     /** Result wrapper mirroring useApiQuery's { data, stale } shape. */
     data class CachedResult<T>(val value: T, val stale: Boolean)

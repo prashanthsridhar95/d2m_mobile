@@ -53,14 +53,28 @@ import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.ui.components.D2MEmptyState
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-/** Same gradient squircle placeholder as MatchesScreen.kt's AvatarGradient -- neither platform has a real photo for a messaging contact (a Sponsor has no profile photo field at all), so this IS the design. */
-private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+/*
+ * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
+ * (#DCEEEA -> #FBEAD2), left over from the old per-flow palettes and the
+ * one place in this app with a colour baked in rather than read from the
+ * theme. It's now the same warm sunken surface a missing photograph gets
+ * everywhere else (see ProfilePhoto.kt), so an avatar with no photo and a
+ * card with no photo read as the same material. A composable accessor
+ * rather than a top-level val, since a CompositionLocal can only be read
+ * inside composition.
+ */
+@Composable
+private fun avatarPlaceholder() = d2m.surfaceSunken
+
 
 /**
  * Mirrors screens/parent/ParentMessagesScreen.jsx -- real E2E chat (same
@@ -159,7 +173,7 @@ fun ParentMessagesScreen() {
             val sel = selectedUsername
             if (sel == null) {
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text("Messages", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    PageTitle("Messages")
                     if (contacts.isEmpty()) {
                         D2MEmptyState(
                             title = "No conversations yet",
@@ -248,7 +262,7 @@ private fun ParentContactRow(peerUsername: String, contact: ParentContact, onCli
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
     ) {
         Box(modifier = Modifier.size(48.dp)) {
-            Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+            Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
             ParentPresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -294,7 +308,7 @@ private fun ParentConversationHeader(
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to messages")
         }
         Box(modifier = Modifier.size(40.dp)) {
-            Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+            Box(modifier = Modifier.size(40.dp).background(avatarPlaceholder(), RoundedCornerShape(12.dp)))
             ParentPresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
@@ -333,7 +347,7 @@ private fun ParentPresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(11.dp)
-            .background(if (online) Color(0xFF3DBE6C) else mutedText(0.3f), CircleShape)
+            .background(if (online) LocalD2MStatusPalette.current.success.fg else mutedText(0.3f), CircleShape)
             .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape),
     )
 }

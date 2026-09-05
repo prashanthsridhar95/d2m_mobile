@@ -128,7 +128,12 @@ import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- deprecated kotlinx.datetime.Clock
+// typealias, actually resolves to kotlin.time.Clock in the 0.7.1 that this
+// project really compiles against. The other kotlinx.datetime imports below
+// (Instant/LocalDate/TimeZone/toLocalDateTime) are untouched -- only Clock
+// itself hit this specific deprecation-typealias resolution problem.
+import kotlin.time.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone

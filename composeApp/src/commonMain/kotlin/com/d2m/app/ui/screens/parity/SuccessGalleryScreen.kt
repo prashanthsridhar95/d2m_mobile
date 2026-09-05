@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +23,8 @@ import com.d2m.app.data.network.friendlyError
 import com.d2m.app.domain.repository.OffboardingRepository
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -49,14 +50,14 @@ fun SuccessGalleryScreen() {
 
     D2MTheme(flow = D2MFlow.GUEST_SYSTEM) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Success stories", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            PageTitle("Success stories")
             when {
                 loading -> Text("Loading…", color = mutedText(0.55f))
                 error != null -> D2MErrorBanner(error!!)
                 entries.isEmpty() -> D2MEmptyState("Nothing published yet")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
                     items(entries) { e ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        D2MCard(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(e.story)
                             }

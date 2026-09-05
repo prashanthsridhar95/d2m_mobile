@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,6 +53,7 @@ import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.astrologicalCompatibility
 import com.d2m.app.ui.components.overallRating
 import com.d2m.app.ui.components.preferenceCompatibility
+import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -166,7 +166,7 @@ fun DiscoveryScreen() {
                             )
                         }
 
-                        Card(
+                        D2MCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(0.82f)
@@ -187,8 +187,6 @@ fun DiscoveryScreen() {
                                         scope.launch { offsetX.snapTo(offsetX.value + dragAmount.x) }
                                     }
                                 },
-                            shape = RoundedCornerShape(D2MRadius.lg),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                         ) {
                             Column(modifier = Modifier.fillMaxSize().padding(bottom = 4.dp)) {
                                 Box(

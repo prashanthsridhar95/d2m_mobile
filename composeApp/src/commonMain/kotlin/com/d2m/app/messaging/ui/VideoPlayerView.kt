@@ -5,11 +5,9 @@ import androidx.compose.ui.Modifier
 
 /**
  * In-app video playback surface for MediaViewerDialog.kt -- "provide a image
- * & video viewer - shouldnt be going outside the app." Android gets a real
- * player (ExoPlayer + PlayerView, see the .android.kt actual); iOS is a
- * no-op stub for now, same established precedent as every other
- * platform-native feature in this app that has no iOS target to actually
- * run in yet (WebRtcEngine.ios.kt, SoundEffects.ios.kt, GifImageLoader.kt).
+ * & video viewer - shouldnt be going outside the app." Both platforms have a real player: ExoPlayer + PlayerView on Android,
+ * AVPlayer + AVKit's AVPlayerViewController on iOS. Both supply standard
+ * transport controls, so neither actual hand-builds a control bar.
  *
  * `autoPlay` starts playback immediately (the viewer's whole reason for
  * existing -- tapping a video bubble should start watching it, not require

@@ -18,6 +18,13 @@ google-services.json
 GoogleService-Info.plist
 
 ## Xcode / iOS
+# CocoaPods' installed output -- 96MB here, ~94MB of it WebRTC-lib's
+# prebuilt xcframework binaries. Reproducible from Podfile.lock (which IS
+# committed) via `pod install`, and committing it would permanently add
+# ~96MB to every clone of this repo -- removable afterwards only by
+# rewriting history. Standard CocoaPods guidance for a project that
+# commits its lockfile.
+iosApp/Pods/
 iosApp/**/xcuserdata/
 iosApp/**/*.xcworkspace/xcuserdata/
 iosApp/**/DerivedData/

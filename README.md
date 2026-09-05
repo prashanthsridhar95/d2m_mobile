@@ -30,44 +30,35 @@ reference are intentionally NOT built here).
   `ApiCache`/`ApiClient`/`SuggestionsRepository`, a Compose UI test.
 - **Phase 6** -- messaging: full wire-protocol port from `messaging-framework`,
   a real WebSocket client with the reference client's reconnect/heartbeat
-  behavior, working chat UI. Encryption is explicitly NOT real yet -- see
-  "Security" below, this is the one deliberate exception to "all phases
-  implemented."
+  behavior, working chat UI. Encryption is real Signal Protocol on both
+  platforms now -- see "Security" below.
 
-## What's NOT verified
+## Build status
 
-**This was built in a sandbox with no Android SDK, no Xcode, and no network
-access to Maven Central or the Gradle distribution server.** Every file here
-has been written and reviewed by hand for structural/type correctness, but
-none of it has been compiled, run, or tested end-to-end. Before relying on
-this:
+Both apps build, and the shared + platform test suites pass, on a machine
+with Xcode 26 and JDK 21:
 
-1. **Finish the Gradle wrapper.** `gradle/wrapper/gradle-wrapper.properties`,
-   `gradlew`, and `gradlew.bat` are committed (pinned to Gradle 8.7, the
-   minimum AGP 8.5.2 requires), but `gradle/wrapper/gradle-wrapper.jar` --
-   a small binary bootstrap jar -- could not be added from this sandbox (no
-   network access, and it's binary so it can't be hand-authored safely). In
-   a terminal with network access, run this once from the repo root:
-   ```
-   gradle wrapper --gradle-version 8.7
-   ```
-   (any locally installed Gradle works to run this -- it just regenerates
-   the jar to match the properties file already here; `brew install gradle`
-   first if you don't have one). If you don't want to install anything,
-   Android Studio's own "Sync Project with Gradle Files" will usually offer
-   to create the missing wrapper jar itself the first time you open this
-   project -- accept that prompt if you see it.
-2. **Check the Gradle JDK.** AGP 8.5.2 requires JDK 17+ to *run* Gradle
-   itself (separate from the app's own `sourceCompatibility`, which targets
-   JVM 11 bytecode). In Android Studio: Settings/Preferences > Build,
-   Execution, Deployment > Build Tools > Gradle > "Gradle JDK" -- set it to
-   17 or newer. Running AGP 8.5 under an older Gradle JDK is a common cause
-   of opaque `Unable to load class ...` sync errors like
-   `DefaultArtifactPublicationSet`.
-3. Open in Android Studio (or IntelliJ with the KMP plugin), let Gradle sync,
-   and fix whatever the compiler actually flags -- treat this as a
-   thoroughly-drafted first pass, not a verified build.
-4. By default the app points at the real `d2m_core_engine`/`messaging-framework`
+```
+./gradlew :composeApp:testDebugUnitTest        # Android unit tests
+./gradlew :composeApp:iosSimulatorArm64Test    # the same commonTest suite, on iOS
+```
+
+For the iOS app itself, `iosApp/` now contains a real generated Xcode
+project and a resolved CocoaPods workspace -- see `iosApp/README.md`. It has
+been built and launched on an iPhone simulator, and also builds for a real
+device (`-destination 'generic/platform=iOS'`).
+
+Things worth knowing before relying on this:
+
+1. **Real-device-only features are still unexercised.** PushKit VoIP,
+   CallKit's ringing UI and real APNs delivery cannot run in the Simulator at
+   all, and WebRTC audio/video needs real hardware to be meaningfully tested.
+   `IosCallKitBridge.kt` and `WebRtcEngine.ios.kt` compile and link, but
+   "compiles" is a much weaker claim than "works" for those two specifically.
+2. **Push needs backend credentials on both sides.** See the push sections
+   below and in `iosApp/README.md`; without them token registration still
+   succeeds and nothing ever arrives.
+3. By default the app points at the real `d2m_core_engine`/`messaging-framework`
    deployments behind Cloudflare Tunnels (`api.prashanthsridhar.com`,
    `chat.prashanthsridhar.com`), same pattern as the web app's
    `app.prashanthsridhar.com`. To point at a backend running on your own
@@ -76,25 +67,72 @@ this:
    `MessagingConfig` -- each has a doc comment with the local-dev values
    (`10.0.2.2:8000` for the Android emulator, `127.0.0.1:8000` for the iOS
    simulator, `:4000` for messaging-framework).
-5. Run `./gradlew :composeApp:testDebugUnitTest` (Android target) once Gradle
-   can actually resolve dependencies, to exercise the Phase 5 test suite.
-6. For iOS, see `iosApp/README.md` -- the `.xcodeproj` itself isn't included
-   (see that file for why, and the 3-step process to generate one).
+4. **Android<->iOS messaging has not been run end to end against a live
+   backend.** The two crypto stacks are pinned to each other by tests (see
+   "Security" below), which is a strong claim about the hard part, but it is
+   not the same as two real devices exchanging a real message.
 
-## Security: messaging encryption is a stub
+## Security: messaging encryption
 
-`messaging/crypto/CryptoProvider.kt`'s default binding
-(`StubUnencryptedCryptoProvider`) is base64, **not encryption**. This was a
-deliberate choice, not an oversight -- hand-rolling Signal Protocol
-cryptography under this build's constraints would have been worse than
-flagging the gap clearly. See that file's doc comment and
-`messaging/README.md` for the three real implementation paths considered
-(Signal's own `libsignal` Android JNI bindings + no current iOS KMP
-equivalent; a vetted third-party KMP Signal Protocol library; hand-porting
-`messaging-framework`'s `crypto.ts` against a KMP crypto primitives library).
-**Do not ship this to real users carrying real conversations without
-replacing this binding and getting a second set of eyes on the crypto
-specifically.**
+Both platforms now run the real, from-spec Signal Protocol implementation in
+`messaging/crypto/signal/` (X3DH + Double Ratchet + protobuf framing, all
+pure Kotlin in commonMain). `StubUnencryptedCryptoProvider` -- base64, **not
+encryption** -- is no longer bound on either platform.
+
+iOS was the last holdout and was the more serious half of that gap: it was
+not merely "iOS is less secure than Android", it was **Android and iOS could
+not exchange messages at all**, because each side handed the other bytes it
+had no way to interpret. Closing it needed a `CryptoPrimitives` actual for
+iOS, and Apple ships no Curve25519 API that Kotlin/Native can bind to
+(CryptoKit is Swift-only; CommonCrypto and Security cover hashes, HMAC, AES
+and the NIST curves, but no Montgomery/Edwards curve). So:
+
+- **`messaging/crypto/signal/Curve25519.kt`** (commonMain) -- X25519 ECDH and
+  XEdDSA sign/verify in pure Kotlin.
+- **`messaging/crypto/signal/CryptoPrimitives.ios.kt`** -- Apple's own
+  CommonCrypto/Security for RNG, HMAC-SHA256 and AES-256-CBC, over that
+  shared curve code.
+- Android is **unchanged** and still uses BouncyCastle + `Ed25519Math.kt`.
+
+The same applies to the Archive Keypair backup system: `archive/P256.kt` and
+`archive/AesGcm.kt` (both commonMain) back `ArchivePrimitives.ios.kt`, whose
+eight methods previously all threw `NotImplementedError`. P-256 had to be
+implemented rather than delegated to Security framework because
+`SecKeyCreateWithData` cannot build an EC private key from a bare scalar, and
+a bare scalar is all Android's 67-byte PKCS#8 encoding carries -- see
+`P256.kt`'s doc comment.
+
+### How this is verified
+
+Hand-written curve code is exactly the kind of thing that should not be
+trusted on the strength of having been written carefully, so it is pinned
+from two directions:
+
+- `commonTest/.../Curve25519Test.kt` and
+  `commonTest/.../ArchivePrimitivesTest.kt` check the published RFC 7748,
+  FIPS 180-4, NIST SP 800-38D (GCM) and PBKDF2 vectors. These run on **every**
+  target, so a green `iosSimulatorArm64Test` is direct evidence the iOS build
+  -- including its CommonCrypto bindings -- computes the specified answers.
+- `androidUnitTest/.../CurveInteropAndroidTest.kt` and
+  `androidUnitTest/.../ArchiveInteropAndroidTest.kt` diff the shared code
+  against the implementations Android already ships -- BouncyCastle,
+  `Ed25519Math`, `java.security` P-256, `javax.crypto` AES-GCM -- over
+  randomised inputs, including asserting XEdDSA signatures are BYTE-IDENTICAL
+  and that an archive wrapped by Android unwraps with the shared code alone.
+
+That second half is the load-bearing one. Two implementations can each be
+perfectly self-consistent and still be unable to talk to each other -- which
+is precisely the state iOS was in before, since base64 round-trips fine
+against itself. During development these tests caught exactly that failure
+mode: a transcribed `BB` where RFC 7748's ladder specifies `AA`, which
+produced a working, self-consistent Diffie-Hellman that agreed with nobody.
+
+**Still worth a second set of eyes before shipping to real users carrying
+real conversations.** The tests above make interop and spec-conformance
+tested properties, but they are not a substitute for review of the crypto by
+someone who does this professionally, and none of this code is constant-time
+(a deliberate trade, documented in each file: these run a handful of times
+per session, locally, never per message).
 
 ## Auth
 
@@ -179,6 +217,30 @@ the last frame; tapping it replays 3 more loops (`messaging/ui/GifBubbleImage`
 in `ChatPane.kt`, backed by `messaging/ui/GifImageLoader.kt`'s Coil
 ImageLoader -- real animated-GIF decoding on Android via `coil-gif`, static
 first-frame only on iOS since that artifact publishes no iOS variant).
+
+## Known remaining iOS/Android differences
+
+Everything else in this README applies to both platforms. These are the
+places they still genuinely differ:
+
+- **Animated GIFs render as a static first frame on iOS.** `coil-gif`
+  publishes no iOS artifact at the pinned Coil 3.0.0 (confirmed: the
+  `coil-gif-iossimulatorarm64` coordinate 404s), and Coil's own Skia-based
+  animated decoder for non-Android targets landed after that. Bumping Coil
+  is not free here -- `coil-network-ktor3` pins an exact Ktor version and
+  this catalog is deliberately aligned to it (see `libs.versions.toml`).
+- **Crash reporting is Android-only.** Firebase Crashlytics rides
+  `google-services.json`; `CrashReporter.ios.kt` prints instead of
+  reporting.
+- **`BackHandlerCompat` is a no-op on iOS.** It exists to intercept
+  Android's system back button inside a single nav route. iOS has no system
+  back button, and this Compose target does not own UIKit's edge-swipe
+  gesture, so there is nothing to intercept -- in-app back affordances are
+  the iOS path.
+- **Compose UI tests do not run on Android's JVM unit-test task.**
+  `runComposeUiTest` needs a real Android environment there (it is an
+  instrumented test by nature) and is excluded in `build.gradle.kts`; the
+  same tests do run on `iosSimulatorArm64Test`.
 
 ## Local chat cache
 

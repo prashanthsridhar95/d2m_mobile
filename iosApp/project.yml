@@ -1,0 +1,153 @@
+# XcodeGen spec -- generates iosApp.xcodeproj deterministically from this
+# file instead of hand-editing a .pbxproj (see README.md's own reasoning
+# for why nothing in this folder hand-writes one). Run `xcodegen generate`
+# from this directory (iosApp/) any time this file changes, then `pod install`.
+#
+# LOAD-BEARING, READ BEFORE EDITING: the `info.properties` and
+# `entitlements.properties` blocks below are the SINGLE SOURCE OF TRUTH for
+# iosApp/Info.plist and iosApp/iosApp.entitlements. XcodeGen GENERATES those
+# two files from this spec and OVERWRITES whatever is on disk every single
+# time it runs. Editing Info.plist or the entitlements directly looks like it
+# works -- right up until the next `xcodegen generate` silently reverts it.
+#
+# That is not hypothetical: it is exactly how this project lost its
+# UILaunchScreen key, and with it every camera/mic/photo usage string, the
+# d2m:// URL scheme and both entitlements. An app with no UILaunchScreen is
+# run by iOS in legacy compatibility mode -- a scaled-down, letterboxed
+# window instead of the real screen bounds -- which surfaced as "Compose only
+# fills ~60% of the screen" and got misdiagnosed as a Compose inset bug (see
+# ContentView.swift's own comment about that dead end). Keep these keys here,
+# not in the generated files.
+name: iosApp
+options:
+  bundleIdPrefix: com.d2m
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: D2M
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+
+        # DO NOT REMOVE. Without UILaunchScreen (and with no legacy
+        # UILaunchStoryboardName), iOS treats the app as a pre-iPhone-X
+        # binary and hands it a scaled-down letterboxed window instead of
+        # the device's true screen bounds. An empty dict is the correct
+        # modern value: "plain solid-colour launch screen, no storyboard",
+        # which is what a Compose-rendered app wants.
+        UILaunchScreen: {}
+
+        # Compose Multiplatform's own PlistSanityCheck aborts the process at
+        # startup if this is missing/false (real crash:
+        # "PlistSanityCheck$performIfNeeded$1" during App.main()). It also
+        # keeps ProMotion iPhones from being silently capped to 60Hz.
+        CADisableMinimumFrameDurationOnPhone: true
+
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+        # These three are not optional niceties: iOS TERMINATES the process
+        # (not a catchable exception) the first time it touches the camera,
+        # microphone or photo library with no usage string present. Without
+        # NSMicrophoneUsageDescription every audio/video call would hard-crash
+        # the app the moment WebRtcEngine.ios.kt opens the mic.
+        NSCameraUsageDescription: D2M needs camera access for video calls and to take a profile photo.
+        NSMicrophoneUsageDescription: D2M needs microphone access for voice and video calls.
+        NSPhotoLibraryUsageDescription: D2M needs photo library access to share photos and videos in chat and to choose a profile photo.
+
+        # Matches the Android manifest's background work: "voip" keeps a
+        # PushKit-delivered call alive when backgrounded, "audio" keeps call
+        # audio running once CallKit owns the audio session (see
+        # WebRtcAudioSessionBridge.kt), and "remote-notification" lets the
+        # app background-refresh on a silent push.
+        UIBackgroundModes:
+          - voip
+          - audio
+          - remote-notification
+
+        # Claim-link deep link: matches Routes.CLAIM_DEEPLINK_SCHEME
+        # (D2MNavGraph.kt). The https:// universal link additionally needs an
+        # apple-app-site-association file hosted at d2m.app -- a server-side
+        # artifact, not app source -- but the d2m:// scheme works without it.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.d2m.app.claim
+            CFBundleURLSchemes:
+              - d2m
+    entitlements:
+      path: iosApp/iosApp.entitlements
+      properties:
+        # Must stay byte-identical to D2M_APP_GROUP_ID in
+        # SqlDriverFactory.ios.kt / Settings.ios.kt AND to the same key on
+        # the extension target below. This is what puts the SQLite chat DB
+        # and the NSUserDefaults suite in a container BOTH processes can
+        # open; without it the extension has no Signal session to decrypt
+        # against and every rich notification degrades to generic copy.
+        com.apple.security.application-groups:
+          - group.com.d2m.app
+        # "development" matches a Debug/Xcode-installed build. Flip this AND
+        # d2m_core_engine's D2M_APNS_ENVIRONMENT to "production" together for
+        # TestFlight/App Store -- a mismatch is exactly what APNs'
+        # BadDeviceToken error means.
+        aps-environment: development
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.d2m.app
+        PRODUCT_NAME: iosApp
+    dependencies:
+      - target: NotificationServiceExtension
+        embed: true
+
+  NotificationServiceExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationServiceExtension
+    info:
+      path: NotificationServiceExtension/Info.plist
+      properties:
+        CFBundleDisplayName: NotificationServiceExtension
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    entitlements:
+      path: NotificationServiceExtension/NotificationServiceExtension.entitlements
+      properties:
+        # MUST match the main app target's group exactly -- this entitlement
+        # is the entire reason the extension can decrypt anything. No
+        # aps-environment here: a Notification Service Extension never
+        # registers for push itself, it only post-processes a payload the
+        # main app's token received.
+        com.apple.security.application-groups:
+          - group.com.d2m.app
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.d2m.app.NotificationServiceExtension
+        PRODUCT_NAME: NotificationServiceExtension

@@ -22,9 +22,12 @@ import androidx.compose.ui.unit.dp
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
+import com.d2m.app.ui.components.D2MBrand
 import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MTextField
+import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -61,18 +64,24 @@ fun LoginScreen(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("D2M", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(
+            D2MBrand(markSize = 34.dp)
+            MetaText(
                 "Every union begins with the stars.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = mutedText(0.55f),
+                Modifier.padding(top = 8.dp),
             )
 
             Column(modifier = Modifier.padding(top = 24.dp).widthIn(max = 420.dp)) {
-                TabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Log in") })
-                    Tab(selected = tab == 1, onClick = { tab = 1; onRegister() }, text = { Text("Register") })
-                }
+                D2MTabs(
+                    titles = listOf("Log in", "Register"),
+                    selectedIndex = tab,
+                    onSelect = { i ->
+                        tab = i
+                        // Register isn't a tab pane here -- it hands off to
+                        // the onboarding wizard, same as web's Login/Register
+                        // toggle does.
+                        if (i == 1) onRegister()
+                    },
+                )
 
                 if (tab == 0) {
                     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

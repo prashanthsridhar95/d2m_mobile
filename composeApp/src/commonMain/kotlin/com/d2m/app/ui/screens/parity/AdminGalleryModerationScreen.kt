@@ -20,6 +20,7 @@ import com.d2m.app.domain.repository.AdminRepository
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MTextField
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -45,7 +46,7 @@ fun AdminGalleryModerationScreen() {
 
     D2MTheme(flow = D2MFlow.GUEST_SYSTEM) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Gallery moderation (internal)", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            PageTitle("Gallery moderation")
             Text("Not a real queue -- publish a specific entry id, same as the web tool.", color = mutedText(0.55f))
             D2MTextField("Entry id", entryId, { entryId = it })
             status?.let { Text(it) }

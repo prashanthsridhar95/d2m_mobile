@@ -44,8 +44,16 @@ class SignalCryptoProvider(
     private var username: String? = null
     private var identity: IdentityRecord? = null
     private val peerLocks = mutableMapOf<String, Mutex>()
+    // Guards getOrPut on peerLocks itself -- `kotlin.synchronized` is a JVM-only
+    // stdlib intrinsic (maps to monitorenter/monitorexit bytecode) with no
+    // Kotlin/Native equivalent ("Unresolved reference 'synchronized'", confirmed
+    // directly against the iOS simulator target). Every real caller of lockFor()
+    // is already a suspend fun (encrypt/decrypt/resetSession below), so a second,
+    // dedicated coroutine Mutex protecting just the map access is a natural fit --
+    // no new dependency needed, unlike kotlinx-atomicfu's SynchronizedObject.
+    private val peerLocksGuard = Mutex()
 
-    private fun lockFor(peer: String): Mutex = synchronized(peerLocks) { peerLocks.getOrPut(peer) { Mutex() } }
+    private suspend fun lockFor(peer: String): Mutex = peerLocksGuard.withLock { peerLocks.getOrPut(peer) { Mutex() } }
     private fun store(): SignalSessionStore = SignalSessionStore(settings, username ?: error("SignalCryptoProvider.ensureIdentity was never called"))
     private fun requireIdentity(): IdentityRecord = identity ?: error("SignalCryptoProvider.ensureIdentity was never called")
 

@@ -19,6 +19,17 @@ struct ComposeView: UIViewControllerRepresentable {
 struct ContentView: View {
     var body: some View {
         ComposeView()
+            // REVERTED: tried plain .ignoresSafeArea() on the theory that
+            // App.kt's `contentWindowInsets = WindowInsets.systemBars`
+            // double-applying insets on top of SwiftUI's own safe-area
+            // constraint was clipping the render surface to ~60% of the
+            // screen height. Confirmed directly that this made things
+            // strictly worse -- the app went fully black (process still
+            // alive per `launchctl list`, so not a crash; Compose's own
+            // inset/size calculation broke instead). Back to the original
+            // .ignoresSafeArea(.keyboard) known-working (if undersized)
+            // state -- the "app only fills ~60% of the screen" sizing issue
+            // needs a different root cause than this.
             .ignoresSafeArea(.keyboard)
     }
 }

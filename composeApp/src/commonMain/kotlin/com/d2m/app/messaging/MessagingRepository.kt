@@ -38,7 +38,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- kotlinx.datetime.Clock is a deprecated
+// typealias for kotlin.time.Clock as of kotlinx-datetime 0.7.x, which this
+// project actually compiles against (Compose Multiplatform's own transitive
+// pull overrides the project's 0.6.1 catalog pin).
+import kotlin.time.Clock
 import kotlinx.serialization.Serializable
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid

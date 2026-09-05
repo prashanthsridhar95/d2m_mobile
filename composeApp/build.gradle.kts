@@ -1,4 +1,7 @@
-@file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+@file:OptIn(
+    org.jetbrains.compose.ExperimentalComposeLibrary::class,
+    org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeCacheApi::class,
+)
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
@@ -12,6 +15,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 // Kotlin DSL gotcha in any AGP/Java-plugin project, not specific to this
 // file. Importing the class directly sidesteps the ambiguity entirely.
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.plugin.mpp.DisableCacheInKotlinVersion
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -20,6 +24,14 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
+    // Applied via plain `id(...)` with no version, not `alias(libs.plugins...)`
+    // -- see gradle/libs.versions.toml's kotlinCocoapods comment for why
+    // (both a version-catalog alias with a pinned version AND one with no
+    // version at all fail here, for two different reasons -- confirmed
+    // directly). This plugin ships bundled inside the same
+    // kotlin-gradle-plugin artifact `org.jetbrains.kotlin.multiplatform`
+    // above already resolved, so it needs no version of its own.
+    id("org.jetbrains.kotlin.native.cocoapods")
 }
 
 // Applied conditionally, by plugin id (not alias(libs.plugins.googleServices)
@@ -57,14 +69,121 @@ kotlin {
         }
     }
 
+    // iosX64 (the legacy Intel-simulator target) deliberately dropped --
+    // confirmed directly: Compose Multiplatform 1.11.1 doesn't publish an
+    // iosX64 variant of its own artifacts ("Couldn't resolve dependency
+    // 'org.jetbrains.compose.ui:ui:1.11.1' in 'iosMain' for all target
+    // platforms... Unresolved platforms: [iosX64]"), and because `iosMain`
+    // is the shared intermediate source set every iOS target (including
+    // iosX64) depends on, that one unresolvable target was poisoning
+    // dependency resolution for the WHOLE iosMain hierarchy -- symptom:
+    // even fully valid, confirmed-present symbols (kotlinx-datetime's
+    // Clock.System, verified present via `klib dump-metadata` against the
+    // real downloaded klib) were unresolvable project-wide. iosX64 has no
+    // practical use here anyway -- this project only ever builds/runs for
+    // iosSimulatorArm64 (Apple Silicon simulator) or a physical arm64
+    // device, never the old Intel simulator.
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            // Works around a real Kotlin/Native compiler-cache bug when
+            // building the cache for androidx.navigation's navigation-runtime
+            // klib (a reified inline function, getBackStackEntry<T>, isn't
+            // found by the cache serializer during linkPodDebugFramework*,
+            // confirmed directly). gradle.properties'
+            // kotlin.native.cacheKind.<target>=none was the pre-2.3.20 way
+            // to do this; it's deprecated/unsupported now and silently did
+            // nothing here -- this DSL call is the current replacement (see
+            // https://kotl.in/disable-native-cache).
+            // DisableCacheInKotlinVersion is a sealed class of version-
+            // specific singleton objects (confirmed: it has no `.entries`,
+            // that's an enum-only member), named with backticks since they
+            // start with a digit -- `2_4_0` is the highest defined for this
+            // project's Kotlin Gradle Plugin version (2.4.10).
+            // `2_4_0` was itself flagged deprecated at build time ("update
+            // to the latest version constant") -- this project is on Kotlin
+            // 2.4.10, so using that exact constant instead.
+            disableNativeCache(
+                version = DisableCacheInKotlinVersion.`2_4_10`,
+                reason = "Compiler cache build fails on androidx.navigation's navigation-runtime klib (getBackStackEntry<T> not found by cache serializer)",
+            )
+        }
+    }
+
+    // WebRtcEngine.ios.kt's real (not stubbed) WebRTC implementation needs
+    // this pod's Kotlin/Native bindings (`platform.WebRTC.*`) -- see that
+    // file's own doc comment for the full design. The kotlinCocoapods
+    // plugin generates a `ComposeApp.podspec` in this module's directory on
+    // the next Gradle sync; iosApp/Podfile (see that file's own comments)
+    // references it so `pod install` pulls both GoogleWebRTC AND this
+    // module's own framework into one Xcode workspace -- this is the
+    // standard KMP+CocoaPods+Xcode wiring, not a d2m-specific pattern.
+    //
+    // A checkout with no Xcode project yet (iosApp/README.md) is entirely
+    // unaffected by this block -- CocoaPods integration only matters once
+    // `pod install` is actually run against a real .xcodeproj/.xcworkspace,
+    // which doesn't exist in this repo yet either way.
+    cocoapods {
+        // Explicit, deliberately -- without this, the plugin derives the
+        // podspec's internal `s.name` from the raw Gradle module directory
+        // name ("composeApp", lowercase c), while the GENERATED FILE itself
+        // is still named ComposeApp.podspec (capital C, matching
+        // `framework.baseName` below) -- CocoaPods then refuses the
+        // mismatch outright ("name of the given podspec `composeApp`
+        // doesn't match the expected one `ComposeApp`", confirmed
+        // directly). Setting `name` here makes both consistent.
+        name = "ComposeApp"
+        version = "1.0.0"
+        summary = "D2M shared Kotlin Multiplatform module"
+        homepage = "https://d2m.app"
+        ios.deploymentTarget = "15.0"
+
+        framework {
+            baseName = "ComposeApp"
+            isStatic = true
+            // This is a SEPARATE Framework object from the plain
+            // iosTarget.binaries.framework {} block above -- the cocoapods
+            // plugin's own linkPodDebugFramework* task (the one that was
+            // actually failing with "Failed to build cache for .../
+            // navigation-runtime.klib") reads from THIS block, confirmed by
+            // the task name itself ("Pod"). Setting disableNativeCache only
+            // on the other framework block had no effect on this failure.
+            disableNativeCache(
+                version = DisableCacheInKotlinVersion.`2_4_10`,
+                reason = "Compiler cache build fails on androidx.navigation's navigation-runtime klib (getBackStackEntry<T> not found by cache serializer)",
+            )
+        }
+
+        // GoogleWebRTC (Google's own official pod) has been deprecated
+        // and device-binary-only since M80 (2020) -- confirmed directly via
+        // a real link failure: "ld: building for iOS-simulator, but linking
+        // in dylib ... built for iOS" when linking against it for the
+        // simulator, because its WebRTC.framework is a legacy single-slice
+        // fat framework, not an xcframework, and can't represent a device +
+        // simulator arm64 split at all. stasel/WebRTC's `WebRTC-lib` pod is
+        // the standard, actively-maintained community replacement --
+        // ships a real xcframework with proper device AND simulator
+        // (arm64 + x86_64) slices, is a drop-in (`import WebRTC`, same
+        // Clang module name), and is what most real-world WebRTC-on-iOS
+        // projects have used since Google's deprecation.
+        //
+        // moduleName = "WebRTC" -- REQUIRED, confirmed directly ("fatal
+        // error: module 'GoogleWebRTC' not found" from cinterop otherwise
+        // when this was still the GoogleWebRTC pod). WebRTC-lib ships the
+        // same `WebRTC` Clang module name, so this stays unchanged.
+        // packageName is set explicitly too, so the generated Kotlin
+        // bindings land at a package this project controls (cocoapods.webrtc.*,
+        // matching WebRtcEngine.ios.kt's imports) rather than guessing at
+        // whatever the plugin would have derived from the pod name by
+        // default -- this also means WebRtcEngine.ios.kt's imports don't
+        // need to change at all for this swap.
+        pod("WebRTC-lib") {
+            moduleName = "WebRTC"
+            packageName = "cocoapods.webrtc"
         }
     }
 
@@ -149,7 +268,18 @@ kotlin {
                 // fixed in libs.versions.toml too (renamed to
                 // firebase-bom-version), but this call stays a literal to
                 // not depend on that accessor working correctly again.
-                implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
+                // project.dependencies.platform(...) -- NOT the bare
+                // platform(...) KMP DSL convenience call this used to be.
+                // Confirmed directly: after bumping to Kotlin/KGP 2.4.10
+                // (see libs.versions.toml's own comment for why), the bare
+                // form fails with "Unresolved reference: platform" inside
+                // this source set's dependencies {} block. Going through
+                // project.dependencies explicitly reaches Gradle's own
+                // stable, version-independent DependencyHandler.platform()
+                // instead of whatever KotlinDependencyHandler's own
+                // convenience method resolved to (or stopped resolving to)
+                // in this KGP version.
+                implementation(project.dependencies.platform("com.google.firebase:firebase-bom:33.4.0"))
                 implementation(libs.firebase.messaging)
                 // Crash/non-fatal/ANR reporting -- see GifConfig.android.kt's
                 // sibling, messaging/CrashReporter.android.kt, for where
@@ -180,7 +310,6 @@ kotlin {
                 implementation(libs.sqldelight.native.driver)
             }
         }
-        val iosX64Main by getting { dependsOn(iosMain) }
         val iosArm64Main by getting { dependsOn(iosMain) }
         val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
     }
@@ -217,6 +346,24 @@ android {
         buildConfig = true
     }
 
+    // Pre-existing, and not related to any UI work: two jars already on
+    // this module's Android classpath ship the same OSGi metadata path --
+    // bcprov-jdk18on (the Signal Protocol crypto primitives, see
+    // messaging/crypto/signal/CryptoPrimitives.android.kt) and jspecify
+    // (pulled in transitively) both carry
+    // META-INF/versions/9/OSGI-INF/MANIFEST.MF, which fails
+    // mergeDebugJavaResource outright:
+    //   "2 files found with path 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'"
+    // so `assembleDebug` could not produce an APK at all. Nothing reads
+    // these files at runtime (OSGi bundle metadata is for OSGi
+    // containers), so excluding the whole META-INF/versions/9/OSGI-INF
+    // tree is the standard fix rather than picking one jar's copy.
+    packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/**"
+        }
+    }
+
     sourceSets["main"].apply {
         manifest.srcFile("src/androidMain/AndroidManifest.xml")
         res.srcDirs("src/androidMain/res")
@@ -231,6 +378,27 @@ android {
         getByName("release") {
             isMinifyEnabled = false
         }
+    }
+}
+
+// Compose UI tests (`runComposeUiTest`, see commonTest's D2MButtonTest) need
+// a real Android environment on the Android target -- on the plain JVM
+// `testDebugUnitTest` task they fail with an NPE inside setContent, because
+// the Android artifact behind compose.uiTest delegates to
+// ui-test-junit4 and there is no Activity/Looper/resource table there.
+// On Android these are INSTRUMENTED tests by nature; running them here would
+// need Robolectric wired up specifically for that.
+//
+// They are excluded here rather than deleted because they are not
+// Android-specific tests at all -- they live in commonTest and DO run, and
+// pass, on iosSimulatorArm64Test, which is where this project actually
+// needed Compose UI coverage. Excluding keeps `testDebugUnitTest` honest
+// (green means green) without giving up the coverage on the target that can
+// provide it.
+tasks.withType<Test>().configureEach {
+    filter {
+        excludeTestsMatching("com.d2m.app.ui.components.*")
+        isFailOnNoMatchingTests = false
     }
 }
 

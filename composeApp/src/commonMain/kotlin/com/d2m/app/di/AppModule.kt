@@ -65,10 +65,13 @@ val appModule = module {
     single<CryptoProvider> { createCryptoProvider(get(), createSettings()) }
 
     // Cross-device message-history backup (messaging/crypto/archive/) --
-    // P-256 ECDH/AES-GCM/PBKDF2, real on Android (same createSettings()-backed
-    // local-cache pattern as SignalSessionStore, separate namespace -- see
-    // ArchiveKeyStore's doc comment), no iOS actual yet (same precedent as
-    // CryptoProvider above).
+    // P-256 ECDH/AES-GCM/PBKDF2, real on BOTH platforms (same
+    // createSettings()-backed local-cache pattern as SignalSessionStore,
+    // separate namespace -- see ArchiveKeyStore's doc comment). The iOS
+    // actual became load-bearing the moment CryptoProvider above went real
+    // there: an iOS device now has an actual Signal identity, so
+    // ArchiveManager.checkAfterConnect reaches the PIN setup/restore path
+    // that used to be unreachable.
     single<ArchivePrimitives> { createArchivePrimitives() }
     single { ArchiveKeyStore(createSettings()) }
     single { ArchiveManager(get(), get()) }

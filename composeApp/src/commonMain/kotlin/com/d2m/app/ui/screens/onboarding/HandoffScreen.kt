@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MEmptyState
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -43,7 +44,7 @@ fun HandoffScreen(onBrowseProfiles: () -> Unit) {
             if (h == null) {
                 D2MEmptyState("No invite to show", "Start setup again to generate a new one.")
             } else {
-                Text("Sent to ${h.childName}.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                PageTitle("Sent to ${h.childName}.")
                 Text(
                     "A private claim link is ready to share -- theirs to open whenever they're ready. Expires ${h.inviteExpiresAt}.",
                     color = mutedText(0.55f),

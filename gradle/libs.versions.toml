@@ -1,16 +1,61 @@
 [versions]
-agp = "8.5.2"
-kotlin = "2.0.21"
-compose-multiplatform = "1.7.0"
+# 8.5.2 -> 8.6.0. The androidx stack this project already resolves to
+# (navigation-compose 2.9.7, compose-ui 1.11.2, core-ktx 1.16.0,
+# material3 1.4.0, lifecycle 2.11.0-beta01 and 11 more) publishes AAR
+# metadata REQUIRING AGP 8.6.0+, so every Android build failed
+# checkDebugAarMetadata until this moved. 8.6.0 specifically: it is the
+# lowest version satisfying that floor, and it still requires only Gradle
+# 8.7 -- exactly what the wrapper already pins -- so this does NOT drag the
+# Gradle distribution along with it. 8.6 also officially supports
+# compileSdk 35, which is the other half of the same failure.
+agp = "8.6.0"
+# Bumped from 2.0.21 -- confirmed directly that Xcode 26 (this project's
+# actual dev machine) cannot be built against at all with 2.0.21's bundled
+# Kotlin/Native LLVM: cinterop fails parsing the iOS 26.5 SDK's own system
+# headers ("module '_c_standard_library_obsolete' requires feature
+# 'found_incompatible_headers__check_search_paths'", cascading into
+# "unknown type name 'size_t'" etc.) -- a well-documented Kotlin/Xcode-26
+# compatibility gap, not a bug in this project. JetBrains added real Xcode
+# 26 support starting at Kotlin 2.2.21; 2.4.10 is current stable as of this
+# bump. compose-multiplatform bumped alongside it to the version JetBrains'
+# own docs pair with 2.4.10 -- Kotlin and Compose Multiplatform versions
+# must move together, not independently.
+kotlin = "2.4.10"
+compose-multiplatform = "1.11.1"
 compose-material3 = "1.3.1"
 # Must stay a version coil-network-ktor3 (below) was built against -- see
 # that entry's comment. Was 2.3.12 originally; bumped to 3.0.0 to match.
 ktor = "3.0.0"
 kotlinx-serialization = "1.7.3"
 kotlinx-coroutines = "1.9.0"
-kotlinx-datetime-version = "0.6.1"
-navigation-compose-version = "2.8.0-alpha10"
-lifecycle = "2.8.4"
+# Bumped from 0.6.1 -- confirmed directly via `./gradlew dependencyInsight`
+# that Compose Multiplatform's own material3-uikitsimarm64:1.9.0 artifact
+# transitively depends on kotlinx-datetime 0.7.1, and Gradle's standard
+# highest-version-wins conflict resolution silently promoted every actual
+# compile to 0.7.1 regardless of this pin -- so 0.6.1 was never really the
+# version in use. Pinning to what's actually resolved avoids that mismatch
+# resurfacing confusingly later. Note kotlinx-datetime 0.7.x deprecated
+# kotlinx.datetime.Clock in favor of the stdlib's own kotlin.time.Clock --
+# see ApiCache.kt's import comment for the call-site-level fix this required.
+kotlinx-datetime-version = "0.7.1"
+# Bumped from 2.8.0-alpha10 -- confirmed directly via lldb (breakpoint on
+# ThrowException) that this old alpha's NavBackStackEntry.updateState()
+# throws kotlin.internal.IrLinkageError at runtime on iOS, an ABI break
+# between navigation-compose's compiled klib and the actual
+# lifecycle/compose-runtime declarations linked into the app -- this was the
+# real cause of the "crash on launch" that the crash reporter could only
+# ever show as an opaque SurfaceMetalRedrawer.draw abort (the throw happens
+# during the first real composition/navigation pass, which is reached from
+# a draw callback). 2.9.2 is the version JetBrains' own compose-multiplatform
+# docs pair with Compose Multiplatform 1.11.1 (this catalog's
+# compose-multiplatform version above) -- see kotlinlang.org "What's new in
+# Compose Multiplatform 1.11.1" Dependencies table.
+navigation-compose-version = "2.9.2"
+# Bumped from 2.8.4 for the same reason -- 2.11.0-beta01 is what JetBrains
+# pairs with Compose Multiplatform 1.11.1 and navigation-compose 2.9.2 in
+# that same Dependencies table. Keeping lifecycle and navigation-compose on
+# mismatched eras is exactly what produced the IrLinkageError above.
+lifecycle = "2.11.0-beta01"
 koin = "4.0.4"
 multiplatform-settings-version = "1.2.0"
 # coil-network-ktor3's own POM declares a hard runtime dependency on a
@@ -29,7 +74,16 @@ multiplatform-settings-version = "1.2.0"
 # lockstep on any future bump.
 coil = "3.0.0"
 sqldelight = "2.0.2"
-android-compileSdk = "34"
+# Bumped 34 -> 35: androidx.navigation resolves transitively to
+# navigation-compose-android 2.9.7, whose AAR metadata REQUIRES consumers to
+# compile against API 35 or later, so every Android build (app and unit
+# tests alike) failed checkDebugAarMetadata with 32 such issues until this
+# moved. compileSdk only controls which APIs are available at compile time,
+# so raising it is safe on its own; android-targetSdk deliberately stays at
+# 34 because THAT is the one that opts the app into new runtime behaviour
+# and is a separate decision to make deliberately, not a side effect of
+# unblocking the build.
+android-compileSdk = "35"
 android-minSdk = "26"
 android-targetSdk = "34"
 firebase-bom-version = "33.4.0"
@@ -140,6 +194,25 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+# Auto-generates Kotlin/Native bindings for the GoogleWebRTC pod (see
+# composeApp/build.gradle.kts's cocoapods {} block) -- WebRtcEngine.ios.kt's
+# `platform.WebRTC.*` imports don't exist without this. Only takes effect
+# once iosApp/ is turned into a real Xcode project with `pod install` run
+# against iosApp/Podfile (see that file + iosApp/README.md) -- a plain
+# `./gradlew build` with no Xcode project present still works for every
+# other target, this plugin only wires up the iOS side's pod integration.
+# kotlinCocoapods intentionally NOT declared here -- version catalog
+# `alias(...)` entries require a non-empty version string (confirmed
+# directly: "plugin version '' is invalid: cannot be null or empty"), but
+# this plugin ships bundled inside the same kotlin-gradle-plugin artifact
+# org.jetbrains.kotlin.multiplatform already puts on the buildscript
+# classpath, and requesting an explicit version for it AGAIN triggers a
+# different error ("already on the classpath with an unknown version, so
+# compatibility cannot be checked" -- also confirmed directly). The only
+# combination that works is applying it via plain `id(...)` with no version
+# at all, which the `alias()` DSL doesn't support -- see
+# composeApp/build.gradle.kts's plugins {} block, which applies it directly
+# instead of through this catalog.
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 googleServices = { id = "com.google.gms.google-services", version.ref = "google-services-version" }
 firebaseCrashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics-version" }

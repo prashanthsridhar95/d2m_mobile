@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.savedstate.read
 import com.d2m.app.ui.screens.child.ChildHomeScreen
 import com.d2m.app.ui.screens.child.ChildProfileDialogScreen
 import com.d2m.app.ui.screens.child.ClaimFlowScreen
@@ -73,7 +74,7 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
                 androidx.navigation.navDeepLink { uriPattern = Routes.CLAIM_DEEPLINK_SCHEME },
             ),
         ) { backStackEntry ->
-            val token = backStackEntry.arguments?.getString(Routes.CLAIM_ARG_TOKEN)
+            val token = backStackEntry.arguments?.read { getStringOrNull(Routes.CLAIM_ARG_TOKEN) }
             ClaimFlowScreen(
                 token = token?.takeIf { it.isNotEmpty() },
                 onComplete = { navController.navigate(Routes.CHILD_HOME) { popUpTo(Routes.LOGIN) { inclusive = true } } },
@@ -118,7 +119,7 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             route = Routes.PROFILE_DETAIL,
             arguments = listOf(navArgument(Routes.PROFILE_ARG_CANDIDATE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
-            val candidateId = backStackEntry.arguments?.getString(Routes.PROFILE_ARG_CANDIDATE_ID).orEmpty()
+            val candidateId = backStackEntry.arguments?.read { getStringOrNull(Routes.PROFILE_ARG_CANDIDATE_ID) }.orEmpty()
             ProfileDetailScreen(
                 candidateId = candidateId,
                 onBack = { navController.popBackStack() },

@@ -33,6 +33,8 @@ import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.*
+import com.d2m.app.ui.components.D2MTabs
+import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -117,12 +119,11 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
 
     D2MTheme(flow = D2MFlow.CHILD) {
         Column(modifier = Modifier.fillMaxSize()) {
-            TopAppBar(title = { Text("My profile") })
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Profile") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Bio data") })
-                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Preferences") })
-            }
+            // A serif page title on the page ground, not a Material
+            // TopAppBar -- see navigation/AppScaffold.kt's ScreenHeader
+            // note on why that bar is the wrong shape for this design.
+            PageTitle("My profile", Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp))
+            D2MTabs(listOf("Profile", "Bio data", "Preferences"), tab, { tab = it })
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (tab) {

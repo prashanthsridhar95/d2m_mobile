@@ -75,7 +75,7 @@ interface WebRtcEngine {
     fun closePeerConnection(pc: Any)
 }
 
-/** Platform factory -- see WebRtcEngine.android.kt (real, needs AndroidWebRtcContextHolder.appContext set by D2MApplication.onCreate) and WebRtcEngine.ios.kt (not implemented yet, see that file's doc comment) for the two actuals. */
+/** Platform factory -- see WebRtcEngine.android.kt (real, needs AndroidWebRtcContextHolder.appContext set by D2MApplication.onCreate) and WebRtcEngine.ios.kt (real, via the WebRTC-lib pod; compiles and links, but see iosApp/README.md -- WebRTC and CallKit can only be meaningfully exercised on a physical device) for the two actuals. */
 expect fun createWebRtcEngine(): WebRtcEngine
 
 /** Renders a local or remote video track handle (the same `Any` handles WebRtcEngine hands out) -- a tiny platform view (SurfaceViewRenderer on Android, RTCMTLVideoView on iOS) wrapped for Compose interop. `mirror` only affects the LOCAL preview's on-screen presentation (front-camera selfie-mirror UX); it is never applied to the outgoing wire track -- simpler than web's canvas-based mirror-on-the-wire trick and matches how native camera/phone call UIs normally behave. */
