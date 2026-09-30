@@ -14,4 +14,4 @@ actual fun httpEngine(): HttpClient = HttpClient(Darwin)
 // "http://127.0.0.1:8000" (the iOS simulator shares the host's loopback
 // interface directly, unlike the Android emulator) or the host's real LAN
 // IP for a physical device.
-actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
+actual fun resolveDefaultBaseUrl(): String = "http://127.0.0.1:8000"

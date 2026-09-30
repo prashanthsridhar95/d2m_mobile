@@ -5,26 +5,42 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.d2m.app.data.network.ApiClient
+import com.d2m.app.data.network.AuditApi
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.SeriousModeRepository
@@ -37,7 +53,12 @@ import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
 import com.d2m.app.push.ui.rememberBatteryOptimizationRequester
 import com.d2m.app.push.ui.rememberNotificationPermissionLauncher
+import com.d2m.app.security.observeAppBackgrounded
+import com.d2m.app.security.observeScreenCapture
+import com.d2m.app.security.observeScreenshotTaken
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.LocalPhotoImageLoader
+import com.d2m.app.ui.components.WatermarkOverlay
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
 import com.d2m.app.ui.navigation.D2MNavGraph
@@ -72,8 +93,13 @@ fun App() {
     val chatUiState: ChatUiState = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
     val apiClient: ApiClient = koinInject()
+    val auditApi: AuditApi = koinInject()
     val seriousModeRepo: SeriousModeRepository = koinInject()
     val parentContactsStore: ParentContactsStore = koinInject()
+    // Authenticated profile-photo ImageLoader (data/network/PhotoImageLoader.kt)
+    // -- provided once here so every ProfilePhoto/ProfileThumb below picks it
+    // up via LocalPhotoImageLoader instead of the app-wide Coil default.
+    val photoImageLoader: ImageLoader = koinInject()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
     val messagingStartupError by messagingRepo.startupError.collectAsState()
@@ -175,6 +201,39 @@ fun App() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Screenshot/recording hardening (security/ScreenCapture.kt) -- both
+    // effects are permanent no-ops on Android, where FLAG_SECURE
+    // (MainActivity.onCreate) already blocks capture outright at the OS
+    // level; only iOS's actuals do anything, since Apple gives apps no way
+    // to prevent a screenshot or recording, only to react to one.
+    var isRecordingCaptured by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val remove = observeScreenCapture { captured -> isRecordingCaptured = captured }
+        onDispose { remove() }
+    }
+    // rememberUpdatedState so this doesn't need to re-subscribe to the OS
+    // notification (and risk missing an event mid-resubscribe) every time
+    // the route changes -- the callback below always reads the CURRENT
+    // route at the moment a screenshot actually happens.
+    val latestRoute by rememberUpdatedState(currentRoute)
+    DisposableEffect(Unit) {
+        val remove = observeScreenshotTaken {
+            scope.launch {
+                auditApi.recordScreenView("SCREENSHOT_DETECTED:${latestRoute ?: "unknown"}")
+            }
+        }
+        onDispose { remove() }
+    }
+    // Blanks the screen the instant iOS is about to background the app --
+    // before the OS takes its app-switcher snapshot, unlike the
+    // screenshot observer above, which only ever fires after the fact.
+    // No-op on Android, same reasoning as observeScreenCapture above.
+    var isBackgrounded by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val remove = observeAppBackgrounded { backgrounded -> isBackgrounded = backgrounded }
+        onDispose { remove() }
+    }
+
     // Read once at composition start -- NavHost's startDestination is fixed
     // at graph-build time, matching how DevIdentity's persisted role is only
     // consulted once per cold start on web too (subsequent role changes go
@@ -199,6 +258,7 @@ fun App() {
     // also factors in the shared conversationOpen flag.
     val showBottomBar = tabs != null && tabs.any { it.route == currentRoute } && !conversationOpen
 
+    CompositionLocalProvider(LocalPhotoImageLoader provides photoImageLoader) {
     D2MTheme(flow = D2MFlow.ENTRY) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
@@ -300,6 +360,70 @@ fun App() {
                     )
                 }
             }
+
+            // Forensic screen watermark (d2m_web's WatermarkOverlay.jsx
+            // counterpart) -- drawn above everything else here, including
+            // the error banner above, so it's captured in any screenshot.
+            if (identity.role != null) {
+                WatermarkOverlay(screen = currentRoute ?: "unknown")
+            }
+
+            // Live screen-recording cover (iOS only -- see
+            // security/ScreenCapture.kt's doc comment on why Android has
+            // nothing to cover, FLAG_SECURE already blocked the capture).
+            // Opaque and LAST in this Box, above even the watermark: the
+            // watermark is meant to be captured if something leaks despite
+            // this, but while a recording is actively running, hiding the
+            // content outright is strictly better than relying on someone
+            // noticing a faint overlay in the recorded footage.
+            if (isRecordingCaptured) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(32.dp),
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            "Screen recording detected",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            "Profile content is hidden while your screen is being recorded or mirrored.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+
+            // App-switcher cover (iOS only -- see security/ScreenCapture.kt's
+            // observeAppBackgrounded doc comment). LAST of all, above even
+            // the recording cover: this one has no animation and no delay,
+            // because whatever's on screen the instant this composes IS
+            // what iOS snapshots for the app-switcher a moment later. Plain
+            // wordmark rather than the recording cover's explanatory text --
+            // nobody actually reads this frame, it exists purely to be
+            // what gets captured, not to be looked at.
+            if (isBackgrounded) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "D2M",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
+    }
     }
 }

@@ -39,10 +39,16 @@ import com.d2m.app.ui.theme.d2m
  * top right") -- a mobile-native pattern rather than a literal mirror of
  * the web app's nav. See ChildHomeScreen.kt's top-right IconButton.
  *
- * "Sharing" (parent) points at the same messaging surface as
- * parent-to-parent contact, since neither the guest/shared-link feature
- * nor a separate parent "Sharing" concept exists on the backend yet.
+ * "Sharing" (parent) now opens ShareLinksScreen -- the profile share-link
+ * feature this tab was originally reserved for (see the previous version
+ * of this comment, which pointed it at parent-to-parent messaging as a
+ * stand-in "since neither... exists on the backend yet"). Parent-to-
+ * parent messaging loses its only top-level tab-bar entry as a result --
+ * it's still reachable from a candidate's profile ("message their
+ * parent") and from a tapped chat notification (App.kt) -- a real gap
+ * worth its own top-level nav slot as a fast-follow, not solved here.
  *
+
  * Retheme note: the bar itself is restyled below rather than left to
  * Material's defaults. On web this chrome became a two-tier top header;
  * on a phone a bottom tab bar is the right shape and stays, but it now
@@ -54,7 +60,7 @@ enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
     // Parent tabs
     ParentDashboard("Dashboard", Icons.Filled.Home, Routes.PARENT_HOME),
     ParentSearch("Search", Icons.Filled.Search, Routes.PARENT_BROWSE),
-    ParentSharing("Sharing", Icons.Filled.Share, Routes.PARENT_MESSAGES),
+    ParentSharing("Sharing", Icons.Filled.Share, Routes.SHARE_LINKS),
     ParentSettings("Settings", Icons.Filled.Settings, Routes.SETTINGS),
 
     // Child tabs -- Settings intentionally omitted, see doc comment above.

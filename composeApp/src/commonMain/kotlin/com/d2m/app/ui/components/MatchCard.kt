@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.ui.theme.D2MRadius
@@ -153,26 +155,79 @@ fun MatchCard(
             }
         }
 
+        // Mirrors web's MatchCard.jsx compact-row redesign (own doc comment
+        // there has the full history): a left accent bar in the rating's
+        // own colour (levelColor -- the exact colour the pill below uses,
+        // not a second, disagreeing tone system), a bigger circular photo
+        // with the star anchored on its own corner instead of adrift in a
+        // side column, a place-only line (age already reads in the name),
+        // and the rating pushed to the row's actual right edge instead of
+        // stacked under the star where a wide row just went empty past it.
+        //
+        // The accent bar is a drawBehind rect on this Row, not a sibling
+        // Box measured via Modifier.height(IntrinsicSize.Min) (an earlier
+        // version of this did that). Intrinsic measurement asks every
+        // child -- including ProfileThumb's AsyncImage -- for its
+        // preferred size in a separate pre-pass before normal layout runs,
+        // and Coil's AsyncImage can report a small/zero intrinsic size
+        // while an image is still loading; that collapsed the *whole row*
+        // (photo included -- Modifier.size() still clamps to whatever
+        // height the row's own intrinsic pass settled on) down to a
+        // squashed oval on whichever card happened to still be loading its
+        // photo at that instant. Confirmed live: one row out of five
+        // rendered exactly that way. drawBehind runs in the draw phase
+        // against the row's real, already-resolved final size, so it can't
+        // be wrong before that size exists.
         MatchCardVariant.COMPACT -> D2MCard(modifier) {
+            val level = suggestion.compositeScore?.let { overallRating(it) }
+            val place = suggestion.nativity ?: suggestion.city
+            val accentColor = level?.let { levelColor(it) }
+
             Row(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        if (accentColor != null) {
+                            drawRect(color = accentColor, size = Size(3.dp.toPx(), size.height))
+                        }
+                    }
+                    .clickable(onClick = onClick)
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                ProfileThumb(photo, "Photograph of ${suggestion.candidateName}")
+                ProfileThumb(
+                    photoUrl = photo,
+                    contentDescription = "Photograph of ${suggestion.candidateName}",
+                    size = 68.dp,
+                    shape = RoundedCornerShape(percent = 50),
+                    overlay = {
+                        if (onToggleShortlist != null) {
+                            ShortlistStar(
+                                shortlisted = isShortlisted,
+                                onToggle = onToggleShortlist,
+                                onPhoto = true,
+                                modifier = Modifier.align(Alignment.BottomEnd),
+                            )
+                        }
+                    },
+                )
                 Column(Modifier.weight(1f)) {
                     SubHeading(
                         suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: ""),
                         maxLines = 2,
                     )
-                    if (meta.isNotEmpty()) MetaText(meta, Modifier.padding(top = 2.dp))
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ScoreBadge(suggestion.compositeScore)
-                    if (onToggleShortlist != null) {
-                        ShortlistStar(isShortlisted, onToggleShortlist)
+                    if (place != null) MetaText(place, Modifier.padding(top = 2.dp))
+                    if (suggestion.doshaFlags.isNotEmpty()) {
+                        Text(
+                            text = "${suggestion.doshaFlags.size} dosha flag${if (suggestion.doshaFlags.size > 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = d2m.meta,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                 }
+                if (level != null) D2MLevelPill(level)
             }
         }
     }
@@ -183,6 +238,16 @@ fun MatchCard(
  * control on top of an arbitrary photograph, and gold when set -- gold is
  * this design's "marked/featured" colour, and a maroon star would compete
  * with the card's own primary action.
+ *
+ * Circular when onPhoto -- mirrors web's own fix for the identical
+ * complaint ("the star button next to the profile image doesn't look
+ * nice"): a squared badge sitting half on/half off a circular thumb reads
+ * as a sticker stuck at an angle. Round echoes the shape it overlays,
+ * whether that's a circular thumb (MatchCard's COMPACT row) or a
+ * rectangular photo band (DETAILED) -- a round icon-button on a photo is
+ * the standard "save"/"favourite" shape either way. Off a photo (the
+ * "Profile status" card's inline star, if this app grows one) it stays
+ * squared, sitting among the app's other square controls in a plain row.
  */
 @Composable
 fun ShortlistStar(
@@ -191,7 +256,7 @@ fun ShortlistStar(
     modifier: Modifier = Modifier,
     onPhoto: Boolean = false,
 ) {
-    val shape = RoundedCornerShape(D2MRadius.sm)
+    val shape = if (onPhoto) RoundedCornerShape(percent = 50) else RoundedCornerShape(D2MRadius.sm)
     Box(
         modifier
             .size(32.dp)

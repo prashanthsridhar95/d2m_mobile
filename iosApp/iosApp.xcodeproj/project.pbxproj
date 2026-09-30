@@ -13,6 +13,7 @@
 		2416E1D69510C13BED2B902A /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60CB1DDE5FCBBEC2AF5C6248 /* NotificationService.swift */; };
 		307C2654CD5972A25FB7FD87 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668CECA83ACC03A83C85A623 /* iOSApp.swift */; };
 		3C80CC5CE976DAE85538F3FF /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 124320FAA4A354C16EB8D189 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		38DEABFDBDE8495B99C1B5C4 /* ScreenshotSecureContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F52A1A1A1740BC8BA67042 /* ScreenshotSecureContainerView.swift */; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
 		6FF662F442F56014B45545CC /* call_tone.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = A254D7ED869852874B02C3CA /* call_tone.mp3 */; };
 		8552F2F0AD4E0DD2C532E4B7 /* Pods_NotificationServiceExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0335554F8EBA10520DE8B4BD /* Pods_NotificationServiceExtension.framework */; };
@@ -58,6 +59,7 @@
 		C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
 		C53C5E7267F06F4446EB6E79 /* Pods_iosApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iosApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CAE3F05B684858E5A15BF59D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		91F52A1A1A1740BC8BA67042 /* ScreenshotSecureContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotSecureContainerView.swift; sourceTree = "<group>"; };
 		CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		ECFA8FAF6FD38774AA8EBF3E /* Pods-iosApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.release.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.release.xcconfig"; sourceTree = "<group>"; };
 		FCDF50F682D8FAF1F43193DC /* NotificationServiceExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotificationServiceExtension.entitlements; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 			isa = PBXGroup;
 			children = (
 				CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */,
+				91F52A1A1A1740BC8BA67042 /* ScreenshotSecureContainerView.swift */,
 				C117AD187833E2513BD2F553 /* Info.plist */,
 				C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */,
 				668CECA83ACC03A83C85A623 /* iOSApp.swift */,
@@ -354,6 +357,7 @@
 			files = (
 				56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */,
 				307C2654CD5972A25FB7FD87 /* iOSApp.swift in Sources */,
+				38DEABFDBDE8495B99C1B5C4 /* ScreenshotSecureContainerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

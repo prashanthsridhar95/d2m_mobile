@@ -45,17 +45,21 @@ data class SponsorCreateResponse(
 )
 
 /**
- * Mirrors app/schemas.py's SponsorProfileOut exactly -- previously had
- * contactInfo/createdAt, neither of which exist on the real backend
- * response (which has childName/childClaimed instead), and both were
- * required, so decoding this after a "I'm a parent" login would have
- * crashed with the same MissingFieldException class as the SuggestionOut
- * bug this file was fixed alongside.
+ * Mirrors app/schemas.py's SponsorProfileOut exactly. Used to omit
+ * contactInfo (the backend response didn't have it, so decoding this
+ * after a "I'm a parent" login would've crashed with the same
+ * MissingFieldException class as the SuggestionOut bug this file was
+ * fixed alongside) -- contactInfo is back now that
+ * onboarding_service.get_sponsor_profile actually returns it, added
+ * specifically to power the Settings screen's account header (name +
+ * contact + account id), same as PrimaryProfileOut.contactInfo already
+ * does for the child role.
  */
 @Serializable
 data class SponsorProfileOut(
     val sponsorId: String,
     val name: String,
+    val contactInfo: String,
     val childName: String? = null,
     val childClaimed: Boolean,
 )
@@ -244,6 +248,58 @@ data class ExtendedBioDataOut(
     val familyValues: String? = null,
     val financialStatus: String? = null,
     val citizenshipStatus: String? = null,
+    val updatedAt: String? = null,
+)
+
+/** One {prompt, answer} card -- see AboutMeDataIn's doc comment. */
+@Serializable
+data class AboutMePromptEntry(
+    val prompt: String,
+    val answer: String,
+)
+
+/**
+ * Mirrors AboutMeData / AboutMeDataIn / AboutMeDataOut exactly -- the
+ * Tinder/Bumble-style "About Me" tab, distinct from ExtendedBioData above
+ * and from ChildPreferencesRequest's hobbies/lifestyleTags/relationshipGoal
+ * (those already back the Preferences tab and matching_service's scoring;
+ * About Me doesn't re-ask the same questions under new names). Unlike
+ * ExtendedBioDataIn, the backend DOES validate this schema's closed-set
+ * fields -- see app/schemas.py::AboutMeDataIn's own doc comment.
+ */
+@Serializable
+data class AboutMeDataIn(
+    val fitnessRoutine: String? = null,
+    val sleepSchedule: String? = null,
+    val pets: String? = null,
+    val socialEnergy: String? = null,
+    val aboutPrompts: List<AboutMePromptEntry> = emptyList(),
+    val partnerQualities: List<String> = emptyList(),
+    val whatMattersMost: String? = null,
+    val careerAfterMarriage: String? = null,
+    val livingArrangement: String? = null,
+    val openToRelocation: String? = null,
+    val favoriteCuisine: String? = null,
+    val dreamDestination: String? = null,
+    val loveLanguage: String? = null,
+)
+
+@Serializable
+data class AboutMeDataOut(
+    val primaryId: String,
+    val fitnessRoutine: String? = null,
+    val sleepSchedule: String? = null,
+    val pets: String? = null,
+    val socialEnergy: String? = null,
+    val aboutPrompts: List<AboutMePromptEntry> = emptyList(),
+    val partnerQualities: List<String> = emptyList(),
+    val whatMattersMost: String? = null,
+    val careerAfterMarriage: String? = null,
+    val livingArrangement: String? = null,
+    val openToRelocation: String? = null,
+    val favoriteCuisine: String? = null,
+    val dreamDestination: String? = null,
+    val loveLanguage: String? = null,
     val updatedAt: String? = null,
 )
 

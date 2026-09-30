@@ -3,6 +3,7 @@ package com.d2m.app.ui.screens.shared
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,7 @@ import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.NotificationsRepository
+import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MCard
@@ -54,8 +57,10 @@ fun NotificationsScreen() {
     var notifications by remember { mutableStateOf<List<NotificationOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var markingAll by remember { mutableStateOf(false) }
 
     val accountId = identity.sponsorId ?: identity.primaryId
+    val unreadCount = notifications.count { it.readAt == null }
 
     LaunchedEffect(accountId) {
         if (accountId == null) return@LaunchedEffect
@@ -73,7 +78,31 @@ fun NotificationsScreen() {
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle("Notifications")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PageTitle("Notifications")
+                // "Notification panel needs a Mark all read button",
+                // reported directly. Only shown once there's something to
+                // clear -- an always-visible disabled button just adds
+                // noise to a page that's usually already read.
+                if (unreadCount > 0 && accountId != null) {
+                    D2MButton(
+                        text = if (markingAll) "Marking…" else "Mark all read",
+                        enabled = !markingAll,
+                        onClick = {
+                            markingAll = true
+                            scope.launch {
+                                runCatching { notificationsRepo.markAllRead(accountId) }
+                                    .onSuccess { notifications = it }
+                                markingAll = false
+                            }
+                        },
+                    )
+                }
+            }
             when {
                 loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                 error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
@@ -108,5 +137,6 @@ private fun notificationTitle(type: String): String = when (type) {
     "consent_request" -> "A parent requested access to your details"
     "consent_granted" -> "Access request granted"
     "request_received" -> "You received a new request"
+    "share_link_viewed" -> "Your shared profile was viewed"
     else -> type
 }

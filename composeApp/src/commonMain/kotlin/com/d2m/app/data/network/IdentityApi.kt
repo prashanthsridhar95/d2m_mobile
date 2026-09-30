@@ -44,4 +44,10 @@ class IdentityApi(private val api: ApiClient) {
 
     suspend fun updateExtendedBio(primaryId: String, body: ExtendedBioDataIn): ExtendedBioDataOut =
         api.put("/primaries/$primaryId/extended-bio", body)
+
+    suspend fun getAboutMe(primaryId: String): AboutMeDataOut =
+        api.get("/primaries/$primaryId/about-me")
+
+    suspend fun updateAboutMe(primaryId: String, body: AboutMeDataIn): AboutMeDataOut =
+        api.put("/primaries/$primaryId/about-me", body)
 }

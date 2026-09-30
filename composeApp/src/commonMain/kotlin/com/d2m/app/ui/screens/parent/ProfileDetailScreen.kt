@@ -34,6 +34,7 @@ import com.d2m.app.domain.repository.SuggestionsRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.ParentContactsStore
 import com.d2m.app.messaging.d2mIdToMessagingUsername
+import com.d2m.app.ui.components.CompatibilityCard
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
@@ -46,7 +47,9 @@ import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.PersonName
 import com.d2m.app.ui.components.ProfilePhoto
 import com.d2m.app.ui.components.RefNoText
-import com.d2m.app.ui.components.ScoreBadge
+import com.d2m.app.ui.components.astrologicalCompatibility
+import com.d2m.app.ui.components.overallRating
+import com.d2m.app.ui.components.preferenceCompatibility
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -158,24 +161,26 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     /*
                      * Header, per the Profile-detail comp: the registration
                      * id in tracked small caps, the name in the display
-                     * serif on its own line, then one meta line. The old
-                     * version put "Name, 27" in bold sans on the same row as
-                     * the score badge, under a full-bleed image -- which
-                     * meant the name and the rating competed for the same
-                     * emphasis, and the id (the thing families actually
-                     * quote on the phone) wasn't shown at all.
+                     * serif on its own line, then one meta line.
+                     *
+                     * Name + age fold into one line -- "Ramesh, 34" --
+                     * mirroring both web's port target and the pattern
+                     * DiscoveryScreen.kt already uses for the same pairing;
+                     * age used to sit in the meta line below instead
+                     * (redundant with itself once folded in here, so it's
+                     * dropped from that line, not duplicated).
+                     *
+                     * ScoreBadge (a raw "x/10" numeric tag) is gone from the
+                     * header entirely, replaced by CompatibilityCard below
+                     * the photo -- see that composable's own doc comment
+                     * for why a word beats a fraction here.
                      */
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        RefNoText(c.candidateId, Modifier.weight(1f))
-                        ScoreBadge(c.compositeScore)
-                    }
-                    PersonName(c.candidateName, Modifier.padding(top = 4.dp))
+                    RefNoText(c.candidateId)
+                    PersonName(
+                        c.candidateName + (c.age?.let { ", $it" } ?: ""),
+                        Modifier.padding(top = 4.dp),
+                    )
                     val meta = listOfNotNull(
-                        c.age?.let { "$it years" },
                         c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") }
                             ?: c.gothram,
                         c.nativity ?: c.city,
@@ -194,6 +199,15 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         modifier = Modifier.padding(top = 16.dp),
                     )
 
+                    CompatibilityCard(
+                        level = c.compositeScore?.let { overallRating(it) },
+                        breakdown = listOf(
+                            "Astrology" to astrologicalCompatibility(c.scores),
+                            "Preferences" to preferenceCompatibility(c.scores),
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    )
+
                     if (c.doshaFlags.isNotEmpty()) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -204,7 +218,11 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         }
                     }
 
-                    D2MProfileTabsPanel(candidateId = candidateId, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
+                    D2MProfileTabsPanel(
+                        candidateId = candidateId,
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        showAboutMe = identity.role == D2MRole.CHILD,
+                    )
 
                     messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
 

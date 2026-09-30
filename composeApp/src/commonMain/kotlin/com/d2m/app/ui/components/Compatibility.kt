@@ -1,7 +1,26 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SubScoreBreakdown
+import com.d2m.app.ui.theme.D2MStroke
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 
 /**
  * Direct Kotlin mirror of d2m_web's lib/compatibility.js -- turns the raw
@@ -46,8 +65,113 @@ private fun toneForLevel(level: String): D2MBadgeTone = when (level) {
     else -> D2MBadgeTone.NEUTRAL
 }
 
+/**
+ * The level word's own colour -- the foreground half of whichever status
+ * tone toneForLevel() maps it to. Exposed (not private) because MatchCard's
+ * compact row uses the exact same colour for its left accent bar: a High
+ * row's bar and a High row's pill should never disagree about what "High"
+ * looks like.
+ */
+@Composable
+fun levelColor(level: String): Color {
+    val palette = LocalD2MStatusPalette.current
+    return when (toneForLevel(level)) {
+        D2MBadgeTone.SUCCESS -> palette.success.fg
+        D2MBadgeTone.INFO -> palette.info.fg
+        D2MBadgeTone.WARNING -> palette.warning.fg
+        else -> palette.neutral.fg
+    }
+}
+
 /** Mirrors components/LevelPill.jsx -- a level word (Low/Medium/High/Exceptional) rendered as a toned pill. */
 @Composable
 fun D2MLevelPill(level: String) {
     D2MBadge(text = level, tone = toneForLevel(level))
+}
+
+enum class CompatibilityCardSize { Large, Small }
+
+/**
+ * Mirrors web's CompatibilityCard.jsx (its own doc comment there has the
+ * full seven-round history) -- Overall as a big colour word, a double
+ * hairline rule (deliberately heavier than the single rule D2MDivider
+ * draws everywhere else, marking this as the one section-within-a-section
+ * on the card), then the breakdown as N columns split by vertical rules,
+ * each with the same word-not-pill treatment as Overall, just smaller.
+ *
+ * No title on the card itself -- "leave off the Compatibility title, make
+ * it 'Overall compatibility'" (reported directly on web) -- the label
+ * above the word carries the card's whole identification.
+ *
+ * `size` exists because this card is used two ways: full width, on its
+ * own row (ProfileDetailScreen, DiscoveryScreen) wants Large; nothing on
+ * mobile currently needs Small, but the param exists so a narrower future
+ * placement doesn't need a second component, same reasoning as web's own
+ * `size` prop.
+ */
+@Composable
+fun CompatibilityCard(
+    level: String?,
+    breakdown: List<Pair<String, String?>> = emptyList(),
+    size: CompatibilityCardSize = CompatibilityCardSize.Large,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(modifier = modifier) {
+        if (level == null) {
+            Text(
+                "This pairing hasn't been scored yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = d2m.meta,
+            )
+            return@SectionCard
+        }
+
+        val overallStyle = if (size == CompatibilityCardSize.Large) {
+            MaterialTheme.typography.headlineMedium
+        } else {
+            MaterialTheme.typography.titleLarge
+        }
+
+        LabelText("Overall compatibility")
+        Text(level, style = overallStyle, color = levelColor(level), modifier = Modifier.padding(top = 4.dp))
+
+        if (breakdown.isNotEmpty()) {
+            Column(Modifier.padding(top = 16.dp)) {
+                D2MDivider(soft = false)
+                Spacer(Modifier.height(3.dp))
+                D2MDivider(soft = false)
+            }
+
+            val subStyle = if (size == CompatibilityCardSize.Large) {
+                MaterialTheme.typography.titleLarge
+            } else {
+                MaterialTheme.typography.titleMedium
+            }
+
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp).height(IntrinsicSize.Min)) {
+                breakdown.forEachIndexed { index, (label, value) ->
+                    if (index > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .width(D2MStroke.hairline)
+                                .padding(vertical = 1.dp)
+                                .background(d2m.borderSoft),
+                        )
+                        Spacer(Modifier.width(20.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        LabelText(label)
+                        Text(
+                            value ?: "—",
+                            style = subStyle,
+                            color = value?.let { levelColor(it) } ?: d2m.faint,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    if (index < breakdown.lastIndex) Spacer(Modifier.width(20.dp))
+                }
+            }
+        }
+    }
 }

@@ -70,7 +70,18 @@ fun CityChipPicker(
                 value.forEach { city ->
                     AssistChip(
                         onClick = { if (!disabled) onChange(value - city) },
-                        label = { Text(city) },
+                        // Mainly for legacy data: accept_locations previously
+                        // stored the old closed LOCATIONS taxonomy's
+                        // lowercase/snake_case codes ("delhi_ncr", plain
+                        // "chennai") before this field switched to free-text
+                        // city search -- a profile onboarded before that
+                        // switch still shows them raw ("lowercase with
+                        // underscores", reported directly). Taxonomy.toLabel
+                        // fixes those and is a no-op on a real geocode label
+                        // ("Chennai, Tamil Nadu, India"), which is already
+                        // properly capitalized and has no underscore to
+                        // split on.
+                        label = { Text(Taxonomy.toLabel(city)) },
                         trailingIcon = if (!disabled) {
                             {
                                 Icon(

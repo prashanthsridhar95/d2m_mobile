@@ -35,6 +35,7 @@ object Routes {
 
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
+    const val SHARE_LINKS = "share_links"
 
     const val CHILD_PROFILE_DIALOG = "child_profile_dialog"
 

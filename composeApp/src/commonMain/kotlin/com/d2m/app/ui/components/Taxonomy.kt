@@ -61,6 +61,75 @@ object Taxonomy {
     )
     val CURRENCIES = listOf("INR", "USD", "GBP", "EUR", "AED", "CAD", "AUD", "SGD")
 
+    // -- AboutMeData picklists (About Me tab) -- mirrors the block of the
+    // same name in app/taxonomy.py. Deliberately distinct from HOBBIES/
+    // LIFESTYLE_TAGS/RELATIONSHIP_GOALS above -- those already back the
+    // Preferences tab and matching_service's scoring; About Me doesn't
+    // re-ask the same questions under new names.
+    val FITNESS_ROUTINES = listOf("Never", "Occasionally", "Regularly", "Daily")
+    val SLEEP_SCHEDULES = listOf("Early bird", "Night owl", "Flexible")
+    val PET_PREFERENCES = listOf("Love pets & have one", "Love pets, none currently", "Not a pet person", "Allergic")
+    val SOCIAL_ENERGIES = listOf("Introvert", "Extrovert", "Ambivert")
+    val PARTNER_QUALITIES = listOf(
+        "Kind", "Ambitious", "Family-oriented", "Good sense of humor", "Adventurous",
+        "Supportive", "Well-settled", "Spiritual", "Good listener", "Confident", "Easy-going",
+    )
+    val CAREER_AFTER_MARRIAGE_OPTIONS = listOf("Continue working", "Open to pausing", "Flexible", "Prefer not to work")
+    val LIVING_ARRANGEMENTS = listOf("With parents", "Independent/nuclear", "Flexible")
+    val RELOCATION_PREFERENCES = listOf("Yes", "No", "Depends")
+    val LOVE_LANGUAGES = listOf("Words of affirmation", "Acts of service", "Quality time", "Gifts", "Physical touch")
+    val ABOUT_ME_PROMPTS = listOf(
+        "A life goal of mine is…",
+        "My friends would describe me as…",
+        "I geek out on…",
+        "My weekends usually look like…",
+        "A fact that surprises people about me…",
+        "My simple pleasures are…",
+        "The way to my heart is…",
+        "I'm currently obsessed with…",
+    )
+
+    // Tap-to-fill suggestions for the About Me tab's free-text fields --
+    // UNLIKE every list above, these are NOT a closed set (the backend
+    // fields stay plain free text, no validation) -- just saves typing for
+    // the common case. Deliberately long ("I want an exhaustive list",
+    // reported directly) -- the UI shows a short slice with a "show more"
+    // expander rather than trimming the list itself. Mirrors d2m_web's
+    // lib/taxonomy.js CUISINE_SUGGESTIONS / DESTINATION_SUGGESTIONS /
+    // WHAT_MATTERS_MOST_SUGGESTIONS.
+    val CUISINE_SUGGESTIONS = listOf(
+        "North Indian", "South Indian", "Punjabi", "Gujarati", "Rajasthani", "Bengali",
+        "Hyderabadi", "Chettinad", "Malabar", "Konkani", "Maharashtrian", "Goan",
+        "Italian", "Thai", "Chinese", "Japanese", "Korean", "Vietnamese",
+        "Mexican", "Mediterranean", "Lebanese", "Turkish", "Continental", "French",
+        "Spanish", "Greek", "American", "BBQ & grill", "Street food", "Vegan / plant-based",
+    )
+    // Dream destination dropped this static list in favor of
+    // CityAutocomplete's live Open-Meteo search (ChildProfileDialogScreen.kt)
+    // -- "provide the same suggestion option as locations", reported
+    // directly. No callers left; d2m_web's own DESTINATION_SUGGESTIONS was
+    // removed the same way.
+    val WHAT_MATTERS_MOST_SUGGESTIONS = listOf(
+        "Kindness and honesty",
+        "Shared values and mutual respect",
+        "Great communication",
+        "Ambition and drive",
+        "A strong sense of family",
+        "Humor and positivity",
+        "Emotional maturity",
+        "Loyalty and trust",
+        "Being each other's best friend",
+        "Growing together",
+        "Financial responsibility",
+        "Spiritual compatibility",
+        "Supporting each other's dreams",
+        "A partner who really listens",
+        "Balancing career and family",
+        "Respect for each other's families",
+        "Adventure and shared experiences",
+        "Patience and understanding",
+    )
+
     private val ACRONYMS = mapOf("usa" to "USA", "uk" to "UK", "ncr" to "NCR")
 
     /** "5l_10l" -> "5L - 10L"-ish, "usa_bay_area" -> "Usa Bay Area" -- same simple title-casing as toLabel() on web. */

@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,9 +28,28 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.d2m
+
+/**
+ * The authenticated photo ImageLoader (data/network/PhotoImageLoader.kt),
+ * provided once at the App() root (App.kt) via CompositionLocalProvider so
+ * every ProfilePhoto/ProfileThumb below it -- MatchCard, DiscoveryScreen,
+ * ChildHomeScreen's own inlined AsyncImage spots -- picks it up without
+ * threading an ImageLoader parameter through every intermediate composable.
+ * Falls back to Coil's plain default loader (unauthenticated) rather than
+ * crashing if something renders a photo outside that provider, e.g. a
+ * preview/test composition.
+ */
+val LocalPhotoImageLoader = compositionLocalOf<ImageLoader?> { null }
+
+@Composable
+fun rememberPhotoImageLoader(): ImageLoader =
+    LocalPhotoImageLoader.current ?: SingletonImageLoader.get(LocalPlatformContext.current)
 
 /*
  * Profile photograph, with the comps' treatment for not having one.
@@ -118,6 +138,7 @@ fun ProfilePhoto(
         if (photoUrl != null) {
             AsyncImage(
                 model = photoUrl,
+                imageLoader = rememberPhotoImageLoader(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -146,6 +167,11 @@ fun ProfilePhoto(
 /**
  * Fixed-size square variant, for row-shaped compact cards and chat
  * avatars where a fluid aspect-ratio band makes no sense.
+ *
+ * `overlay` mirrors ProfilePhoto's own slot above -- added so a shortlist
+ * star can anchor to this thumb's own corner (MatchCard's COMPACT row)
+ * instead of sitting in a separate column disconnected from the photo it's
+ * supposedly marking.
  */
 @Composable
 fun ProfileThumb(
@@ -154,6 +180,7 @@ fun ProfileThumb(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     shape: Shape = RoundedCornerShape(D2MRadius.md),
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Box(
         modifier.size(size).clip(shape).background(d2m.surfaceSunken),
@@ -162,6 +189,7 @@ fun ProfileThumb(
         if (photoUrl != null) {
             AsyncImage(
                 model = photoUrl,
+                imageLoader = rememberPhotoImageLoader(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -169,5 +197,6 @@ fun ProfileThumb(
         } else {
             PersonGlyph(size * 0.5f)
         }
+        overlay?.invoke(this)
     }
 }

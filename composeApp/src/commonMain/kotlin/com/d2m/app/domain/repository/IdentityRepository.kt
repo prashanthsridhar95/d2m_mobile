@@ -84,4 +84,16 @@ class IdentityRepository(
         cache.setCached("extended-bio:$primaryId", result)
         return result
     }
+
+    suspend fun getAboutMe(primaryId: String, forceRefresh: Boolean = false): AboutMeDataOut {
+        val key = "about-me:$primaryId"
+        if (forceRefresh) cache.invalidateKey(key)
+        return cache.get(key) { api.getAboutMe(primaryId) }.value
+    }
+
+    suspend fun updateAboutMe(primaryId: String, body: AboutMeDataIn): AboutMeDataOut {
+        val result = api.updateAboutMe(primaryId, body)
+        cache.setCached("about-me:$primaryId", result)
+        return result
+    }
 }

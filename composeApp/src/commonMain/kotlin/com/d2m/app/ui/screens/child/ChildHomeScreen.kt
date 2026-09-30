@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.d2m.app.ui.components.rememberPhotoImageLoader
 import com.d2m.app.data.model.ConsentRequestOut
 import com.d2m.app.data.model.PrimaryProfileOut
 import com.d2m.app.data.model.SponsorStatusOut
@@ -463,6 +464,7 @@ private fun HeroBanner(
             if (resolvedPhoto != null) {
                 AsyncImage(
                     model = resolvedPhoto,
+                    imageLoader = rememberPhotoImageLoader(),
                     contentDescription = activeThread.otherParticipantName,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -592,7 +594,13 @@ private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiCli
         contentAlignment = Alignment.Center,
     ) {
         if (resolved != null) {
-            AsyncImage(model = resolved, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = resolved,
+                imageLoader = rememberPhotoImageLoader(),
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             Text(
                 (name?.trim()?.firstOrNull() ?: '?').uppercaseChar().toString(),

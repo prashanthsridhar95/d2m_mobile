@@ -29,6 +29,9 @@ val appModule = module {
     single { ApiClient(engine = httpEngine()) }
 
     single { IdentityApi(get()) }
+    // Forensic watermark audit ping (data/network/AuditApi.kt) -- consumed
+    // by ui/components/WatermarkOverlay.kt.
+    single { AuditApi(get(), get()) }
     single { SuggestionsApi(get()) }
     single { BufferApi(get()) }
     single { SeriousModeApi(get()) }
@@ -39,6 +42,7 @@ val appModule = module {
     single { DashboardApi(get()) }
     single { PanchangamApi(get()) }
     single { GeocodingApi(httpEngine()) }
+    single { ShareLinksApi(get()) }
 
     single { IdentityRepository(get(), get()) }
     single { SuggestionsRepository(get(), get(), get()) }
@@ -46,6 +50,8 @@ val appModule = module {
     single { ConsentRepository(get(), get()) }
     single { NotificationsRepository(get(), get()) }
     single { DashboardRepository(get(), get()) }
+    single { ShareLinksRepository(get(), get()) }
+    single { ShareLinkFieldsCache(createSettings()) }
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }
     single { AdminRepository(get()) }
@@ -104,4 +110,10 @@ val appModule = module {
     // Built once, not per-composition -- see messaging/ui/GifImageLoader.kt.
     // Reported directly: "GIF sent/received should be autoplaying."
     single { createGifImageLoader() }
+
+    // Authenticated profile-photo loader -- see data/network/PhotoImageLoader.kt's
+    // doc comment on why this is a separate ImageLoader/HttpClient from the
+    // app-wide Coil default (GifPicker.kt's Giphy fetches, chat media) rather
+    // than a global singleton swap.
+    single { createPhotoImageLoader(get()) }
 }

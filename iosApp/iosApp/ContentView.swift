@@ -4,13 +4,42 @@ import ComposeApp
 /// Thin UIViewControllerRepresentable wrapping the Kotlin-side
 /// MainViewController() (composeApp/src/iosMain/.../MainViewController.kt),
 /// which itself starts Koin and hosts App() -- the same root composable
-/// androidMain's MainActivity renders. This file, iOSApp.swift, and
-/// Info.plist are the only 3 pieces of Swift/plist source this app needs;
-/// everything else (navigation, screens, networking, state) lives in
-/// commonMain and is shared with Android.
+/// androidMain's MainActivity renders. This file, iOSApp.swift,
+/// ScreenshotSecureContainerView.swift, and Info.plist are the only 4
+/// pieces of Swift/plist source this app needs; everything else
+/// (navigation, screens, networking, state) lives in commonMain and is
+/// shared with Android.
+///
+/// The Compose view controller's own .view is reparented inside
+/// ScreenshotSecureContainerView rather than added directly -- see that
+/// file's doc comment for what this buys (real screenshot/recording
+/// exclusion on device, android/security/ScreenCapture.kt's own comment
+/// on why Apple gives apps no supported way to get this) and its real
+/// risk (unofficial, can break silently on a future iOS release).
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
-        MainViewControllerKt.MainViewController()
+        let composeVC = MainViewControllerKt.MainViewController()
+        let wrapper = UIViewController()
+
+        let secureContainer = ScreenshotSecureContainerView(frame: .zero)
+        secureContainer.translatesAutoresizingMaskIntoConstraints = false
+        wrapper.view.addSubview(secureContainer)
+        NSLayoutConstraint.activate([
+            secureContainer.leadingAnchor.constraint(equalTo: wrapper.view.leadingAnchor),
+            secureContainer.trailingAnchor.constraint(equalTo: wrapper.view.trailingAnchor),
+            secureContainer.topAnchor.constraint(equalTo: wrapper.view.topAnchor),
+            secureContainer.bottomAnchor.constraint(equalTo: wrapper.view.bottomAnchor),
+        ])
+
+        // Standard UIViewController containment (addChild/didMove) --
+        // without it, composeVC never receives viewWillAppear/
+        // viewDidAppear and Compose Multiplatform's own lifecycle-driven
+        // setup (e.g. resuming its render loop) doesn't fire correctly.
+        wrapper.addChild(composeVC)
+        secureContainer.hideContent(composeVC.view)
+        composeVC.didMove(toParent: wrapper)
+
+        return wrapper
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}

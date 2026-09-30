@@ -27,7 +27,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -42,14 +41,16 @@ import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.ui.components.CompatibilityCard
+import com.d2m.app.ui.components.CompatibilityCardSize
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
-import com.d2m.app.ui.components.D2MLevelPill
 import com.d2m.app.ui.components.D2MProfileTabsPanel
+import com.d2m.app.ui.components.rememberPhotoImageLoader
 import com.d2m.app.ui.components.astrologicalCompatibility
 import com.d2m.app.ui.components.overallRating
 import com.d2m.app.ui.components.preferenceCompatibility
@@ -202,6 +203,7 @@ fun DiscoveryScreen() {
                                 ) {
                                     AsyncImage(
                                         model = current.photoUrl?.let(apiClient::resolveMediaUrl),
+                                        imageLoader = rememberPhotoImageLoader(),
                                         contentDescription = current.candidateName,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize(),
@@ -209,23 +211,28 @@ fun DiscoveryScreen() {
                                 }
 
                                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.Top,
-                                    ) {
-                                        Column {
-                                            Text(
-                                                "${current.candidateName}${current.age?.let { ", $it" } ?: ""}",
-                                                style = MaterialTheme.typography.headlineSmall,
-                                                fontWeight = FontWeight.Bold,
-                                            )
-                                            val subline = listOfNotNull(current.city, current.occupationTitle).joinToString(" · ")
-                                            if (subline.isNotEmpty()) {
-                                                Text(subline, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
-                                            }
-                                        }
-                                        D2MLevelPill(rating)
+                                    // Compatibility used to sit inline beside
+                                    // the name (a D2MLevelPill in this same
+                                    // Row) with Astrology/Preferences as two
+                                    // plain "Astrology: High" text badges
+                                    // below -- web has never put
+                                    // Compatibility beside the name on its
+                                    // child view (only the parent's card
+                                    // moved there, and only on web, where
+                                    // there's room beside the name at all).
+                                    // CompatibilityCard on its own row below
+                                    // brings this in line with that, and
+                                    // replaces the plain-text badges with the
+                                    // same big-word treatment the parent's
+                                    // card uses.
+                                    Text(
+                                        "${current.candidateName}${current.age?.let { ", $it" } ?: ""}",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    val subline = listOfNotNull(current.city, current.occupationTitle).joinToString(" · ")
+                                    if (subline.isNotEmpty()) {
+                                        Text(subline, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
                                     }
 
                                     if (current.doshaFlags.isNotEmpty()) {
@@ -239,13 +246,12 @@ fun DiscoveryScreen() {
                                         }
                                     }
 
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.padding(top = 12.dp),
-                                    ) {
-                                        D2MBadge("Astrology: $astroLevel", D2MBadgeTone.NEUTRAL)
-                                        D2MBadge("Preferences: $prefLevel", D2MBadgeTone.NEUTRAL)
-                                    }
+                                    CompatibilityCard(
+                                        level = rating,
+                                        breakdown = listOf("Astrology" to astroLevel, "Preferences" to prefLevel),
+                                        size = CompatibilityCardSize.Small,
+                                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                    )
                                 }
                             }
                         }
@@ -256,7 +262,7 @@ fun DiscoveryScreen() {
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 20.dp, bottom = 10.dp),
                         )
-                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth())
+                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth(), showAboutMe = true)
 
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),

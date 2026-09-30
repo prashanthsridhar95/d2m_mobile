@@ -2,6 +2,7 @@ package com.d2m.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,6 +27,14 @@ import com.d2m.app.push.EXTRA_ACCEPT_CALL_ID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Real, OS-level screenshot/screen-recording block -- also hides
+        // this app's content from the recent-apps switcher thumbnail.
+        // Unlike iOS (see security/ScreenCapture.kt's doc comment: Apple
+        // gives apps no way to block capture, only a detect-after-the-fact
+        // notification), this actually prevents the capture from happening
+        // at all rather than just reacting to it. Set before setContent so
+        // there's no frame where sensitive content renders unprotected.
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         consumeAcceptExtra(intent)
         setContent {

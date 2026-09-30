@@ -26,6 +26,7 @@ import com.d2m.app.ui.screens.parity.PanchangamCalendarScreen
 import com.d2m.app.ui.screens.parity.SuccessGalleryScreen
 import com.d2m.app.ui.screens.shared.NotificationsScreen
 import com.d2m.app.ui.screens.shared.SettingsScreen
+import com.d2m.app.ui.screens.shared.ShareLinksScreen
 
 /**
  * Root NavHost -- mirrors src/App.jsx's route tree (Routes.kt). Bottom-tab
@@ -133,8 +134,13 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
 
         composable(Routes.NOTIFICATIONS) { NotificationsScreen() }
 
+        composable(Routes.SHARE_LINKS) { ShareLinksScreen() }
+
         composable(Routes.SETTINGS) {
-            SettingsScreen(onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) } })
+            SettingsScreen(
+                onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
+                onOpenShareLinks = { navController.navigate(Routes.SHARE_LINKS) },
+            )
         }
 
         composable(Routes.CHILD_PROFILE_DIALOG) {
