@@ -384,7 +384,16 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         vouchersError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(top = 14.dp)) {
                             when {
-                                vouchers == null && vouchersError == null -> Text("Loading…", color = mutedText(0.55f))
+                                vouchers == null && vouchersError == null -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    repeat(2) {
+                                        D2MCard(modifier = Modifier.fillMaxWidth()) {
+                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                D2MSkeleton(width = 140.dp, height = 13.dp)
+                                                D2MSkeleton(width = 90.dp, height = 11.dp)
+                                            }
+                                        }
+                                    }
+                                }
                                 vouchers?.isEmpty() == true -> Text("No match-visible vouches to show.", color = mutedText(0.55f))
                                 else -> vouchers?.forEach { v ->
                                     D2MCard(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {

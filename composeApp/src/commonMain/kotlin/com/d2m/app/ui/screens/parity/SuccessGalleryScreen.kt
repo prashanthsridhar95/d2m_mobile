@@ -24,6 +24,7 @@ import com.d2m.app.domain.repository.OffboardingRepository
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
@@ -52,7 +53,17 @@ fun SuccessGalleryScreen() {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             PageTitle("Success stories")
             when {
-                loading -> Text("Loading…", color = mutedText(0.55f))
+                loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
+                    repeat(3) {
+                        D2MCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                D2MSkeleton(width = 220.dp, height = 12.dp)
+                                D2MSkeleton(height = 12.dp)
+                                D2MSkeleton(width = 160.dp, height = 12.dp)
+                            }
+                        }
+                    }
+                }
                 error != null -> D2MErrorBanner(error!!)
                 entries.isEmpty() -> D2MEmptyState("Nothing published yet")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {

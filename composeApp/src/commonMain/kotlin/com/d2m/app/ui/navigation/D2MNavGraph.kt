@@ -114,7 +114,10 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
         }
 
         composable(Routes.MATCHES) {
-            MatchesScreen(onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) })
+            MatchesScreen(
+                onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
+                onOpenGallery = { navController.navigate(Routes.SUCCESS_GALLERY) },
+            )
         }
 
         composable(

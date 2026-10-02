@@ -43,8 +43,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import com.d2m.app.ui.components.rememberPhotoImageLoader
 import com.d2m.app.data.model.ConsentRequestOut
 import com.d2m.app.data.model.PrimaryProfileOut
 import com.d2m.app.data.model.SponsorStatusOut
@@ -64,6 +62,8 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.components.ProfilePhoto
+import com.d2m.app.ui.components.ProfileThumb
 import com.d2m.app.ui.components.SubHeading
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
@@ -449,61 +449,47 @@ private fun HeroBanner(
     if (activeThread != null) {
         val resolvedPhoto = candidatePhotoUrl?.let(apiClient::resolveMediaUrl)
         val isExclusive = activeThread.status == "exclusive"
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .clip(shape)
-                .then(
-                    if (resolvedPhoto == null) {
-                        Modifier.background(SolidColor(d2m.surfaceSunken))
-                    } else Modifier,
-                )
-                .clickable(onClick = onOpenChat),
-        ) {
-            if (resolvedPhoto != null) {
-                AsyncImage(
-                    model = resolvedPhoto,
-                    imageLoader = rememberPhotoImageLoader(),
-                    contentDescription = activeThread.otherParticipantName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
+        ProfilePhoto(
+            photoUrl = resolvedPhoto,
+            contentDescription = activeThread.otherParticipantName,
+            modifier = Modifier.clickable(onClick = onOpenChat),
+            fixedHeight = 220.dp,
+            shape = shape,
+            fallback = {
                 Text(
                     (activeThread.otherParticipantName.trim().firstOrNull() ?: '?').uppercaseChar().toString(),
                     fontSize = 56.sp,
                     fontWeight = FontWeight.Bold,
                     color = d2m.label,
-                    modifier = Modifier.align(Alignment.Center),
                 )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xCC181210))))
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-            ) {
-                Column {
-                    Text(activeThread.otherParticipantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(
-                        if (isExclusive) "You two are getting serious 💛" else "You matched -- say hi 💬",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+            },
+            overlay = {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xCC181210))))
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                ) {
+                    Column {
+                        Text(activeThread.otherParticipantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            if (isExclusive) "You two are getting serious 💛" else "You matched -- say hi 💬",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
-            }
 
-            D2MButton(
-                "Open chat",
-                onClick = onOpenChat,
-                size = D2MButtonSize.SM,
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-            )
-        }
+                D2MButton(
+                    "Open chat",
+                    onClick = onOpenChat,
+                    size = D2MButtonSize.SM,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                )
+            },
+        )
     } else {
         Column(
             modifier = Modifier
@@ -586,30 +572,20 @@ private fun SkeletonHomeRow() {
 @Composable
 private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiClient) {
     val resolved = url?.let(apiClient::resolveMediaUrl)
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(SolidColor(d2m.surfaceSunken)),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (resolved != null) {
-            AsyncImage(
-                model = resolved,
-                imageLoader = rememberPhotoImageLoader(),
-                contentDescription = name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
+    ProfileThumb(
+        photoUrl = resolved,
+        contentDescription = name,
+        size = size,
+        shape = CircleShape,
+        fallback = {
             Text(
                 (name?.trim()?.firstOrNull() ?: '?').uppercaseChar().toString(),
                 fontWeight = FontWeight.Bold,
                 fontSize = (size.value * 0.36f).sp,
                 color = d2m.label,
             )
-        }
-    }
+        },
+    )
 }
 
 /** Gradient avatar circle with an emoji glyph instead of a photo -- mirrors GlyphCircle.jsx. */

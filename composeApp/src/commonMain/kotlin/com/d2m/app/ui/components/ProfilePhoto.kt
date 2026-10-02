@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -126,11 +127,27 @@ fun ProfilePhoto(
     glyphSize: Dp = 34.dp,
     shape: Shape = RoundedCornerShape(0.dp),
     overlay: (@Composable BoxScope.() -> Unit)? = null,
+    // A hero banner (ChildHomeScreen.kt) needs a fixed height, not an
+    // aspect ratio -- its loading skeleton is also a fixed height (see
+    // that file's HeroBanner), and an aspect-ratio frame would stop
+    // matching that skeleton's height the moment real content (a
+    // different rendered width than assumed) replaces it, reintroducing
+    // exactly the layout-jump a skeleton exists to prevent. null (the
+    // default) keeps every existing caller's aspect-ratio behavior
+    // unchanged.
+    fixedHeight: Dp? = null,
+    // ChildHomeScreen.kt's hero banner shows the peer's initial letter
+    // when they have no photo, not this component's own PersonGlyph --
+    // a deliberate, pre-existing choice (mirrors HomeScreen.jsx's
+    // HeroBanner) this refactor isn't here to overrule. null (the
+    // default) keeps every existing caller's PersonGlyph+caption
+    // fallback unchanged.
+    fallback: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier
             .fillMaxWidth()
-            .aspectRatio(ratio)
+            .then(if (fixedHeight != null) Modifier.height(fixedHeight) else Modifier.aspectRatio(ratio))
             .clip(shape)
             .background(d2m.surfaceSunken),
         contentAlignment = Alignment.Center,
@@ -143,6 +160,8 @@ fun ProfilePhoto(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (fallback != null) {
+            fallback()
         } else {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -181,6 +200,13 @@ fun ProfileThumb(
     size: Dp = 56.dp,
     shape: Shape = RoundedCornerShape(D2MRadius.md),
     overlay: (@Composable BoxScope.() -> Unit)? = null,
+    // ChildHomeScreen.kt's PhotoCircle shows the peer's initial letter
+    // when they have no photo, not this component's own PersonGlyph --
+    // same deliberate, pre-existing per-context choice ProfilePhoto's
+    // own `fallback` param documents (mirrors PhotoCircle.jsx). null (the
+    // default) keeps every existing caller's PersonGlyph fallback
+    // unchanged.
+    fallback: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier.size(size).clip(shape).background(d2m.surfaceSunken),
@@ -194,6 +220,8 @@ fun ProfileThumb(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else if (fallback != null) {
+            fallback()
         } else {
             PersonGlyph(size * 0.5f)
         }

@@ -42,6 +42,7 @@ import com.d2m.app.ui.components.D2MCheckboxRow
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSelectField
+import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.PageTitle
@@ -66,6 +67,25 @@ private fun statusTone(status: String): D2MBadgeTone = when {
     status.contains("PENDING") -> D2MBadgeTone.WARNING
     status.contains("DECLIN") || status.contains("REVOK") -> D2MBadgeTone.DANGER
     else -> D2MBadgeTone.NEUTRAL
+}
+
+// Shared loading placeholder for every list in this screen (vouches
+// received/given, connections, endorsements, recommendations, external
+// references) -- previews the same "card, a couple text lines" shape
+// each list's real rows already render in. Replaces the plain
+// Text("Loading…") every section used to show for its list content.
+@Composable
+private fun TrustListSkeleton(count: Int = 2) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        repeat(count) {
+            D2MCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    D2MSkeleton(width = 140.dp, height = 13.dp)
+                    D2MSkeleton(width = 90.dp, height = 11.dp)
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -330,7 +350,7 @@ private fun VouchesSection(
 
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     when {
-                        loading -> Text("Loading…", color = mutedText(0.55f))
+                        loading -> TrustListSkeleton()
                         vouches.isNullOrEmpty() -> D2MEmptyState("No vouches yet", "Vouches you request or receive will appear here.")
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(vouches!!) { v ->
@@ -380,7 +400,7 @@ private fun VouchesSection(
 
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     when {
-                        givenLoading -> Text("Loading…", color = mutedText(0.55f))
+                        givenLoading -> TrustListSkeleton()
                         givenVouches.isNullOrEmpty() -> D2MEmptyState("You haven't vouched for anyone yet", "Vouches you give, on any profile, will appear here.")
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(givenVouches!!) { v ->
@@ -579,7 +599,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
 
     Column(modifier = Modifier.padding(top = 16.dp)) {
         when {
-            loading -> Text("Loading…", color = mutedText(0.55f))
+            loading -> TrustListSkeleton()
             connections.isNullOrEmpty() -> D2MEmptyState("No trusted connections yet", "Connections you invite or accept will appear here.")
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(connections!!) { c ->
@@ -754,7 +774,7 @@ private fun EndorsementsSection(
 
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
-                    loading -> Text("Loading…", color = mutedText(0.55f))
+                    loading -> TrustListSkeleton()
                     endorsements.isNullOrEmpty() -> D2MEmptyState("No endorsements yet", "Endorsements you request or receive will appear here.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(endorsements!!) { e ->
@@ -974,7 +994,7 @@ private fun RecommendationsSection(
 
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
-                    loading -> Text("Loading…", color = mutedText(0.55f))
+                    loading -> TrustListSkeleton()
                     recommendations.isNullOrEmpty() -> D2MEmptyState("No recommendations yet", "Recommendations you request or receive will appear here.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(recommendations!!) { r ->
@@ -1269,7 +1289,7 @@ private fun ExternalReferencesSection(
 
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
-                    loading -> Text("Loading…", color = mutedText(0.55f))
+                    loading -> TrustListSkeleton()
                     references.isNullOrEmpty() -> D2MEmptyState("No external references yet", "References you invite will appear here.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(references!!) { r ->

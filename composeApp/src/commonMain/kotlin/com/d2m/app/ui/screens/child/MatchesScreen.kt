@@ -64,12 +64,17 @@ import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.messaging.ui.mediaLabel
 import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.data.model.UnionStatusOut
+import com.d2m.app.domain.repository.OffboardingRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.D2MCheckboxRow
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
@@ -101,6 +106,24 @@ import org.koin.compose.koinInject
  */
 @Composable
 private fun avatarPlaceholder() = d2m.surfaceSunken
+
+// Shared loading placeholder for this screen's three list tabs (Matches,
+// Received, Sent) -- mirrors ThreadRow's own avatar-plus-two-lines shape
+// so the list doesn't visibly reflow once real rows replace it.
+@Composable
+private fun MatchesListSkeleton(count: Int = 3) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 14.dp)) {
+        repeat(count) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    D2MSkeleton(width = 140.dp, height = 13.dp)
+                    D2MSkeleton(width = 90.dp, height = 11.dp)
+                }
+            }
+        }
+    }
+}
 
 
 private val SHORT_MONTH_NAMES = listOf(
@@ -161,15 +184,26 @@ private fun fmtThreadListTime(epochMillis: Long): String {
  * any phone messaging app (and as web itself falls back to below 720px).
  */
 @Composable
-fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
+fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Unit = {}) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
     val callManager = org.koin.compose.koinInject<CallManager>()
     val messagingRepo = org.koin.compose.koinInject<MessagingRepository>()
     val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
+    val offboardingRepo = org.koin.compose.koinInject<OffboardingRepository>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+
+    // "Integrate offboarding flow" (reported directly) -- the union-confirm
+    // + Success Gallery opt-in banner, mirroring web's MatchesScreen.jsx
+    // treatment exactly (see that file's own loadUnionStatus/
+    // handleConfirmUnion/handleGalleryToggle). OffboardingRepository was
+    // already fully wired on this platform with zero UI callers before
+    // this -- this is that wiring.
+    var unionStatus by remember { mutableStateOf<UnionStatusOut?>(null) }
+    var unionBusy by remember { mutableStateOf(false) }
+    var unionError by remember { mutableStateOf<String?>(null) }
 
     // "Include request sent/request received profiles sections in matches
     // tab" (reported directly) -- a Thread only exists once BOTH sides
@@ -201,6 +235,74 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     var actionError by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
+
+    // Union status only means anything once a thread is exclusive, and
+    // getUnionStatus is a read-only peek (never creates a row) -- safe to
+    // refetch every time the active exclusive thread changes.
+    suspend fun loadUnionStatus() {
+        val pid = primaryId
+        val t = selected
+        if (pid == null || t == null) return
+        try {
+            unionStatus = offboardingRepo.getUnionStatus(pid, t.otherParticipantId)
+        } catch (e: Exception) {
+            // leave the previous value in place -- a stale-but-present
+            // status is less confusing than the banner vanishing on a
+            // transient error.
+        }
+    }
+
+    LaunchedEffect(selected?.threadId, selected?.status, primaryId) {
+        val t = selected
+        if (t == null || t.status != "exclusive") {
+            unionStatus = null
+            return@LaunchedEffect
+        }
+        loadUnionStatus()
+    }
+
+    fun confirmUnion() {
+        val pid = primaryId ?: return
+        val t = selected ?: return
+        unionBusy = true
+        unionError = null
+        scope.launch {
+            try {
+                offboardingRepo.confirmUnion(pid, t.otherParticipantId)
+                loadUnionStatus()
+            } catch (e: Exception) {
+                unionError = friendlyError(e, "Couldn't confirm the union.")
+            } finally {
+                unionBusy = false
+            }
+        }
+    }
+
+    fun toggleGalleryOptIn(consent: Boolean) {
+        val pid = primaryId ?: return
+        val t = selected ?: return
+        unionBusy = true
+        unionError = null
+        scope.launch {
+            try {
+                offboardingRepo.galleryOptIn(pid, t.otherParticipantId, consent)
+                loadUnionStatus()
+            } catch (e: Exception) {
+                unionError = friendlyError(e, "Couldn't update gallery opt-in.")
+            } finally {
+                unionBusy = false
+            }
+        }
+    }
+
+    val iAmUnionA = unionStatus?.primaryAId == primaryId
+    val myUnionConfirmed = unionStatus?.let { if (iAmUnionA) it.confirmedA else it.confirmedB } ?: false
+    // Banner only ever appears once someone has actually asked -- see
+    // web's MatchesScreen.jsx comment on the same gate: getUnionStatus
+    // synthesizes a "pending" row (both sides false) for every exclusive
+    // thread whether or not anyone's touched Confirm Union yet.
+    val otherUnionConfirmed = unionStatus?.let { if (iAmUnionA) it.confirmedB else it.confirmedA } ?: false
+    val myGalleryConsent = unionStatus?.let { if (iAmUnionA) it.galleryConsentA else it.galleryConsentB } ?: false
 
     // Was `threads = seriousModeRepo.getThreads(...)` with no guard -- every
     // caller below wraps its own action in runCatching but then calls this
@@ -344,7 +446,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                 )
                 when (matchesTab) {
                     0 -> when {
-                        loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                        loading -> MatchesListSkeleton()
                         error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
                         visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
@@ -356,7 +458,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                     1 -> {
                         requestsError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                         when {
-                            receivedRequests == null -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                            receivedRequests == null -> MatchesListSkeleton()
                             receivedRequests!!.isEmpty() -> D2MEmptyState("No requests waiting", "When someone sends you a request, it shows up here.")
                             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                                 items(receivedRequests!!, key = { it.candidateId }) { r ->
@@ -407,7 +509,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                         }
                     }
                     else -> when {
-                        sentRequests == null -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                        sentRequests == null -> MatchesListSkeleton()
                         sentRequests!!.isEmpty() -> D2MEmptyState("No requests sent", "Accept a suggestion from Discover to send a request.")
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                             items(sentRequests!!, key = { it.candidateId }) { r ->
@@ -500,10 +602,63 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                                     refresh()
                                 }
                             },
+                            showConfirmUnion = t.status == "exclusive" && !myUnionConfirmed,
+                            onConfirmUnion = { confirmUnion() },
                         )
                     },
                 )
                 actionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+                unionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+
+                // Banner only ever appears once someone has actually asked
+                // (myUnionConfirmed or otherUnionConfirmed) -- see the
+                // comment where those are computed above for why gating on
+                // unionStatus alone would nag both sides indefinitely just
+                // for being exclusive. "More options > Confirm Union" is
+                // still there for whoever wants to actually start it.
+                if (t.status == "exclusive" && unionStatus?.status != "confirmed" && (myUnionConfirmed || otherUnionConfirmed)) {
+                    D2MCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            if (myUnionConfirmed) {
+                                Text("Waiting on ${t.otherParticipantName} to confirm your union.", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                Text("${t.otherParticipantName} wants to confirm your union.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                D2MButton(text = "Confirm Union", size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
+                            }
+                        }
+                    }
+                }
+
+                if (t.status == "exclusive" && unionStatus?.status == "confirmed") {
+                    D2MCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("Union confirmed 🎉", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Share your story in the Success Gallery? Anonymized (5-year age buckets only) -- requires both sides to opt in, and you can revoke any time.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = mutedText(0.55f),
+                                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                            )
+                            D2MCheckboxRow(
+                                label = "Opt in to the Success Gallery",
+                                checked = myGalleryConsent,
+                                enabled = !unionBusy,
+                                onCheckedChange = { toggleGalleryOptIn(it) },
+                            )
+                            D2MButton(
+                                text = "View the Success Gallery",
+                                variant = D2MButtonVariant.OUTLINE,
+                                size = D2MButtonSize.SM,
+                                modifier = Modifier.padding(top = 10.dp),
+                                onClick = onOpenGallery,
+                            )
+                        }
+                    }
+                }
                 ChatPane(
                     peerId = t.otherParticipantId,
                     peerName = t.otherParticipantName,
@@ -711,6 +866,8 @@ private fun MoreOptionsMenu(
     onUnmatch: () -> Unit,
     onAcceptSeriousRequest: () -> Unit,
     onDeclineSeriousRequest: () -> Unit,
+    showConfirmUnion: Boolean = false,
+    onConfirmUnion: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
@@ -729,6 +886,9 @@ private fun MoreOptionsMenu(
             }
             if (thread.status == "exclusive") {
                 DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
+            }
+            if (showConfirmUnion) {
+                DropdownMenuItem(text = { Text("Confirm Union") }, onClick = { menuOpen = false; onConfirmUnion() })
             }
             DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
         }
