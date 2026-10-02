@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,20 +28,25 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.data.model.VouchOut
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.ShareLinksRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.domain.repository.TrustRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.ParentContactsStore
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.ui.components.CompatibilityCard
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
+import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.D2MBadge
@@ -75,6 +82,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     val suggestionsRepo: SuggestionsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
     val shareLinksRepo: ShareLinksRepository = koinInject()
+    val trustRepo: TrustRepository = koinInject()
     val contactsStore: ParentContactsStore = koinInject()
     val chatUiState: ChatUiState = koinInject()
     val apiClient: ApiClient = koinInject()
@@ -169,6 +177,33 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
         }
     }
 
+    // "In each profile, vouch data to be shown -- on clicking, get
+    // information of the people who have vouched" (reported directly).
+    // Viewer-agnostic (respects the profile owner's own
+    // show_match_trust_signals toggle server-side), so this loads
+    // unconditionally, independent of the candidate-card fetch above.
+    var trustSummary by remember(candidateId) { mutableStateOf<com.d2m.app.data.model.TrustSummaryOut?>(null) }
+    var vouchersDialogOpen by remember { mutableStateOf(false) }
+    var vouchers by remember { mutableStateOf<List<VouchOut>?>(null) }
+    var vouchersError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(candidateId) {
+        trustSummary = try {
+            trustRepo.getPublicTrustSummary(candidateId)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    LaunchedEffect(vouchersDialogOpen) {
+        if (!vouchersDialogOpen || vouchers != null) return@LaunchedEffect
+        try {
+            vouchers = trustRepo.listPublicVouches(candidateId)
+        } catch (e: Exception) {
+            vouchersError = friendlyError(e, "Couldn't load who vouched for this profile.")
+        }
+    }
+
     D2MTheme(flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             // A quiet text link, not a maroon GHOST button -- the comps
@@ -248,6 +283,32 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         }
                     }
 
+                    trustSummary?.badgeExplanations?.takeIf { it.isNotEmpty() }?.let { badges ->
+                        Column(modifier = Modifier.padding(top = 14.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                badges.forEach { D2MBadge(it.badge, D2MBadgeTone.NEUTRAL) }
+                            }
+                            // Only when the badge set actually includes a
+                            // real, match-visible vouch (familyVouched) --
+                            // the other badges (verification, endorsements)
+                            // have no individual-identity click-through at
+                            // all, and listPublicVouches would just come
+                            // back empty for them.
+                            if (trustSummary?.familyVouched == true) {
+                                LinkText(
+                                    "See who vouched",
+                                    onClick = {
+                                        vouchersDialogOpen = true
+                                        if (vouchers == null) {
+                                            vouchersError = null
+                                        }
+                                    },
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+                        }
+                    }
+
                     D2MProfileTabsPanel(
                         candidateId = candidateId,
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -310,6 +371,41 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        if (vouchersDialogOpen) {
+            Dialog(onDismissRequest = { vouchersDialogOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                D2MCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(24.dp)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Who vouched for ${candidate?.candidateName ?: "this profile"}", style = MaterialTheme.typography.titleMedium)
+                        vouchersError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
+                        Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(top = 14.dp)) {
+                            when {
+                                vouchers == null && vouchersError == null -> Text("Loading…", color = mutedText(0.55f))
+                                vouchers?.isEmpty() == true -> Text("No match-visible vouches to show.", color = mutedText(0.55f))
+                                else -> vouchers?.forEach { v ->
+                                    D2MCard(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(v.voucherName ?: "A family member", style = MaterialTheme.typography.titleSmall)
+                                            Text(
+                                                v.claimScopes.joinToString(", ") { it.lowercase().replace('_', ' ').replaceFirstChar { c -> c.uppercase() } },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = mutedText(0.55f),
+                                                modifier = Modifier.padding(top = 4.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        D2MButton(
+                            text = "Close",
+                            modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                            onClick = { vouchersDialogOpen = false },
+                        )
                     }
                 }
             }

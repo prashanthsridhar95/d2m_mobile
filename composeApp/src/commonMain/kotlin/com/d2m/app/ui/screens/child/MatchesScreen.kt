@@ -63,8 +63,14 @@ import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.messaging.ui.mediaLabel
+import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.D2MButtonSize
+import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
@@ -161,8 +167,22 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
     val callManager = org.koin.compose.koinInject<CallManager>()
     val messagingRepo = org.koin.compose.koinInject<MessagingRepository>()
+    val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+
+    // "Include request sent/request received profiles sections in matches
+    // tab" (reported directly) -- a Thread only exists once BOTH sides
+    // have accepted, so a pending one-sided Accept has nowhere to show up
+    // in this screen today. Same two endpoints HomeScreen already renders
+    // inline on its own activity feed, surfaced here as their own tab
+    // instead -- this screen's list is already a flat list of one kind of
+    // thing (threads), and a request isn't a thread yet.
+    var matchesTab by remember { mutableStateOf(0) } // 0 = matches, 1 = received, 2 = sent
+    var receivedRequests by remember { mutableStateOf<List<SuggestionOut>?>(null) }
+    var sentRequests by remember { mutableStateOf<List<SuggestionOut>?>(null) }
+    var requestsError by remember { mutableStateOf<String?>(null) }
+    var requestBusyId by remember { mutableStateOf<String?>(null) }
 
     var threads by remember { mutableStateOf<List<ThreadOut>>(emptyList()) }
     // "open profile & trigger system back - moves to matches page - should
@@ -221,6 +241,25 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             error = friendlyError(e, "Couldn't load your matches.")
         } finally {
             loading = false
+        }
+    }
+
+    suspend fun refreshReceived() {
+        if (primaryId == null) return
+        try {
+            receivedRequests = suggestionsRepo.getReceivedRequests(primaryId)
+        } catch (e: Exception) {
+            requestsError = friendlyError(e, "Couldn't load received requests.")
+        }
+    }
+
+    LaunchedEffect(primaryId) {
+        if (primaryId == null) return@LaunchedEffect
+        refreshReceived()
+        try {
+            sentRequests = suggestionsRepo.getSentRequests(primaryId)
+        } catch (e: Exception) {
+            requestsError = friendlyError(e, "Couldn't load sent requests.")
         }
     }
 
@@ -297,13 +336,89 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             // Thread list, full width -- default pane.
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 PageTitle("Matches")
-                when {
-                    loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
-                    error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                    visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                        items(visibleThreads) { thread ->
-                            ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
+                D2MTabs(
+                    titles = listOf("Matches", "Received", "Sent"),
+                    selectedIndex = matchesTab,
+                    onSelect = { matchesTab = it },
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                when (matchesTab) {
+                    0 -> when {
+                        loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                        error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
+                        visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                            items(visibleThreads) { thread ->
+                                ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
+                            }
+                        }
+                    }
+                    1 -> {
+                        requestsError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
+                        when {
+                            receivedRequests == null -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                            receivedRequests!!.isEmpty() -> D2MEmptyState("No requests waiting", "When someone sends you a request, it shows up here.")
+                            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                                items(receivedRequests!!, key = { it.candidateId }) { r ->
+                                    val busy = requestBusyId == r.candidateId
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
+                                            Text("Wants to match with you", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                        }
+                                        D2MButton(
+                                            text = "Accept", size = D2MButtonSize.SM, enabled = !busy,
+                                            onClick = {
+                                                val pid = primaryId ?: return@D2MButton
+                                                requestBusyId = r.candidateId
+                                                scope.launch {
+                                                    try {
+                                                        suggestionsRepo.act(pid, r.candidateId, "accept")
+                                                        refreshReceived()
+                                                    } catch (e: Exception) {
+                                                        requestsError = friendlyError(e, "Couldn't accept that request.")
+                                                    } finally {
+                                                        requestBusyId = null
+                                                    }
+                                                }
+                                            },
+                                        )
+                                        D2MButton(
+                                            text = "Decline", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
+                                            onClick = {
+                                                val pid = primaryId ?: return@D2MButton
+                                                requestBusyId = r.candidateId
+                                                scope.launch {
+                                                    try {
+                                                        suggestionsRepo.act(pid, r.candidateId, "reject")
+                                                        refreshReceived()
+                                                    } catch (e: Exception) {
+                                                        requestsError = friendlyError(e, "Couldn't decline that request.")
+                                                    } finally {
+                                                        requestBusyId = null
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> when {
+                        sentRequests == null -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                        sentRequests!!.isEmpty() -> D2MEmptyState("No requests sent", "Accept a suggestion from Discover to send a request.")
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                            items(sentRequests!!, key = { it.candidateId }) { r ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                    Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
+                                    Column {
+                                        Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
+                                        Text("Waiting for a reply", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                    }
+                                }
+                            }
                         }
                     }
                 }

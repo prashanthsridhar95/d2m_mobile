@@ -125,6 +125,17 @@ firebase-crashlytics-version = "3.0.7"
 # Android-only, same expect/actual pattern as stream-webrtc-android/coil-gif
 # above -- see messaging/ui/VideoPlayerView.android.kt.
 media3-version = "1.4.1"
+# Credential Manager -- current Google-recommended Android sign-in API
+# (supersedes the deprecated com.google.android.gms.auth.api.signin.
+# GoogleSignInClient), used for native Google Sign-In on the login/register
+# screen. See data/auth/GoogleSignInLauncher.android.kt. Confirmed current
+# stable on Google Maven at implementation time.
+androidx-credentials-version = "1.3.0"
+# Google's own GetGoogleIdOption/GoogleIdTokenCredential helpers on top of
+# Credential Manager -- what actually knows how to talk to Google
+# specifically (Credential Manager itself is provider-agnostic). Confirmed
+# current stable on Google Maven at implementation time.
+googleid-version = "1.1.1"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -183,6 +194,16 @@ stream-webrtc-android = { module = "io.getstream:stream-webrtc-android", version
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle-version" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3-version" }
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3-version" }
+
+# Native Google Sign-In (Credential Manager) -- see
+# data/auth/GoogleSignInLauncher.android.kt.
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidx-credentials-version" }
+# Credential Manager's Play Services backing implementation -- required at
+# runtime for the actual account-chooser UI to show on real
+# devices/emulators with Play Services (GetGoogleIdOption specifically
+# routes through this), not just the provider-agnostic API surface above.
+androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "androidx-credentials-version" }
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid-version" }
 
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }

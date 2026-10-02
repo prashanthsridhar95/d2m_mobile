@@ -15,3 +15,9 @@ actual fun httpEngine(): HttpClient = HttpClient(Darwin)
 // interface directly, unlike the Android emulator) or the host's real LAN
 // IP for a physical device.
 actual fun resolveDefaultBaseUrl(): String = "http://127.0.0.1:8000"
+
+// WedLock IAM has no production tunnel yet -- see WedLockApi.kt's doc
+// comment on resolveWedlockBaseUrl(). The iOS simulator shares the host's
+// loopback interface directly, so 127.0.0.1 reaches the locally-running
+// wedlock_iam service exactly like it reaches d2m_core_engine above.
+actual fun resolveWedlockBaseUrl(): String = "http://127.0.0.1:8010/api/v1"

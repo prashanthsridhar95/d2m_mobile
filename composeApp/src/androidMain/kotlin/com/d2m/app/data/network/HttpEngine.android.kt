@@ -25,3 +25,9 @@ actual fun httpEngine(): HttpClient = HttpClient(OkHttp)
 // "http://10.0.2.2:8000" (Android emulator's alias for the host's
 // 127.0.0.1:8000) or your host's real LAN IP for a physical device.
 actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
+
+// WedLock IAM has no production tunnel yet -- see WedLockApi.kt's doc
+// comment on resolveWedlockBaseUrl(). 10.0.2.2 is the Android emulator's
+// alias for the host machine's 127.0.0.1, same as the local-dev override
+// noted above for resolveDefaultBaseUrl().
+actual fun resolveWedlockBaseUrl(): String = "http://10.0.2.2:8010/api/v1"

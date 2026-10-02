@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -26,6 +27,7 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import com.d2m.app.data.session.IdentityStore
 
 /**
  * Thin wrapper over Ktor mirroring d2m_web/src/lib/apiClient.js: same base-URL
@@ -33,18 +35,25 @@ import kotlinx.serialization.json.JsonNamingStrategy
  * here, ApiCache owns that" split, same resolveMediaUrl for the backend's
  * relative /media/photos/... paths.
  *
- * Auth note: the backend has no session/token layer at all (see
- * session/IdentityStore.kt's doc comment) -- every call here is a plain,
- * unauthenticated request identified only by whatever sponsor_id/primary_id
- * is embedded in the path, exactly like the web app. There is no
- * Authorization header to attach. When real auth lands on the backend, this
- * is the one file that needs a bearer-token interceptor added.
+ * Auth note: d2m_core_engine's /sponsors and /invites/redeem endpoints now
+ * accept an optional `Authorization: Bearer <wedlock_jwt>` header (see
+ * app/routers/identity.py's create_sponsor/redeem_invite) -- a token
+ * obtained via WedLockApi.kt's login()/register flow and stashed in
+ * session/IdentityStore.kt. This client attaches that header, when present,
+ * to every request it makes (applyAuthHeader() below); most requests carry
+ * no such token server-side requirement today, but sending it unconditionally
+ * costs nothing since every other endpoint simply ignores an Authorization
+ * header it doesn't ask for. identityStore is optional (defaults to null)
+ * so anything constructing an ApiClient without a session context -- there
+ * is none in this app today, but this keeps the constructor from forcing
+ * one -- still works unauthenticated exactly as before.
  */
 class ApiError(val status: Int, val detail: String?, message: String) : Exception(message)
 
 class ApiClient(
     private val engine: HttpClient,
     var baseUrl: String = ApiConfig.DEFAULT_BASE_URL,
+    @PublishedApi internal val identityStore: IdentityStore? = null,
 ) {
     // d2m_core_engine's Pydantic schemas (app/schemas.py) are plain BaseModel
     // subclasses with no alias_generator -- every field goes over the wire as
@@ -77,6 +86,14 @@ class ApiClient(
     }
 
     fun url(path: String) = baseUrl.trimEnd('/') + path
+
+    /** Attaches the stored WedLock bearer token, if any -- see the class doc comment above. */
+    @PublishedApi
+    internal fun HttpRequestBuilder.applyAuthHeader() {
+        identityStore?.identity?.value?.wedlockAccessToken?.let { token ->
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+    }
 
     /**
      * Backoff for 429s -- the backend's rate limiter (app/rate_limit.py) is a
@@ -111,33 +128,63 @@ class ApiClient(
 
     suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap()): T =
         withRateLimitRetry {
-            unwrap(client.get(url(path)) { params.forEach { (k, v) -> if (v != null) parameter(k, v) } })
+            unwrap(client.get(url(path)) {
+                applyAuthHeader()
+                params.forEach { (k, v) -> if (v != null) parameter(k, v) }
+            })
         }
 
-    suspend inline fun <reified T> post(path: String, body: Any? = null): T =
+    // extraHeaders defaults to empty so every existing call site (none of
+    // which needed a per-call header before the trust subsystem) is
+    // unaffected. Added for the WedLock trust subsystem's step-up re-auth
+    // flow (app/routers/trust.py): a mutating trust call must carry the
+    // short-lived token from POST /trust/reauthenticate as
+    // `X-Step-Up-Token`, and that header is specific to ONE call, not the
+    // whole session -- unlike the Authorization bearer token, which
+    // applyAuthHeader() already attaches to every request unconditionally.
+    // See data/network/TrustApi.kt and ui/components/StepUpConfirmDialog.kt.
+    suspend inline fun <reified T> post(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.post(url(path)) {
+                applyAuthHeader()
                 contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
                 if (body != null) setBody(body)
             })
         }
 
-    suspend inline fun <reified T> put(path: String, body: Any? = null): T =
+    suspend inline fun <reified T> put(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.put(url(path)) {
+                applyAuthHeader()
                 contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
                 if (body != null) setBody(body)
             })
         }
 
-    suspend inline fun <reified T> delete(path: String): T =
-        withRateLimitRetry { unwrap(client.delete(url(path))) }
+    // body defaults to null, same additive shape as post/put above -- every
+    // existing DELETE call site is unaffected. Added for unlink_family
+    // (TrustApi.kt), the one DELETE in this app that needs a JSON body
+    // (the caller's password) rather than just headers.
+    suspend inline fun <reified T> delete(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
+        withRateLimitRetry {
+            unwrap(client.delete(url(path)) {
+                applyAuthHeader()
+                extraHeaders.forEach { (k, v) -> header(k, v) }
+                if (body != null) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            })
+        }
 
     /** Multipart photo upload -- mirrors postForm() in apiClient.js. */
     suspend inline fun <reified T> postForm(path: String, fileName: String, contentType: String, bytes: ByteArray): T =
         withRateLimitRetry {
             unwrap(
                 client.post(url(path)) {
+                    applyAuthHeader()
                     setBody(MultiPartFormDataContent(formData {
                         append("file", bytes, Headers.build {
                             append(HttpHeaders.ContentType, contentType)

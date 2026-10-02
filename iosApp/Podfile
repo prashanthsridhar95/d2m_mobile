@@ -18,6 +18,14 @@
 # extension doesn't depend on is possible but a bigger restructuring than
 # this pass -- fine to leave for later if the extension's binary size
 # becomes an actual issue.
+#
+# Same reasoning applies to GoogleSignIn (native Google Sign-In, see
+# composeApp/build.gradle.kts's cocoapods { pod("GoogleSignIn") } block and
+# data/auth/GoogleSignInLauncher.ios.kt): it's declared once, as
+# ComposeApp's own pod dependency, and reaches both targets here
+# transitively through `pod 'ComposeApp'` below -- deliberately NOT also
+# listed as a direct `pod 'GoogleSignIn'` line in either target block,
+# which would just be a redundant second declaration of the same pod.
 
 platform :ios, '15.0'
 use_frameworks!

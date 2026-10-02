@@ -185,6 +185,19 @@ kotlin {
             moduleName = "WebRTC"
             packageName = "cocoapods.webrtc"
         }
+
+        // Native Google Sign-In on iOS (GoogleSignInLauncher.ios.kt) --
+        // Google's official pod, same "Kotlin/Native cinterop bindings
+        // generated straight from the pod, no Swift glue" wiring as
+        // WebRTC-lib above. moduleName/packageName set explicitly for the
+        // same reason as that block: this project prefers an explicit,
+        // predictable generated package over whatever the plugin would
+        // derive from the pod name on its own.
+        pod("GoogleSignIn") {
+            version = "~> 7.1"
+            moduleName = "GoogleSignIn"
+            packageName = "cocoapods.googlesignin"
+        }
     }
 
     sourceSets {
@@ -300,6 +313,13 @@ kotlin {
                 // outside the app") -- see messaging/ui/VideoPlayerView.android.kt.
                 implementation(libs.media3.exoplayer)
                 implementation(libs.media3.ui)
+                // Native Google Sign-In (Credential Manager, replacing the
+                // deprecated GoogleSignInClient) -- see
+                // data/auth/GoogleSignInLauncher.android.kt and
+                // GoogleSignInConfig.kt's ANDROID_CLIENT_ID placeholder.
+                implementation(libs.androidx.credentials)
+                implementation(libs.androidx.credentials.play.services.auth)
+                implementation(libs.googleid)
             }
         }
 

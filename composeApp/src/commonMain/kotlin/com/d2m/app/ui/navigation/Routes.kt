@@ -36,6 +36,11 @@ object Routes {
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
     const val SHARE_LINKS = "share_links"
+    // WedLock trust subsystem Round 1 (vouches/trusted connections/
+    // endorsements) -- no free bottom-bar slot on either role's tab bar
+    // (both already have 4), so this is a Settings entry point for both
+    // roles, same placement pattern ShareLinksScreen uses on the child side.
+    const val TRUST = "trust"
 
     const val CHILD_PROFILE_DIALOG = "child_profile_dialog"
 

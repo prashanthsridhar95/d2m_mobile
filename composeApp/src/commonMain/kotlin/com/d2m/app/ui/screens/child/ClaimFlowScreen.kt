@@ -2,6 +2,7 @@ package com.d2m.app.ui.screens.child
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -15,12 +16,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
 import com.d2m.app.data.model.ChildPreferencesRequest
 import com.d2m.app.data.model.InviteRedeemRequest
+import com.d2m.app.data.network.WedLockApi
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MTextField
@@ -34,20 +38,42 @@ import org.koin.compose.koinInject
 
 /**
  * Mirrors screens/child/ClaimFlow.jsx: invite-redemption flow, internally
- * stepped (landing -> redeem form -> preferences -> photos-skippable). This
- * cut covers landing/redeem/preferences; photos step is intentionally
- * deferred to ChildProfileDialogScreen's Preferences/Photos surface (a
- * PhotoManager-equivalent component isn't built in this pass -- see plan
- * §4/§8, photo upload needs a platform picker actual that lands with the
- * rest of the platform actuals work).
+ * stepped (landing -> create account -> redeem form -> preferences ->
+ * photos-skippable). This cut covers landing/account/redeem/preferences;
+ * photos step is intentionally deferred to ChildProfileDialogScreen's
+ * Preferences/Photos surface (a PhotoManager-equivalent component isn't
+ * built in this pass -- see plan §4/§8, photo upload needs a platform
+ * picker actual that lands with the rest of the platform actuals work).
+ *
+ * The "create account" step (WedLock otp/send -> otp/verify -> set
+ * password -> register/self -> login) is new: d2m_core_engine's
+ * POST /invites/redeem forwards the CALLER's own WedLock bearer token to
+ * WedLock's linking-accept API server-to-server (see
+ * app/services/wedlock_bridge_service.py), so it has to be the CHILD's
+ * own SELF-type WedLock account, not the parent's -- registering here,
+ * right before redeeming, is the natural point: this is the first and
+ * only screen a child (who arrived via their parent's shared invite link)
+ * ever sees before they have a D2M identity of their own. That's also why
+ * this doesn't reuse LoginScreen.kt's register pane, which is
+ * parent-only.
  */
 @Composable
 fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
     val identityRepo: IdentityRepository = koinInject()
     val identityStore: IdentityStore = koinInject()
+    val wedLockApi: WedLockApi = koinInject()
     val scope = rememberCoroutineScope()
 
-    var step by remember { mutableStateOf(0) } // 0 = landing, 1 = redeem, 2 = preferences
+    var step by remember { mutableStateOf(0) } // 0 = landing, 1 = create account, 2 = redeem, 3 = preferences
+
+    // Step 1 -- WedLock account creation.
+    var accountSubStep by remember { mutableStateOf(0) } // 0 = email, 1 = otp, 2 = password
+    var wedlockEmail by remember { mutableStateOf("") }
+    var wedlockOtp by remember { mutableStateOf("") }
+    var wedlockPassword by remember { mutableStateOf("") }
+    var accountLoading by remember { mutableStateOf(false) }
+    var accountError by remember { mutableStateOf<String?>(null) }
+
     var name by remember { mutableStateOf("") }
     var contactInfo by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf(Taxonomy.GENDERS.first()) }
@@ -71,6 +97,89 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                     D2MButton(text = "Claim your profile", onClick = { step = 1 })
                 }
                 1 -> {
+                    SectionHeading("First, let's create your account.")
+                    when (accountSubStep) {
+                        0 -> {
+                            D2MTextField(label = "Your email", value = wedlockEmail, onValueChange = { wedlockEmail = it; accountError = null }, keyboardType = KeyboardType.Email)
+                            accountError?.let { D2MErrorBanner(it) }
+                            D2MButton(
+                                text = if (accountLoading) "Sending code…" else "Send code",
+                                enabled = wedlockEmail.isNotBlank() && !accountLoading,
+                                onClick = {
+                                    scope.launch {
+                                        accountLoading = true
+                                        accountError = null
+                                        try {
+                                            wedLockApi.sendRegistrationOtp(wedlockEmail)
+                                            accountSubStep = 1
+                                        } catch (e: Exception) {
+                                            accountError = friendlyError(e, "Couldn't send a code to that email.")
+                                        } finally {
+                                            accountLoading = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        1 -> {
+                            Text("We sent a 6-digit code to $wedlockEmail.", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                            D2MTextField(label = "Verification code", value = wedlockOtp, onValueChange = { wedlockOtp = it; accountError = null }, keyboardType = KeyboardType.Number)
+                            accountError?.let { D2MErrorBanner(it) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                D2MButton(
+                                    text = if (accountLoading) "Verifying…" else "Verify",
+                                    enabled = wedlockOtp.length == 6 && !accountLoading,
+                                    onClick = {
+                                        scope.launch {
+                                            accountLoading = true
+                                            accountError = null
+                                            try {
+                                                wedLockApi.verifyRegistrationOtp(wedlockEmail, wedlockOtp)
+                                                accountSubStep = 2
+                                            } catch (e: Exception) {
+                                                accountError = friendlyError(e, "That code didn't check out.")
+                                            } finally {
+                                                accountLoading = false
+                                            }
+                                        }
+                                    },
+                                )
+                                D2MButton(text = "Back", variant = D2MButtonVariant.OUTLINE, onClick = { accountSubStep = 0; wedlockOtp = ""; accountError = null })
+                            }
+                        }
+                        2 -> {
+                            D2MTextField(
+                                label = "Password",
+                                value = wedlockPassword,
+                                onValueChange = { wedlockPassword = it; accountError = null },
+                                isPassword = true,
+                                hint = "At least 8 characters.",
+                            )
+                            accountError?.let { D2MErrorBanner(it) }
+                            D2MButton(
+                                text = if (accountLoading) "Creating account…" else "Create account",
+                                enabled = wedlockPassword.length >= 8 && !accountLoading,
+                                onClick = {
+                                    scope.launch {
+                                        accountLoading = true
+                                        accountError = null
+                                        try {
+                                            wedLockApi.registerSelf(wedlockEmail, wedlockPassword)
+                                            val tokens = wedLockApi.login(emailOrPhone = wedlockEmail, password = wedlockPassword)
+                                            identityStore.setWedlockAccessToken(tokens.accessToken)
+                                            step = 2
+                                        } catch (e: Exception) {
+                                            accountError = friendlyError(e, "Couldn't create that account.")
+                                        } finally {
+                                            accountLoading = false
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+                2 -> {
                     SectionHeading("Let's make sure it's really you.")
                     D2MTextField("Your name", name, { name = it })
                     D2MTextField("Contact info (phone or email)", contactInfo, { contactInfo = it })
@@ -87,6 +196,9 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                 submitting = true
                                 error = null
                                 try {
+                                    // identityStore already carries this child's own
+                                    // WedLock access_token from step 1 above --
+                                    // ApiClient attaches it to this call transparently.
                                     val result = identityRepo.redeemInvite(
                                         InviteRedeemRequest(
                                             token = token.orEmpty(),
@@ -99,7 +211,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                         ),
                                     )
                                     primaryId = result.primaryId
-                                    step = 2
+                                    step = 3
                                 } catch (e: Exception) {
                                     error = friendlyError(e, "That link doesn't look right -- ask for a fresh one.")
                                 } finally {
@@ -109,7 +221,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                         },
                     )
                 }
-                2 -> {
+                3 -> {
                     SectionHeading("Who are you hoping to meet?")
                     androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         D2MTextField("Min age", minAge, { minAge = it }, modifier = Modifier.weight(1f))

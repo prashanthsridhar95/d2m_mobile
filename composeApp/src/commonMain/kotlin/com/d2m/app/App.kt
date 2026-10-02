@@ -58,6 +58,8 @@ import com.d2m.app.security.observeScreenCapture
 import com.d2m.app.security.observeScreenshotTaken
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.LocalPhotoImageLoader
+import com.d2m.app.ui.components.StepUpConfirmDialogHost
+import com.d2m.app.ui.components.StepUpController
 import com.d2m.app.ui.components.WatermarkOverlay
 import com.d2m.app.ui.navigation.ChildTabs
 import com.d2m.app.ui.navigation.D2MBottomBar
@@ -96,6 +98,7 @@ fun App() {
     val auditApi: AuditApi = koinInject()
     val seriousModeRepo: SeriousModeRepository = koinInject()
     val parentContactsStore: ParentContactsStore = koinInject()
+    val stepUpController: StepUpController = koinInject()
     // Authenticated profile-photo ImageLoader (data/network/PhotoImageLoader.kt)
     // -- provided once here so every ProfilePhoto/ProfileThumb below picks it
     // up via LocalPhotoImageLoader instead of the app-wide Coil default.
@@ -302,6 +305,14 @@ fun App() {
             // d2m_web's CallLayer.jsx sitting above its router. Renders
             // nothing while idle -- see CallLayer.kt.
             CallLayer()
+
+            // Reusable trust-subsystem step-up ("confirm your password")
+            // dialog -- mounted once here, same reasoning as CallLayer
+            // above, so any screen/ViewModel can just call
+            // stepUpController.confirmStepUp() without wiring its own
+            // Dialog. Renders nothing while no confirmation is pending --
+            // see ui/components/StepUpConfirmDialog.kt.
+            StepUpConfirmDialogHost(stepUpController)
 
             // Instagram-style in-app message banner (point 4 of the
             // notification request) -- mounted the same way as CallLayer so

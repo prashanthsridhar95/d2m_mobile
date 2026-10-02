@@ -27,6 +27,7 @@ import com.d2m.app.ui.screens.parity.SuccessGalleryScreen
 import com.d2m.app.ui.screens.shared.NotificationsScreen
 import com.d2m.app.ui.screens.shared.SettingsScreen
 import com.d2m.app.ui.screens.shared.ShareLinksScreen
+import com.d2m.app.ui.screens.shared.TrustScreen
 
 /**
  * Root NavHost -- mirrors src/App.jsx's route tree (Routes.kt). Bottom-tab
@@ -136,10 +137,13 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
 
         composable(Routes.SHARE_LINKS) { ShareLinksScreen() }
 
+        composable(Routes.TRUST) { TrustScreen() }
+
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
                 onOpenShareLinks = { navController.navigate(Routes.SHARE_LINKS) },
+                onOpenTrust = { navController.navigate(Routes.TRUST) },
             )
         }
 

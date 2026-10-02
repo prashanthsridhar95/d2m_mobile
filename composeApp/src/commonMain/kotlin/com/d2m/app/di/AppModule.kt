@@ -26,7 +26,15 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { ApiCache() }
-    single { ApiClient(engine = httpEngine()) }
+    // identityStore = get() lets ApiClient attach the stored WedLock bearer
+    // token to every d2m_core_engine request -- see ApiClient.kt's doc
+    // comment. Safe despite IdentityStore's own single{} being declared
+    // further down: Koin resolves get() lazily on first actual use, not in
+    // module-declaration order.
+    single { ApiClient(engine = httpEngine(), identityStore = get()) }
+    // Separate base URL/service -- see WedLockApi.kt's doc comment on why
+    // this isn't routed through the ApiClient above.
+    single { WedLockApi(httpEngine()) }
 
     single { IdentityApi(get()) }
     // Forensic watermark audit ping (data/network/AuditApi.kt) -- consumed
@@ -43,6 +51,9 @@ val appModule = module {
     single { PanchangamApi(get()) }
     single { GeocodingApi(httpEngine()) }
     single { ShareLinksApi(get()) }
+    // WedLock trust subsystem (vouches/trusted connections/endorsements) --
+    // Round 1 slice, see app/routers/trust.py + data/network/TrustApi.kt.
+    single { TrustApi(get()) }
 
     single { IdentityRepository(get(), get()) }
     single { SuggestionsRepository(get(), get(), get()) }
@@ -51,6 +62,7 @@ val appModule = module {
     single { NotificationsRepository(get(), get()) }
     single { DashboardRepository(get(), get()) }
     single { ShareLinksRepository(get(), get()) }
+    single { TrustRepository(get(), get()) }
     single { ShareLinkFieldsCache(createSettings()) }
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }
@@ -58,6 +70,11 @@ val appModule = module {
 
     single { IdentityStore(createSettings()) }
     single { com.d2m.app.ui.screens.onboarding.OnboardingResultHolder() }
+    // Reusable "confirm your password" step-up dialog controller -- see
+    // ui/components/StepUpConfirmDialog.kt's doc comment. Mounted once at
+    // the App.kt shell level (StepUpConfirmDialogHost), used from any
+    // screen via koinInject().
+    single { com.d2m.app.ui.components.StepUpController(get()) }
 
     single { PushTokenRegistrar(get(), get()) }
     single { com.d2m.app.push.PlatformPushInitializer() }

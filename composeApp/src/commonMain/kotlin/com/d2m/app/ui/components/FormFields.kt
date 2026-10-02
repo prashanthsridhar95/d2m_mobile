@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.d2m
@@ -112,6 +114,10 @@ fun D2MTextField(
     enabled: Boolean = true,
     singleLine: Boolean = true,
     minLines: Int = 1,
+    // Added for WedLock registration/login's password fields (LoginScreen.kt,
+    // ClaimFlowScreen.kt) -- nothing in this app needed masked input before.
+    // Same field chrome as every other D2MTextField, just masked.
+    isPassword: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth()) {
         if (label.isNotEmpty()) FieldLabel(label, optional)
@@ -126,7 +132,8 @@ fun D2MTextField(
             shape = RoundedCornerShape(D2MRadius.md),
             colors = fieldColors(),
             textStyle = MaterialTheme.typography.bodyLarge,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            keyboardOptions = KeyboardOptions(keyboardType = if (isPassword) KeyboardType.Password else keyboardType),
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         )
         if (hint != null) FieldHint(hint)
     }

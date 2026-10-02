@@ -26,14 +26,25 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.model.NotificationPreferenceIn
+import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.Identity
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.NotificationsRepository
+import com.d2m.app.domain.repository.TrustRepository
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.ProfileThumb
 import com.d2m.app.ui.theme.D2MFlow
@@ -52,9 +63,10 @@ import org.koin.compose.koinInject
  * logout page (no equivalent basic-data/filters concept for sponsors).
  */
 @Composable
-fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit) {
+fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTrust: () -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
+    val trustRepo: TrustRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -62,6 +74,13 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit) {
     var frequency by remember { mutableStateOf("immediate") }
 
     val accountId = identity.sponsorId ?: identity.primaryId
+    // "Linking management of parent with child & vice versa" (reported
+    // directly) -- a Sponsor's linked child is identity.childPrimaryId
+    // (resolved and cached onto Identity the same way ParentBrowseScreen.kt
+    // does for search); if nothing has populated it yet (a first-ever
+    // visit landing directly on Settings), this section just doesn't
+    // render rather than re-implementing that lookup here too.
+    val linkedPrimaryId = if (identity.role == D2MRole.PARENT) identity.childPrimaryId else identity.primaryId
     LaunchedEffect(accountId) {
         if (accountId == null) return@LaunchedEffect
         runCatching { notificationsRepo.getPreferences(accountId) }.onSuccess {
@@ -104,10 +123,113 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit) {
                 D2MButton(text = "Share my profile", variant = D2MButtonVariant.OUTLINE, onClick = onOpenShareLinks)
             }
 
+            // WedLock trust subsystem (vouches/trusted connections/
+            // endorsements) -- neither role's bottom tab bar has a free
+            // slot (both already have 4, see AppScaffold.kt's D2MTab), so
+            // this is the entry point for both roles, same "Settings" home
+            // "Share my profile" is already using for the child side.
+            D2MButton(text = "Trust & vouches", variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
+
+            if (linkedPrimaryId != null) {
+                FamilyLinkSection(identity = identity, linkedPrimaryId = linkedPrimaryId, trustRepo = trustRepo)
+            }
+
             D2MButton(text = "Log out", variant = D2MButtonVariant.OUTLINE, onClick = {
                 identityStore.clear()
                 onLogout()
             })
+        }
+    }
+}
+
+// "Linking management of parent with child & vice versa" (reported
+// directly) -- not built on StepUpConfirmDialog.kt's existing pattern:
+// that mints a pre-scoped X-Step-Up-Token via WedLock's generic
+// reauthenticate(), which can't satisfy unlink_family's stricter,
+// action-bound require_action_proof (confirmed by live testing against
+// the real stack -- see trust_bridge_service.unlink_family's own
+// docstring on the d2m_core_engine side); this sends the raw password
+// straight through instead.
+@Composable
+private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trustRepo: TrustRepository) {
+    val scope = rememberCoroutineScope()
+    var dialogOpen by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var done by remember { mutableStateOf(false) }
+
+    HorizontalDivider()
+    Column {
+        Text("Family link", fontWeight = FontWeight.Bold)
+        if (done) {
+            Text(
+                "This account is no longer linked to a family member. Log out and back in to refresh the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = mutedText(0.55f),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else {
+            Text(
+                if (identity.role == D2MRole.PARENT) {
+                    "Removes the family link between you and your child's account. Your child's profile and data stay intact, just no longer paired with you."
+                } else {
+                    "Removes the family link between you and your parent's account. Your own profile and data stay intact, just no longer paired with them."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = mutedText(0.55f),
+                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+            )
+            D2MButton(
+                text = "Unlink family account",
+                variant = D2MButtonVariant.OUTLINE,
+                onClick = { password = ""; error = null; dialogOpen = true },
+            )
+        }
+    }
+
+    if (dialogOpen) {
+        Dialog(onDismissRequest = { if (!busy) dialogOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            D2MCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(24.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Confirm with your password", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "This permanently severs the family link -- re-enter your password to continue.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = mutedText(0.55f),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                    )
+                    D2MTextField(label = "Password", value = password, onValueChange = { password = it }, isPassword = true)
+                    error?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        D2MButton(
+                            text = "Cancel", variant = D2MButtonVariant.OUTLINE, enabled = !busy,
+                            modifier = Modifier.weight(1f),
+                            onClick = { dialogOpen = false },
+                        )
+                        D2MButton(
+                            text = if (busy) "Unlinking…" else "Unlink",
+                            enabled = !busy && password.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                busy = true
+                                error = null
+                                scope.launch {
+                                    try {
+                                        trustRepo.unlinkFamily(linkedPrimaryId, password)
+                                        done = true
+                                        dialogOpen = false
+                                    } catch (e: Exception) {
+                                        error = friendlyError(e, "Couldn't unlink right now.")
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }
