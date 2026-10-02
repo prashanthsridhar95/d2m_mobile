@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MFilterSheet
 import com.d2m.app.ui.components.D2MSegmented
 import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.FacetGroup
 import com.d2m.app.ui.components.FacetState
 import com.d2m.app.ui.components.MatchCard
@@ -46,6 +48,8 @@ import com.d2m.app.ui.screens.parity.BrowseTable
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.d2m
+import com.d2m.app.domain.repository.IdentityRepository
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -78,8 +82,19 @@ import org.koin.compose.koinInject
 fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
+    val identityRepo: IdentityRepository = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    // "Provide an ID for each profile for easy search & finding" (reported
+    // directly) -- a direct server lookup by short_id, distinct from the
+    // client-side facet filters below: this can land on any profile at
+    // all, not just one already in `pool` (which only ever holds this
+    // sponsor's own matching/browse-all candidates).
+    var shortIdQuery by remember { mutableStateOf("") }
+    var shortIdSearching by remember { mutableStateOf(false) }
+    var shortIdError by remember { mutableStateOf<String?>(null) }
 
     var mode by remember { mutableStateOf(0) } // 0 = matching, 1 = all
     var tableView by remember { mutableStateOf(false) }
@@ -187,6 +202,42 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 } else null,
                 modifier = Modifier.padding(top = 12.dp),
             )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            ) {
+                D2MTextField(
+                    label = "",
+                    value = shortIdQuery,
+                    onValueChange = { shortIdQuery = it; shortIdError = null },
+                    placeholder = "Find profile by ID…",
+                    modifier = Modifier.weight(1f),
+                )
+                D2MButton(
+                    text = if (shortIdSearching) "Finding…" else "Find",
+                    enabled = shortIdQuery.isNotBlank() && !shortIdSearching,
+                    size = D2MButtonSize.SM,
+                    onClick = {
+                        val code = shortIdQuery.trim()
+                        scope.launch {
+                            shortIdSearching = true
+                            shortIdError = null
+                            try {
+                                val result = identityRepo.searchByShortId(code)
+                                shortIdQuery = ""
+                                onOpenProfile(result.primaryId)
+                            } catch (e: Exception) {
+                                shortIdError = friendlyError(e, "Couldn't search for that ID.")
+                            } finally {
+                                shortIdSearching = false
+                            }
+                        }
+                    },
+                )
+            }
+            shortIdError?.let { D2MErrorBanner(it) }
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),

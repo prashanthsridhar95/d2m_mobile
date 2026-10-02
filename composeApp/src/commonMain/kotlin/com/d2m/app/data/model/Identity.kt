@@ -145,6 +145,20 @@ data class PrimarySponsorOut(
     val sponsorId: String,
 )
 
+/** GET /primaries/search?code= result -- "provide an ID for each profile
+ * for easy search & finding" (reported directly). Minimal preview card,
+ * not a full candidate/match shape -- a short_id lookup isn't the
+ * matching pipeline's output, just a direct lookup by a human-shared
+ * code; ParentBrowseScreen navigates straight to ProfileDetailScreen on
+ * a hit, which fetches the real candidate card itself. */
+@Serializable
+data class ShortIdSearchResultOut(
+    val primaryId: String,
+    val shortId: String,
+    val name: String,
+    val photoUrl: String? = null,
+)
+
 @Serializable
 data class LocationPreferenceIn(
     val acceptLocations: List<String>,

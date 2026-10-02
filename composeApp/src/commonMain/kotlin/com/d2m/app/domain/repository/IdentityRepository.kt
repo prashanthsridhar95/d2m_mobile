@@ -49,6 +49,11 @@ class IdentityRepository(
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         cache.get("primary-sponsor:$primaryId") { api.getPrimarySponsor(primaryId) }.value
 
+    // Not cached -- a one-off lookup triggered by an explicit search
+    // action, not a value any other screen would ever re-read.
+    suspend fun searchByShortId(code: String): ShortIdSearchResultOut =
+        api.searchByShortId(code)
+
     suspend fun updateLocationPreference(sponsorId: String, body: LocationPreferenceIn): LocationPreferenceOut {
         val result = api.updateLocationPreference(sponsorId, body)
         cache.invalidate("dashboard:")

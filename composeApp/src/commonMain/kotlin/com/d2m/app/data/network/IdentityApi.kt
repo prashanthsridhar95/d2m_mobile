@@ -26,6 +26,9 @@ class IdentityApi(private val api: ApiClient) {
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         api.get("/primaries/$primaryId/sponsor")
 
+    suspend fun searchByShortId(code: String): ShortIdSearchResultOut =
+        api.get("/primaries/search", mapOf("code" to code))
+
     suspend fun updateLocationPreference(sponsorId: String, body: LocationPreferenceIn): LocationPreferenceOut =
         api.put("/sponsors/$sponsorId/location-preference", body)
 

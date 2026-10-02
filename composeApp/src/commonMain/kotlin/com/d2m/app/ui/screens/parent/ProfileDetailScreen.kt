@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SuggestionOut
@@ -30,6 +32,7 @@ import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
+import com.d2m.app.domain.repository.ShareLinksRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.ParentContactsStore
@@ -54,6 +57,7 @@ import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -70,11 +74,13 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
+    val shareLinksRepo: ShareLinksRepository = koinInject()
     val contactsStore: ParentContactsStore = koinInject()
     val chatUiState: ChatUiState = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
 
     var candidate by remember { mutableStateOf<SuggestionOut?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -82,6 +88,13 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     var actionInFlight by remember { mutableStateOf(false) }
     var messageParentBusy by remember { mutableStateOf(false) }
     var messageParentError by remember { mutableStateOf<String?>(null) }
+    // "Share profile - from other users (people who are discovering) --
+    // only parent mode (Default link share to be generated for all
+    // profiles -- use that here)" (reported directly). Always "full" --
+    // the only detail level a caller sharing a profile they don't own is
+    // allowed to create (app/routers/identity.py::create_share_link).
+    var shareState by remember { mutableStateOf("idle") } // idle | busy | copied | error
+    var shareError by remember { mutableStateOf<String?>(null) }
 
     // Open, no request/accept gate -- mirrors ProfileDetailScreen.jsx's
     // handleMessageParent exactly, see that file's own comment: "there is no
@@ -120,6 +133,23 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 messageParentError = friendlyError(e, "Couldn't start that conversation.")
             } finally {
                 messageParentBusy = false
+            }
+        }
+    }
+
+    fun shareProfile() {
+        scope.launch {
+            shareState = "busy"
+            shareError = null
+            try {
+                val link = shareLinksRepo.createShareLink(candidateId, "full")
+                clipboard.setText(AnnotatedString("${apiClient.baseUrl.trimEnd('/')}/${link.code}"))
+                shareState = "copied"
+                delay(2000)
+                if (shareState == "copied") shareState = "idle"
+            } catch (e: Exception) {
+                shareState = "error"
+                shareError = friendlyError(e, "Couldn't create a share link.")
             }
         }
     }
@@ -225,6 +255,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     )
 
                     messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
+                    shareError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
 
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (identity.role == D2MRole.PARENT) {
@@ -250,6 +281,16 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 variant = D2MButtonVariant.OUTLINE,
                                 enabled = !messageParentBusy,
                                 onClick = { messageParent() },
+                            )
+                            D2MButton(
+                                text = when (shareState) {
+                                    "busy" -> "Creating link…"
+                                    "copied" -> "Link copied ✓"
+                                    else -> "Share this profile"
+                                },
+                                variant = D2MButtonVariant.OUTLINE,
+                                enabled = shareState != "busy",
+                                onClick = { shareProfile() },
                             )
                         } else {
                             listOf("accept" to "Send request", "snooze" to "Snooze", "reject" to "Pass").forEach { (action, label) ->
