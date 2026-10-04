@@ -349,6 +349,53 @@ val localProperties = Properties().apply {
 }
 val giphyApiKey: String = (localProperties.getProperty("GIPHY_API_KEY") ?: "dc6zaTOxFJmzC")
 
+// Release signing. Before this block, `buildTypes { getByName("release") {
+// isMinifyEnabled = false } }` had no `signingConfig` at all, which means
+// AGP silently fell back to the debug keystore (a fixed, publicly-known
+// password/alias shipped in every AGP install, specifically so local debug
+// builds work with zero setup) -- so every "release" APK built from this
+// project so far has actually been debug-signed. That's fine for the thing
+// debug signing is for (installing a build on a device), but it is NOT a
+// real release key: Play Store rejects an upload signed with it, and even
+// if it didn't, every engineer's checkout would be signing with the same
+// public key, defeating the entire point of app-signing (proving updates
+// come from the same place).
+//
+// Real signing material is deliberately NOT introduced here -- there is no
+// actual release keystore for this project yet, and committing one (or a
+// fabricated password) would be worse than the current gap. Instead this
+// reads the four standard pieces of signing config (keystore path, store
+// password, key alias, key password) from whichever of two places actually
+// has them:
+//   1. local.properties -- gitignored, never committed (see .gitignore and
+//      the GIPHY_API_KEY precedent just above) -- for a developer's own
+//      machine.
+//   2. Environment variables of the same name -- for CI, where secrets are
+//      injected via GitHub Actions `secrets.*` as env vars, never written
+//      to a file in the checkout at all.
+// local.properties wins when both are set, matching GIPHY_API_KEY's
+// existing precedent above (local override takes priority over whatever
+// else is around).
+//
+// See README.md's "Release signing" section for how to actually generate a
+// keystore and wire these up, locally or in CI.
+fun releaseSigningProperty(key: String): String? =
+    localProperties.getProperty(key) ?: System.getenv(key)
+
+val releaseStoreFilePath = releaseSigningProperty("RELEASE_STORE_FILE")
+val releaseStorePassword = releaseSigningProperty("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
+
+// All four or none -- a partially-configured set (e.g. a password typo'd
+// into one property name) should not silently fall back to debug signing
+// as if nothing were configured at all; that would hide a real
+// misconfiguration behind the same "looks fine, built an APK" result as
+// the genuinely-unconfigured case below.
+val hasReleaseSigningConfig =
+    releaseStoreFilePath != null && releaseStorePassword != null &&
+        releaseKeyAlias != null && releaseKeyPassword != null
+
 android {
     namespace = "com.d2m.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -394,9 +441,61 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    signingConfigs {
+        // Only created when all four properties are actually present --
+        // `storeFile = file(null)` / empty-string passwords would otherwise
+        // fail later at sign time with a much less useful error than just
+        // not declaring the config at all.
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            // Real key when one is configured (see the signingConfigs
+            // block and the big comment above releaseSigningProperty for
+            // where these come from); otherwise fall back to the debug
+            // config rather than failing the build outright.
+            //
+            // This mirrors how this codebase treats "optional, dev-fallback
+            // vs. must-configure-for-real" elsewhere: an unauthenticated
+            // caller of a sensitive endpoint gets hard-rejected (see
+            // d2m_core_engine's INTERNAL_PUSH_SECRET / app/routers/
+            // internal.py, which 503s rather than silently accepting
+            // unsigned pushes) because that gap is exploitable by a third
+            // party the moment it exists. A missing release keystore isn't
+            // that -- nobody else can exploit *your* checkout not having a
+            // signing key -- it just means `assembleRelease` would be
+            // unusable for anyone (every engineer, CI before secrets are
+            // wired up) who hasn't set one up yet, for a build type whose
+            // whole job up to now has only ever been "the same APK as
+            // debug, minus debuggable flags". Hard-failing that trades a
+            // real local problem (nobody can use `assembleRelease` for
+            // anything, including just sanity-checking a shrink/obfuscate
+            // pass) for a hypothetical one (someone mistakes this debug-
+            // signed output for a real, Play-Store-uploadable release),
+            // which the loud warning below exists specifically to prevent.
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "No release signing config found (RELEASE_STORE_FILE / " +
+                        "RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / " +
+                        "RELEASE_KEY_PASSWORD, in local.properties or the " +
+                        "environment) -- assembleRelease will fall back to " +
+                        "debug signing. This build is NOT suitable for " +
+                        "Play Store upload. See README.md's 'Release " +
+                        "signing' section.",
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }

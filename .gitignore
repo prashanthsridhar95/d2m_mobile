@@ -17,6 +17,12 @@ captures/
 google-services.json
 GoogleService-Info.plist
 
+## Android release signing (never commit a real keystore -- see README's
+## "Release signing" section; RELEASE_STORE_FILE etc. live in
+## local.properties, already covered by the local.properties rule above)
+*.jks
+*.keystore
+
 ## Xcode / iOS
 # CocoaPods' installed output -- 96MB here, ~94MB of it WebRTC-lib's
 # prebuilt xcframework binaries. Reproducible from Podfile.lock (which IS

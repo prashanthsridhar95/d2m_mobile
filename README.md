@@ -202,6 +202,61 @@ Every coroutine's last-line-of-defense `CoroutineExceptionHandler`
 existing `println`, so a recovered-from bug is still visible in the
 Crashlytics dashboard after the fact, not just in a live logcat session.
 
+## Release signing
+
+`./gradlew :composeApp:assembleRelease` works out of the box with no setup
+at all -- `composeApp/build.gradle.kts`'s `release` build type falls back to
+debug signing (logging a Gradle warning when it does) if no real keystore is
+configured. That's fine for sanity-checking a release build locally, but it
+is **not** a build Play Store (or any real user) should ever receive: debug
+signing uses a fixed, publicly-known password/alias that every AGP install
+ships, so it proves nothing about who built the APK.
+
+To sign with a real key:
+
+1. Generate a keystore once (`keytool` ships with the JDK):
+   ```
+   keytool -genkeypair -v -keystore release.keystore.jks \
+     -alias d2m-release -keyalg RSA -keysize 2048 -validity 10000
+   ```
+   Keep the resulting `.jks` file and both passwords it prompts for
+   somewhere safe outside this repo -- `.gitignore` already excludes
+   `*.jks`/`*.keystore`, but a keystore that's lost can't be regenerated
+   with the same signature, and Play Store ties app updates to that
+   signature permanently.
+2. Locally: add these four keys to `local.properties` (gitignored, same
+   file `GIPHY_API_KEY` already lives in -- see "GIF picker" below):
+   ```
+   RELEASE_STORE_FILE=/absolute/or/project-relative/path/to/release.keystore.jks
+   RELEASE_STORE_PASSWORD=<your store password>
+   RELEASE_KEY_ALIAS=d2m-release
+   RELEASE_KEY_PASSWORD=<your key password>
+   ```
+3. In CI: the same four keys, but as GitHub Actions repository secrets
+   (Settings -> Secrets and variables -> Actions) rather than a committed
+   file, injected as environment variables of the same names just before
+   a signed build/task runs -- `composeApp/build.gradle.kts` reads
+   `local.properties` first and falls back to `System.getenv(...)`, so no
+   workflow change is needed beyond setting the job's `env:`:
+   ```yaml
+   - name: Build signed release
+     run: ./gradlew :composeApp:assembleRelease
+     env:
+       RELEASE_STORE_FILE: ${{ secrets.RELEASE_STORE_FILE }}   # path to a keystore written out by an earlier step
+       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+       RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+       RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+   ```
+   (`RELEASE_STORE_FILE` can't be a secret's raw bytes -- a typical setup
+   base64-encodes the keystore into its own secret and adds a step that
+   decodes it to a file path before the build, then points
+   `RELEASE_STORE_FILE` at that path.)
+
+   `.github/workflows/ci.yml` does **not** do any of this yet -- there is
+   no real release keystore for this project yet to put behind a secret,
+   so wiring up actual CI-side signing is left for whoever adds one, per
+   the three steps above.
+
 ## GIF picker
 
 The composer's GIF tab (`messaging/ui/GifPicker.kt`) calls GIPHY directly.
