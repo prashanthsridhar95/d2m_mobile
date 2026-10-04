@@ -15,6 +15,10 @@ class IdentityRepository(
     private val api: IdentityApi,
     private val cache: ApiCache,
 ) {
+    // Not cached -- only ever called once, right after a fresh WedLock
+    // login (see LoginScreen.kt), never re-read by another screen.
+    suspend fun getMe(): MeOut = api.getMe()
+
     suspend fun createSponsor(body: SponsorCreateRequest): SponsorCreateResponse =
         api.createSponsor(body)
 

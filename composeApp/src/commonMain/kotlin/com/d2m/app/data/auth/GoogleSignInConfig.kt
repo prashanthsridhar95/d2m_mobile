@@ -8,16 +8,14 @@ package com.d2m.app.data.auth
  * other, or with any web client ID an eventual d2m_web Google Sign-In
  * would use.
  *
- * PLACEHOLDERS -- the user is still setting up the Google Cloud OAuth
- * consent screen/clients as of this change. Both native SDK calls below
- * (GoogleSignInLauncher.android.kt / .ios.kt) are fully wired to read
- * these two constants; dropping in real values is the only remaining step
- * to make Google Sign-In actually work end to end. Until then, both calls
- * fail at runtime with an invalid-client error (Android: Credential
- * Manager's GetCredentialException with a 16-not-found-style message;
- * iOS: GIDSignIn's completion handler receives a non-nil NSError) --
- * neither crashes, both surface through GoogleSignInResult.Error, caught
- * in LoginScreen.kt like any other sign-in failure.
+ * Real values below (Google Cloud Console project "project-8a229145-29c3-
+ * 44c7-92d" / Firebase project "zyke-31dd1"), filled in from the client
+ * JSON/plist Console issued. ANDROID_CLIENT_ID is deliberately the WEB-
+ * application client (see that constant's own comment on why); a
+ * separate Android-type registration (package com.d2m.app + the debug/
+ * release keystore SHA-1) also has to exist in Console for Google to
+ * recognize the signed APK at all, even though its own client ID string
+ * is never used here.
  */
 object GoogleSignInConfig {
     // Android: passed to Credential Manager's
@@ -35,7 +33,7 @@ object GoogleSignInConfig {
     // client ID string is just never the one that goes here or over the
     // wire. Named "ANDROID_CLIENT_ID" to match this object's per-platform
     // naming, not because the value itself is an Android-type client.
-    const val ANDROID_CLIENT_ID: String = "REPLACE_WITH_ANDROID_ASSOCIATED_WEB_CLIENT_ID.apps.googleusercontent.com"
+    const val ANDROID_CLIENT_ID: String = "835063984447-poe8is01fjqen38lko8m789c2me2bb3m.apps.googleusercontent.com"
 
     // iOS: passed to GIDConfiguration(clientID:) (see
     // GoogleSignInLauncher.ios.kt) -- this one really is the iOS-type
@@ -46,5 +44,5 @@ object GoogleSignInConfig {
     // client id's "reversed client ID" (e.g.
     // com.googleusercontent.apps.XXXXXXXX) -- standard GoogleSignIn-iOS
     // setup step, see GoogleSignInLauncher.ios.kt's doc comment.
-    const val IOS_CLIENT_ID: String = "REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com"
+    const val IOS_CLIENT_ID: String = "835063984447-cbblmgiad01ce020fmmr1bmbvdd8e42a.apps.googleusercontent.com"
 }

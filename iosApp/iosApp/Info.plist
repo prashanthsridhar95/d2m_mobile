@@ -30,6 +30,19 @@
 				<string>d2m</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.d2m.app.google-signin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Reversed form of GoogleSignInConfig.IOS_CLIENT_ID (835063984447-cbblmgiad01ce020fmmr1bmbvdd8e42a),
+				     required by GIDSignIn so the Google auth flow can hand
+				     control back to this app. From the downloaded iOS
+				     client plist's own REVERSED_CLIENT_ID key -- standard
+				     GoogleSignIn-iOS setup step. -->
+				<string>com.googleusercontent.apps.835063984447-cbblmgiad01ce020fmmr1bmbvdd8e42a</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

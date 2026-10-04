@@ -5,6 +5,9 @@ import com.d2m.app.data.model.*
 /** Mirrors app/routers/identity.py -- onboarding, account, photos, extended bio. */
 class IdentityApi(private val api: ApiClient) {
 
+    suspend fun getMe(): MeOut =
+        api.get("/me")
+
     suspend fun createSponsor(body: SponsorCreateRequest): SponsorCreateResponse =
         api.post("/sponsors", body)
 

@@ -12,6 +12,19 @@ import kotlinx.serialization.Serializable
  * client authenticates, i.e. doesn't).
  */
 
+/** Mirrors app/schemas.py::MeOut -- GET /me resolves the caller's own
+ * WedLock-verified bearer token straight to a D2M account (role +
+ * sponsor_id/primary_id), so LoginScreen.kt can skip its manual
+ * "I'm a parent / I'm the child, paste your id" step for the common case.
+ * See that screen's own doc comment. */
+@Serializable
+data class MeOut(
+    val role: String, // "parent" | "child"
+    val sponsorId: String? = null,
+    val primaryId: String? = null,
+    val name: String,
+)
+
 @Serializable
 data class SponsorCreateRequest(
     val name: String,

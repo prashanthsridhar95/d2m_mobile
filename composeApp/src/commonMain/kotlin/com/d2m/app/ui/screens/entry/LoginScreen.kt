@@ -41,14 +41,14 @@ import org.koin.compose.koinInject
  *
  * Two panes:
  *
- * Log in -- a real WedLock POST /auth/login credential check, then (once
- * that succeeds and the returned access_token is stashed in IdentityStore)
- * the pre-existing "confirm sponsor/primary id" step to pick which D2M
- * profile to open. That second step isn't a leftover: d2m_core_engine has
- * no "look up my Sponsor/Primary by WedLock account id" endpoint yet (see
- * IdentityStore.kt's doc comment), so it's still how this app learns which
- * D2M record a WedLock account owns -- it's no longer the credential check
- * itself, though, which is the actual gap this change closes.
+ * Log in -- a real WedLock POST /auth/login credential check, then GET /me
+ * (IdentityRepository.getMe(), app/routers/identity.py) to resolve that
+ * straight to a D2M account -- the common case (a fully onboarded WedLock
+ * account) needs nothing further. The old "confirm sponsor/primary id"
+ * step still exists as a fallback for GET /me's own 404: a WedLock account
+ * that logged in fine but never completed D2M's own onboarding (POST
+ * /sponsors or /invites/redeem) has no Sponsor/Primary row to resolve to
+ * yet.
  *
  * Register -- WedLock's OTP send/verify -> set password -> register/parent
  * -> auto-login sequence (registration returns no token, so login() always
@@ -127,7 +127,9 @@ fun LoginScreen(
     }
 }
 
-/** Phase A: real WedLock credential check. Phase B: existing D2M sponsor/primary id confirm -- see LoginScreen's doc comment for why both are still needed. */
+/** Phase A: real WedLock credential check. Phase B (only on GET /me's own
+ * 404 -- see LoginScreen's doc comment): existing D2M sponsor/primary id
+ * confirm, as a fallback for a WedLock account with no D2M record yet. */
 @Composable
 private fun LoginPane(
     identityRepo: IdentityRepository,
@@ -138,6 +140,7 @@ private fun LoginPane(
     onLoginAsChild: (primaryId: String) -> Unit,
 ) {
     var authenticated by remember { mutableStateOf(false) }
+    var resolving by remember { mutableStateOf(false) }
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -150,8 +153,44 @@ private fun LoginPane(
     var idLoading by remember { mutableStateOf(false) }
     var idError by remember { mutableStateOf<String?>(null) }
 
+    // Tries GET /me right after a WedLock session is established (see this
+    // file's own doc comment). True on success -- identity is set and the
+    // relevant onLoginAs*/onComplete callback has already fired, nothing
+    // left for the caller to do. False means "couldn't resolve, fall back
+    // to the manual id-entry step" -- covers both the real 404 (no D2M
+    // account linked yet) and any other failure (network, backend down),
+    // since stranding the user instead of falling back to the
+    // already-working manual flow would be strictly worse.
+    suspend fun resolveAndEnter(): Boolean {
+        resolving = true
+        try {
+            val me = identityRepo.getMe()
+            val sponsorId = me.sponsorId
+            val primaryId = me.primaryId
+            return when {
+                me.role == "parent" && sponsorId != null -> {
+                    identityStore.setParent(sponsorId)
+                    onLoginAsParent(sponsorId)
+                    true
+                }
+                me.role == "child" && primaryId != null -> {
+                    identityStore.setChild(primaryId)
+                    onLoginAsChild(primaryId)
+                    true
+                }
+                else -> false
+            }
+        } catch (e: Exception) {
+            return false
+        } finally {
+            resolving = false
+        }
+    }
+
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (!authenticated) {
+        if (resolving) {
+            Text("Signed in. Finding your account…", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+        } else if (!authenticated) {
             Text("Log in with your WedLock account.", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
             D2MTextField(label = "Email", value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Email)
@@ -169,7 +208,7 @@ private fun LoginPane(
                         try {
                             val tokens = wedLockApi.login(emailOrPhone = email, password = password)
                             identityStore.setWedlockAccessToken(tokens.accessToken)
-                            authenticated = true
+                            if (!resolveAndEnter()) authenticated = true
                         } catch (e: Exception) {
                             authError = friendlyError(e, "Couldn't log in. Check your email and password.")
                         } finally {
@@ -188,7 +227,7 @@ private fun LoginPane(
                 wedLockApi = wedLockApi,
                 scope = scope,
                 onError = { authError = it },
-                onSuccess = { authenticated = true },
+                onSuccess = { scope.launch { if (!resolveAndEnter()) authenticated = true } },
             )
         } else {
             Text("Which profile do you want to open?", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
