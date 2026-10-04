@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 21 -- matches what README.md's "Build status" section says this
+      # project is actually built/tested with locally, and what
+      # composeApp/build.gradle.kts's Kotlin/AGP versions (2.4.10 / 8.6.0,
+      # see gradle/libs.versions.toml) expect on the Gradle daemon's JVM.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Handles the Gradle wrapper, dependency and build-cache caching in one
+      # step (the officially recommended replacement for hand-rolling an
+      # actions/cache block around ~/.gradle) -- no extra config needed since
+      # this repo already commits gradle-wrapper.properties pinning 8.7.
+      - uses: gradle/actions/setup-gradle@v4
+
+      # iOS is deliberately NOT built here -- it needs a macOS runner, a real
+      # Xcode install matching the 26.x this project's Kotlin/Native cinterop
+      # is pinned against (see libs.versions.toml's kotlin="2.4.10" comment),
+      # and CocoaPods' `pod install` against iosApp/Podfile before Xcode can
+      # even open the workspace. None of that is in place yet, so adding an
+      # iOS job now would mean guessing at a slow, flaky macOS pipeline
+      # instead of a real one -- Android CI landing and staying green is the
+      # priority; iOS CI is follow-up work once someone has verified the
+      # exact runner/Xcode/pod combination by hand.
+
+      # Same APK a developer gets from `./gradlew :composeApp:assembleDebug`
+      # locally -- debug because this job has no release-signing secrets
+      # configured (see composeApp/build.gradle.kts's signingConfigs block
+      # and README.md's "Release signing" section), and a debug build is
+      # the right thing for CI to prove compiles cleanly on every push/PR
+      # anyway.
+      - name: Build debug APK
+        run: ./gradlew :composeApp:assembleDebug
+
+      # commonTest (ApiCache/ApiClient/SuggestionsRepository unit tests, plus
+      # the Compose UI test in ui/components) running on the Android target --
+      # see README.md's "Build status" section for the equivalent
+      # iosSimulatorArm64Test command, which needs a macOS runner and isn't
+      # run here for the same reason iOS isn't built above.
+      - name: Run unit tests
+        run: ./gradlew :composeApp:testDebugUnitTest
