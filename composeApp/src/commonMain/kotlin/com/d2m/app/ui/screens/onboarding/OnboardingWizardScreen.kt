@@ -27,6 +27,8 @@ import com.d2m.app.ui.components.SectionHeading
 import com.d2m.app.ui.components.DataRow
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.D2MStepper
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -77,6 +79,16 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val totalSteps = 5
+    val strings = LocalStrings.current.onboarding
+    val locale = LocalAppLocale.current
+    val relationshipLabel: (String) -> String = {
+        when (it) {
+            "Mother" -> strings.relationshipMother
+            "Father" -> strings.relationshipFather
+            "Guardian" -> strings.relationshipGuardian
+            else -> strings.relationshipOther
+        }
+    }
 
     fun update(patch: WizardForm.() -> WizardForm) { form = form.patch() }
 
@@ -90,9 +102,9 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
              * validation runs forward (step 2's coordinate guard below
              * depends on it).
              */
-            PageTitle("Set up the profile")
+            PageTitle(strings.setUpProfile)
             D2MStepper(
-                steps = listOf("About you", "About them", "Birth details", "Preferences", "Review"),
+                steps = listOf(strings.stepAboutYou, strings.stepAboutThem, strings.stepBirthDetails, strings.stepPreferences, strings.stepReview),
                 activeIndex = step,
                 onStepClick = { step = it },
                 modifier = Modifier.padding(top = 14.dp),
@@ -101,53 +113,53 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (step) {
                     0 -> {
-                        SectionHeading("A little about you first.")
-                        D2MTextField("Your name", form.yourName, { update { copy(yourName = it) } })
-                        D2MSelectField("Your relationship to them", form.relationship, listOf("Mother", "Father", "Guardian", "Other relative"), { update { copy(relationship = it) } })
+                        SectionHeading(strings.aboutYouHeading)
+                        D2MTextField(strings.yourName, form.yourName, { update { copy(yourName = it) } })
+                        D2MSelectField(strings.yourRelationship, form.relationship, listOf("Mother", "Father", "Guardian", "Other relative"), { update { copy(relationship = it) } }, optionLabel = relationshipLabel)
                     }
                     1 -> {
-                        SectionHeading("Tell us about your child.")
-                        D2MTextField("Name", form.childName, { update { copy(childName = it) } })
-                        D2MSelectField("Gender", form.childGender, Taxonomy.GENDERS, { update { copy(childGender = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MSelectField("Seeking", form.childSeekingGender, Taxonomy.GENDERS, { update { copy(childSeekingGender = it) } }, optionLabel = Taxonomy::toLabel)
+                        SectionHeading(strings.aboutChildHeading)
+                        D2MTextField(strings.name, form.childName, { update { copy(childName = it) } })
+                        D2MSelectField(strings.gender, form.childGender, Taxonomy.GENDERS, { update { copy(childGender = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MSelectField(strings.seeking, form.childSeekingGender, Taxonomy.GENDERS, { update { copy(childSeekingGender = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
                     }
                     2 -> {
-                        SectionHeading("When was she born?")
-                        D2MTextField("Date (YYYY-MM-DD)", form.childDob, { update { copy(childDob = it) } })
-                        D2MTextField("Time (HH:MM, 24h)", form.childTob, { update { copy(childTob = it) } })
+                        SectionHeading(strings.whenWasSheBorn)
+                        D2MTextField(strings.dateLabel, form.childDob, { update { copy(childDob = it) } })
+                        D2MTextField(strings.timeLabel, form.childTob, { update { copy(childTob = it) } })
                         CityAutocomplete(
-                            label = "Birth place",
+                            label = strings.birthPlace,
                             value = form.childBirthPlace,
                             geocodingApi = geocodingApi,
                             onSelect = { r -> update { copy(childBirthPlace = r.label, childBirthLat = r.lat, childBirthLon = r.lon) } },
                             onRawTextChange = { text -> update { copy(childBirthPlace = text) } },
                         )
                         if (form.childBirthLat == 0.0 && form.childBirthLon == 0.0 && form.childBirthPlace.isNotBlank()) {
-                            Text("No coordinates resolved yet for this place -- pick a suggestion from the list, or the chart can't be computed (\"Null Island\" guard).", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+                            Text(strings.noCoordinatesWarning, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
                         }
                     }
                     3 -> {
-                        SectionHeading("A few more details.")
-                        D2MSelectField("Religion", form.ownReligion, Taxonomy.RELIGIONS, { update { copy(ownReligion = it) } })
-                        D2MSelectField("Your community", form.ownCasteCommunity, Taxonomy.COMMUNITIES, { update { copy(ownCasteCommunity = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MChipGroup("Acceptable religions", Taxonomy.RELIGIONS, form.acceptReligions, { update { copy(acceptReligions = it) } })
+                        SectionHeading(strings.moreDetailsHeading)
+                        D2MSelectField(strings.religion, form.ownReligion, Taxonomy.RELIGIONS, { update { copy(ownReligion = it) } })
+                        D2MSelectField(strings.yourCommunity, form.ownCasteCommunity, Taxonomy.COMMUNITIES, { update { copy(ownCasteCommunity = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MChipGroup(strings.acceptableReligions, Taxonomy.RELIGIONS, form.acceptReligions, { update { copy(acceptReligions = it) } })
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            D2MTextField("Min age", form.minAge, { update { copy(minAge = it) } }, modifier = Modifier.weight(1f))
-                            D2MTextField("Max age", form.maxAge, { update { copy(maxAge = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.minAge, form.minAge, { update { copy(minAge = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.maxAge, form.maxAge, { update { copy(maxAge = it) } }, modifier = Modifier.weight(1f))
                         }
-                        CityChipPicker("Acceptable locations", form.acceptLocations, { update { copy(acceptLocations = it) } }, geocodingApi)
-                        D2MChipGroup("Acceptable marital status", Taxonomy.MARITAL_STATUSES, form.maritalStatusFilter, { update { copy(maritalStatusFilter = it) } }, optionLabel = Taxonomy::toLabel)
+                        CityChipPicker(strings.acceptableLocations, form.acceptLocations, { update { copy(acceptLocations = it) } }, geocodingApi)
+                        D2MChipGroup(strings.acceptableMaritalStatus, Taxonomy.MARITAL_STATUSES, form.maritalStatusFilter, { update { copy(maritalStatusFilter = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
                     }
                     4 -> {
-                        SectionHeading("Before we save this.")
+                        SectionHeading(strings.beforeWeSave)
                         listOf(
-                            "Name" to form.childName,
-                            "Gender" to Taxonomy.toLabel(form.childGender),
-                            "Born" to "${form.childDob} ${form.childTob}",
-                            "Birth place" to form.childBirthPlace,
-                            "Religion" to form.ownReligion,
-                            "Community" to Taxonomy.toLabel(form.ownCasteCommunity),
-                            "Match age range" to "${form.minAge}–${form.maxAge}",
+                            strings.name to form.childName,
+                            strings.gender to Taxonomy.toLabel(form.childGender, locale),
+                            strings.reviewBorn to "${form.childDob} ${form.childTob}",
+                            strings.birthPlace to form.childBirthPlace,
+                            strings.religion to form.ownReligion,
+                            strings.yourCommunity to Taxonomy.toLabel(form.ownCasteCommunity, locale),
+                            strings.reviewMatchAgeRange to "${form.minAge}–${form.maxAge}",
                         ).forEach { (label, value) ->
                             DataRow(label, value)
                         }
@@ -158,12 +170,12 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
 
             Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 if (step > 0) {
-                    D2MButton("Back", variant = D2MButtonVariant.OUTLINE, onClick = { step -= 1 })
+                    D2MButton(strings.back, variant = D2MButtonVariant.OUTLINE, onClick = { step -= 1 })
                 } else {
                     androidx.compose.foundation.layout.Spacer(Modifier)
                 }
                 D2MButton(
-                    text = if (step < totalSteps - 1) "Continue" else if (submitting) "Saving…" else "Confirm profile",
+                    text = if (step < totalSteps - 1) strings.continueAction else if (submitting) strings.saving else strings.confirmProfile,
                     enabled = !submitting,
                     onClick = {
                         if (step < totalSteps - 1) {
@@ -205,7 +217,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                                     )
                                     onComplete()
                                 } catch (e: Exception) {
-                                    error = com.d2m.app.data.network.friendlyError(e, "Couldn't save this profile.")
+                                    error = com.d2m.app.data.network.friendlyError(e, strings.errCouldntSaveProfile)
                                 } finally {
                                     submitting = false
                                 }

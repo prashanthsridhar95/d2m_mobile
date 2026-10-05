@@ -7,6 +7,7 @@ import com.d2m.app.data.network.*
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.data.session.createSettings
 import com.d2m.app.domain.repository.*
+import com.d2m.app.ui.strings.LocaleStore
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.ParentContactsStore
@@ -69,6 +70,7 @@ val appModule = module {
     single { AdminRepository(get()) }
 
     single { IdentityStore(createSettings()) }
+    single { LocaleStore(createSettings()) }
     single { com.d2m.app.ui.screens.onboarding.OnboardingResultHolder() }
     // Reusable "confirm your password" step-up dialog controller -- see
     // ui/components/StepUpConfirmDialog.kt's doc comment. Mounted once at

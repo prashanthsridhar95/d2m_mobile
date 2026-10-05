@@ -42,6 +42,8 @@ import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.*
 import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -109,13 +111,15 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
     // directly here, same convention as web's ChildProfileDialog.jsx
     // TABS_FOR_CHILD/TABS_FOR_PARENT.
     val isChildViewer = identity.role == D2MRole.CHILD
+    val strings = LocalStrings.current.childProfileDialog
+    val locale = LocalAppLocale.current
     val tabKeys = if (isChildViewer) listOf("about", "profile", "bio", "preferences") else listOf("profile", "bio", "preferences")
     val tabLabels = tabKeys.map { key ->
         when (key) {
-            "about" -> "About Me"
-            "profile" -> "Profile"
-            "bio" -> "Bio data"
-            else -> "Preferences"
+            "about" -> strings.tabAbout
+            "profile" -> strings.tabProfile
+            "bio" -> strings.tabBio
+            else -> strings.tabPreferences
         }
     }
     var tab by remember(isChildViewer) { mutableStateOf(0) }
@@ -201,64 +205,64 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
             // A serif page title on the page ground, not a Material
             // TopAppBar -- see navigation/AppScaffold.kt's ScreenHeader
             // note on why that bar is the wrong shape for this design.
-            PageTitle("My profile", Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp))
+            PageTitle(strings.myProfile, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp))
             D2MTabs(tabLabels, tab, { tab = it })
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (tabKeys[tab]) {
-                    "profile" -> Text("Basic data and photos live in Settings today -- see plan §4 for the photo-picker follow-up.", color = mutedText(0.55f))
+                    "profile" -> Text(strings.basicDataNote, color = mutedText(0.55f))
 
                     "bio" -> {
-                        BioSectionHeader("Basic & personal details")
-                        D2MTextField("Height (cm)", bio.heightCm, { update { copy(heightCm = it) } })
-                        D2MSelectField("Complexion", bio.complexion, Taxonomy.COMPLEXIONS, { update { copy(complexion = it) } })
-                        D2MSelectField("Mother tongue", bio.motherTongue, Taxonomy.LANGUAGES, { update { copy(motherTongue = it) } })
-                        D2MChipGroup("Other languages known", Taxonomy.LANGUAGES, bio.otherLanguages, { update { copy(otherLanguages = it) } })
-                        D2MSelectField("Body type", bio.bodyType, Taxonomy.BODY_TYPES, { update { copy(bodyType = it) } }, optionLabel = Taxonomy::toLabel)
+                        BioSectionHeader(strings.sectionBasicPersonal)
+                        D2MTextField(strings.heightCm, bio.heightCm, { update { copy(heightCm = it) } })
+                        D2MSelectField(strings.complexion, bio.complexion, Taxonomy.COMPLEXIONS, { update { copy(complexion = it) } })
+                        D2MSelectField(strings.motherTongue, bio.motherTongue, Taxonomy.LANGUAGES, { update { copy(motherTongue = it) } })
+                        D2MChipGroup(strings.otherLanguagesKnown, Taxonomy.LANGUAGES, bio.otherLanguages, { update { copy(otherLanguages = it) } })
+                        D2MSelectField(strings.bodyType, bio.bodyType, Taxonomy.BODY_TYPES, { update { copy(bodyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
 
-                        BioSectionHeader("Religious & astrological information")
-                        D2MSelectField("Religion", bio.religion, Taxonomy.RELIGIONS, { update { copy(religion = it) } })
-                        D2MSelectField("Caste / community", bio.casteCommunity, Taxonomy.COMMUNITIES, { update { copy(casteCommunity = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MSelectField("Sect", bio.sect, Taxonomy.SECTS, { update { copy(sect = it) } })
-                        D2MSelectField("Gothram", bio.gothram, Taxonomy.GOTHRAMS, { update { copy(gothram = it) } })
-                        D2MSelectField("Horoscope match preference", bio.horoscopeMatchPreference, Taxonomy.HOROSCOPE_MATCH_PREFERENCES, { update { copy(horoscopeMatchPreference = it) } }, optionLabel = Taxonomy::toLabel)
+                        BioSectionHeader(strings.sectionReligiousAstrological)
+                        D2MSelectField(strings.religion, bio.religion, Taxonomy.RELIGIONS, { update { copy(religion = it) } })
+                        D2MSelectField(strings.casteCommunity, bio.casteCommunity, Taxonomy.COMMUNITIES, { update { copy(casteCommunity = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MSelectField(strings.sect, bio.sect, Taxonomy.SECTS, { update { copy(sect = it) } })
+                        D2MSelectField(strings.gothram, bio.gothram, Taxonomy.GOTHRAMS, { update { copy(gothram = it) } })
+                        D2MSelectField(strings.horoscopeMatchPreference, bio.horoscopeMatchPreference, Taxonomy.HOROSCOPE_MATCH_PREFERENCES, { update { copy(horoscopeMatchPreference = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
 
-                        BioSectionHeader("Education & career")
-                        D2MSelectField("Highest education", bio.highestEducation, Taxonomy.EDUCATION_LEVELS, { update { copy(highestEducation = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MTextField("Institution / university", bio.institution, { update { copy(institution = it) } })
-                        D2MSelectField("Employed in", bio.employmentSector, Taxonomy.EMPLOYMENT_SECTORS, { update { copy(employmentSector = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MTextField("Occupation / designation", bio.occupationTitle, { update { copy(occupationTitle = it) } })
-                        D2MTextField("Employer", bio.employer, { update { copy(employer = it) } })
+                        BioSectionHeader(strings.sectionEducationCareer)
+                        D2MSelectField(strings.highestEducation, bio.highestEducation, Taxonomy.EDUCATION_LEVELS, { update { copy(highestEducation = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.institution, bio.institution, { update { copy(institution = it) } })
+                        D2MSelectField(strings.employedIn, bio.employmentSector, Taxonomy.EMPLOYMENT_SECTORS, { update { copy(employmentSector = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.occupationDesignation, bio.occupationTitle, { update { copy(occupationTitle = it) } })
+                        D2MTextField(strings.employer, bio.employer, { update { copy(employer = it) } })
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            D2MTextField("Monthly income", bio.monthlyIncomeAmount, { update { copy(monthlyIncomeAmount = it) } }, modifier = Modifier.weight(1f))
-                            D2MSelectField("Currency", bio.monthlyIncomeCurrency, Taxonomy.CURRENCIES, { update { copy(monthlyIncomeCurrency = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.monthlyIncome, bio.monthlyIncomeAmount, { update { copy(monthlyIncomeAmount = it) } }, modifier = Modifier.weight(1f))
+                            D2MSelectField(strings.currency, bio.monthlyIncomeCurrency, Taxonomy.CURRENCIES, { update { copy(monthlyIncomeCurrency = it) } }, modifier = Modifier.weight(1f))
                         }
 
-                        BioSectionHeader("Family background")
-                        D2MTextField("Father's name", bio.fatherName, { update { copy(fatherName = it) } })
-                        D2MTextField("Father's occupation", bio.fatherOccupation, { update { copy(fatherOccupation = it) } })
-                        D2MTextField("Mother's name", bio.motherName, { update { copy(motherName = it) } })
-                        D2MTextField("Mother's occupation", bio.motherOccupation, { update { copy(motherOccupation = it) } })
+                        BioSectionHeader(strings.sectionFamilyBackground)
+                        D2MTextField(strings.fathersName, bio.fatherName, { update { copy(fatherName = it) } })
+                        D2MTextField(strings.fathersOccupation, bio.fatherOccupation, { update { copy(fatherOccupation = it) } })
+                        D2MTextField(strings.mothersName, bio.motherName, { update { copy(motherName = it) } })
+                        D2MTextField(strings.mothersOccupation, bio.motherOccupation, { update { copy(motherOccupation = it) } })
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            D2MTextField("Elder brothers", bio.elderBrothers, { update { copy(elderBrothers = it) } }, modifier = Modifier.weight(1f))
-                            D2MTextField("Younger brothers", bio.youngerBrothers, { update { copy(youngerBrothers = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.elderBrothers, bio.elderBrothers, { update { copy(elderBrothers = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.youngerBrothers, bio.youngerBrothers, { update { copy(youngerBrothers = it) } }, modifier = Modifier.weight(1f))
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            D2MTextField("Elder sisters", bio.elderSisters, { update { copy(elderSisters = it) } }, modifier = Modifier.weight(1f))
-                            D2MTextField("Younger sisters", bio.youngerSisters, { update { copy(youngerSisters = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.elderSisters, bio.elderSisters, { update { copy(elderSisters = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.youngerSisters, bio.youngerSisters, { update { copy(youngerSisters = it) } }, modifier = Modifier.weight(1f))
                         }
-                        D2MSelectField("Family type", bio.familyType, Taxonomy.FAMILY_TYPES, { update { copy(familyType = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MSelectField("Family values", bio.familyValues, Taxonomy.FAMILY_VALUES, { update { copy(familyValues = it) } }, optionLabel = Taxonomy::toLabel)
-                        D2MTextField("Native place / ancestral origin", bio.nativity, { update { copy(nativity = it) } })
-                        D2MTextField("Financial status", bio.financialStatus, { update { copy(financialStatus = it) } })
+                        D2MSelectField(strings.familyType, bio.familyType, Taxonomy.FAMILY_TYPES, { update { copy(familyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MSelectField(strings.familyValues, bio.familyValues, Taxonomy.FAMILY_VALUES, { update { copy(familyValues = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.nativePlace, bio.nativity, { update { copy(nativity = it) } })
+                        D2MTextField(strings.financialStatus, bio.financialStatus, { update { copy(financialStatus = it) } })
 
-                        BioSectionHeader("Location & contact")
-                        D2MSelectField("Citizenship / residing status", bio.citizenshipStatus, Taxonomy.CITIZENSHIP_STATUSES, { update { copy(citizenshipStatus = it) } }, optionLabel = Taxonomy::toLabel)
+                        BioSectionHeader(strings.sectionLocationContact)
+                        D2MSelectField(strings.citizenshipStatus, bio.citizenshipStatus, Taxonomy.CITIZENSHIP_STATUSES, { update { copy(citizenshipStatus = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
 
                         error?.let { D2MErrorBanner(it) }
-                        if (saved) Text("Saved.", color = MaterialTheme.colorScheme.primary)
+                        if (saved) Text(strings.saved, color = MaterialTheme.colorScheme.primary)
                         D2MButton(
-                            text = if (saving) "Saving…" else "Save bio data",
+                            text = if (saving) strings.saving else strings.saveBioData,
                             enabled = !saving,
                             onClick = {
                                 val pid = primaryId ?: return@D2MButton
@@ -303,7 +307,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                         )
                                         saved = true
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't save bio data.")
+                                        error = friendlyError(e, strings.errSaveBioData)
                                     } finally {
                                         saving = false
                                     }
@@ -328,10 +332,10 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                             aboutMe.careerAfterMarriage.isNotBlank(), aboutMe.livingArrangement.isNotBlank(), aboutMe.openToRelocation.isNotBlank(),
                             aboutMe.favoriteCuisine.isNotBlank(), aboutMe.dreamDestination.isNotBlank(), aboutMe.loveLanguage.isNotBlank(),
                         ).count { it }
-                        FieldHint("$aboutMeFieldsFilled of 13 filled in")
+                        FieldHint(strings.aboutMeFieldsProgress(aboutMeFieldsFilled, 13))
 
-                        SectionCard(title = "About me prompts", padding = 16.dp) {
-                            FieldHint("Candidates see these first -- pick up to $MAX_ABOUT_PROMPTS and answer honestly.")
+                        SectionCard(title = strings.aboutPromptsTitle, padding = 16.dp) {
+                            FieldHint(strings.aboutPromptsHint(MAX_ABOUT_PROMPTS))
 
                             if (aboutMe.selectedPrompts.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
@@ -351,7 +355,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                         SectionCard(
                                             title = prompt,
                                             padding = 14.dp,
-                                            trailing = { LinkText("Remove", onClick = { removePrompt(prompt) }) },
+                                            trailing = { LinkText(strings.removePrompt, onClick = { removePrompt(prompt) }) },
                                         ) {
                                             D2MTextArea(
                                                 label = "",
@@ -382,12 +386,12 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                             onChange = { next -> next.firstOrNull()?.let(::addPrompt) },
                                         )
                                         if (aboutMe.selectedPrompts.isNotEmpty()) {
-                                            LinkText("Cancel", onClick = { promptPickerOpen = false }, modifier = Modifier.padding(top = 8.dp))
+                                            LinkText(strings.cancel, onClick = { promptPickerOpen = false }, modifier = Modifier.padding(top = 8.dp))
                                         }
                                     }
                                 } else {
                                     D2MButton(
-                                        text = "+ Add a prompt (${aboutMe.selectedPrompts.size}/$MAX_ABOUT_PROMPTS)",
+                                        text = strings.addAPrompt(aboutMe.selectedPrompts.size, MAX_ABOUT_PROMPTS),
                                         variant = D2MButtonVariant.OUTLINE,
                                         onClick = { promptPickerOpen = true },
                                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -396,47 +400,47 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                             }
                         }
 
-                        SectionCard(title = "Lifestyle", padding = 16.dp) {
+                        SectionCard(title = strings.lifestyleTitle, padding = 16.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                D2MOptionGroup("Fitness routine", Taxonomy.FITNESS_ROUTINES, aboutMe.fitnessRoutine, { v -> updateAboutMe { copy(fitnessRoutine = if (v == fitnessRoutine) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup("Sleep schedule", Taxonomy.SLEEP_SCHEDULES, aboutMe.sleepSchedule, { v -> updateAboutMe { copy(sleepSchedule = if (v == sleepSchedule) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup("Pets", Taxonomy.PET_PREFERENCES, aboutMe.pets, { v -> updateAboutMe { copy(pets = if (v == pets) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup("Social energy", Taxonomy.SOCIAL_ENERGIES, aboutMe.socialEnergy, { v -> updateAboutMe { copy(socialEnergy = if (v == socialEnergy) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.fitnessRoutine, Taxonomy.FITNESS_ROUTINES, aboutMe.fitnessRoutine, { v -> updateAboutMe { copy(fitnessRoutine = if (v == fitnessRoutine) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.sleepSchedule, Taxonomy.SLEEP_SCHEDULES, aboutMe.sleepSchedule, { v -> updateAboutMe { copy(sleepSchedule = if (v == sleepSchedule) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.pets, Taxonomy.PET_PREFERENCES, aboutMe.pets, { v -> updateAboutMe { copy(pets = if (v == pets) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.socialEnergy, Taxonomy.SOCIAL_ENERGIES, aboutMe.socialEnergy, { v -> updateAboutMe { copy(socialEnergy = if (v == socialEnergy) "" else v) } }, shape = D2MChipShape.PILL)
                             }
                         }
 
-                        SectionCard(title = "What I'm looking for", padding = 16.dp) {
+                        SectionCard(title = strings.lookingForTitle, padding = 16.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                                 D2MChipGroup(
-                                    "What I value in a partner",
+                                    strings.whatIValueInPartner,
                                     Taxonomy.PARTNER_QUALITIES,
                                     aboutMe.partnerQualities,
                                     { updateAboutMe { copy(partnerQualities = it) } },
                                 )
                                 Column {
-                                    FieldLabel("What matters most to me")
+                                    FieldLabel(strings.whatMattersMostToMe)
                                     D2MTextArea("", aboutMe.whatMattersMost, { updateAboutMe { copy(whatMattersMost = it) } }, minLines = 3)
                                     SuggestionChipGroup(Taxonomy.WHAT_MATTERS_MOST_SUGGESTIONS, aboutMe.whatMattersMost) { updateAboutMe { copy(whatMattersMost = it) } }
                                 }
                             }
                         }
 
-                        SectionCard(title = "Life & future plans", padding = 16.dp) {
+                        SectionCard(title = strings.lifeAndFuturePlansTitle, padding = 16.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                D2MOptionGroup("Career after marriage", Taxonomy.CAREER_AFTER_MARRIAGE_OPTIONS, aboutMe.careerAfterMarriage, { v -> updateAboutMe { copy(careerAfterMarriage = if (v == careerAfterMarriage) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup("Living arrangement", Taxonomy.LIVING_ARRANGEMENTS, aboutMe.livingArrangement, { v -> updateAboutMe { copy(livingArrangement = if (v == livingArrangement) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup("Open to relocation", Taxonomy.RELOCATION_PREFERENCES, aboutMe.openToRelocation, { v -> updateAboutMe { copy(openToRelocation = if (v == openToRelocation) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.careerAfterMarriage, Taxonomy.CAREER_AFTER_MARRIAGE_OPTIONS, aboutMe.careerAfterMarriage, { v -> updateAboutMe { copy(careerAfterMarriage = if (v == careerAfterMarriage) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.livingArrangement, Taxonomy.LIVING_ARRANGEMENTS, aboutMe.livingArrangement, { v -> updateAboutMe { copy(livingArrangement = if (v == livingArrangement) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.openToRelocation, Taxonomy.RELOCATION_PREFERENCES, aboutMe.openToRelocation, { v -> updateAboutMe { copy(openToRelocation = if (v == openToRelocation) "" else v) } }, shape = D2MChipShape.PILL)
                             }
                         }
 
-                        SectionCard(title = "Quick facts", padding = 16.dp) {
+                        SectionCard(title = strings.quickFactsTitle, padding = 16.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                                 // Dropdown-filtered as you type, not a row of
                                 // chips below the field ("show it as autofill
                                 // suggestion rather than suggestion bubbles
                                 // below", reported directly).
                                 TextAutocomplete(
-                                    label = "Favorite cuisine",
+                                    label = strings.favoriteCuisine,
                                     value = aboutMe.favoriteCuisine,
                                     onValueChange = { updateAboutMe { copy(favoriteCuisine = it) } },
                                     options = Taxonomy.CUISINE_SUGGESTIONS,
@@ -449,21 +453,21 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                 // ("provide the same suggestion option as
                                 // locations", reported directly).
                                 CityAutocomplete(
-                                    label = "Dream destination",
+                                    label = strings.dreamDestination,
                                     value = aboutMe.dreamDestination,
                                     geocodingApi = geocodingApi,
                                     onSelect = { r -> updateAboutMe { copy(dreamDestination = r.label) } },
                                     onRawTextChange = { text -> updateAboutMe { copy(dreamDestination = text) } },
-                                    placeholder = "Search any city or country…",
+                                    placeholder = strings.searchAnyCity,
                                 )
-                                D2MOptionGroup("Love language", Taxonomy.LOVE_LANGUAGES, aboutMe.loveLanguage, { v -> updateAboutMe { copy(loveLanguage = if (v == loveLanguage) "" else v) } }, shape = D2MChipShape.PILL)
+                                D2MOptionGroup(strings.loveLanguage, Taxonomy.LOVE_LANGUAGES, aboutMe.loveLanguage, { v -> updateAboutMe { copy(loveLanguage = if (v == loveLanguage) "" else v) } }, shape = D2MChipShape.PILL)
                             }
                         }
 
                         error?.let { D2MErrorBanner(it) }
-                        if (saved) Text("Saved.", color = MaterialTheme.colorScheme.primary)
+                        if (saved) Text(strings.saved, color = MaterialTheme.colorScheme.primary)
                         D2MButton(
-                            text = if (saving) "Saving…" else "Save About Me",
+                            text = if (saving) strings.saving else strings.saveAboutMe,
                             enabled = !saving,
                             onClick = {
                                 val pid = primaryId ?: return@D2MButton
@@ -494,7 +498,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                         )
                                         saved = true
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't save About Me.")
+                                        error = friendlyError(e, strings.errSaveAboutMe)
                                     } finally {
                                         saving = false
                                     }
@@ -504,11 +508,11 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                     }
 
                     else -> {
-                        Text("Location preference", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        CityChipPicker("Locations you'd accept a match from", acceptLocations, { acceptLocations = it }, geocodingApi)
+                        Text(strings.locationPreference, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        CityChipPicker(strings.locationsAcceptMatch, acceptLocations, { acceptLocations = it }, geocodingApi)
                         error?.let { D2MErrorBanner(it) }
                         D2MButton(
-                            text = if (saving) "Saving…" else "Save preferences",
+                            text = if (saving) strings.saving else strings.savePreferences,
                             enabled = !saving,
                             onClick = {
                                 val sid = resolvedSponsorId
@@ -521,7 +525,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                         }
                                         saved = true
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't save preferences.")
+                                        error = friendlyError(e, strings.errSavePreferences)
                                     } finally {
                                         saving = false
                                     }
@@ -552,6 +556,7 @@ private const val SUGGESTION_PREVIEW_COUNT = 8
 // rather than a new shared component nobody else asked for.
 @Composable
 private fun SuggestionChipGroup(options: List<String>, value: String, onPick: (String) -> Unit) {
+    val strings = LocalStrings.current.childProfileDialog
     val matchIndex = options.indexOf(value)
     var expanded by remember(options) { mutableStateOf(matchIndex >= SUGGESTION_PREVIEW_COUNT) }
     val visible = if (expanded) options else options.take(SUGGESTION_PREVIEW_COUNT)
@@ -559,7 +564,7 @@ private fun SuggestionChipGroup(options: List<String>, value: String, onPick: (S
         D2MOptionGroup(label = null, options = visible, value = value, onChange = onPick, shape = D2MChipShape.PILL)
         if (options.size > SUGGESTION_PREVIEW_COUNT) {
             LinkText(
-                text = if (expanded) "Show fewer" else "Show all (${options.size})",
+                text = if (expanded) strings.showFewer else strings.showAll(options.size),
                 onClick = { expanded = !expanded },
             )
         }

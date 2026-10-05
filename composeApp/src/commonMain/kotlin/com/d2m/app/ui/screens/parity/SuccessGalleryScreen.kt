@@ -26,6 +26,7 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -35,6 +36,7 @@ import org.koin.compose.koinInject
 @Composable
 fun SuccessGalleryScreen() {
     val repo: OffboardingRepository = koinInject()
+    val strings = LocalStrings.current.parity
     var entries by remember { mutableStateOf<List<SuccessGalleryEntryOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -43,7 +45,7 @@ fun SuccessGalleryScreen() {
         try {
             entries = repo.getSuccessGallery()
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load the gallery.")
+            error = friendlyError(e, strings.errLoadGallery)
         } finally {
             loading = false
         }
@@ -51,7 +53,7 @@ fun SuccessGalleryScreen() {
 
     D2MTheme(flow = D2MFlow.GUEST_SYSTEM) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle("Success stories")
+            PageTitle(strings.successStoriesTitle)
             when {
                 loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
                     repeat(3) {
@@ -65,7 +67,7 @@ fun SuccessGalleryScreen() {
                     }
                 }
                 error != null -> D2MErrorBanner(error!!)
-                entries.isEmpty() -> D2MEmptyState("Nothing published yet")
+                entries.isEmpty() -> D2MEmptyState(strings.nothingPublishedYet)
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
                     items(entries) { e ->
                         D2MCard(modifier = Modifier.fillMaxWidth()) {

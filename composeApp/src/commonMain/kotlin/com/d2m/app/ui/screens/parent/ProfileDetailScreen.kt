@@ -57,6 +57,7 @@ import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.PersonName
 import com.d2m.app.ui.components.ProfilePhoto
 import com.d2m.app.ui.components.RefNoText
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.components.astrologicalCompatibility
 import com.d2m.app.ui.components.overallRating
 import com.d2m.app.ui.components.preferenceCompatibility
@@ -89,6 +90,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
+    val strings = LocalStrings.current.profileDetail
 
     var candidate by remember { mutableStateOf<SuggestionOut?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -138,7 +140,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 chatUiState.requestOpenPeer(peerUsername)
                 onOpenMessages()
             } catch (e: Exception) {
-                messageParentError = friendlyError(e, "Couldn't start that conversation.")
+                messageParentError = friendlyError(e, strings.errStartConversation)
             } finally {
                 messageParentBusy = false
             }
@@ -157,7 +159,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 if (shareState == "copied") shareState = "idle"
             } catch (e: Exception) {
                 shareState = "error"
-                shareError = friendlyError(e, "Couldn't create a share link.")
+                shareError = friendlyError(e, strings.errCreateShareLink)
             }
         }
     }
@@ -171,7 +173,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
         try {
             candidate = suggestionsRepo.getCandidate(viewerPrimaryId, candidateId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load this profile.")
+            error = friendlyError(e, strings.errLoadProfile)
         } finally {
             loading = false
         }
@@ -200,7 +202,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
         try {
             vouchers = trustRepo.listPublicVouches(candidateId)
         } catch (e: Exception) {
-            vouchersError = friendlyError(e, "Couldn't load who vouched for this profile.")
+            vouchersError = friendlyError(e, strings.errLoadVouchers)
         }
     }
 
@@ -209,7 +211,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
             // A quiet text link, not a maroon GHOST button -- the comps
             // open this screen on a breadcrumb row, and the first thing on
             // the page should be the person, not a control.
-            LinkText("← Back", onClick = onBack, modifier = Modifier.padding(bottom = 4.dp))
+            LinkText(strings.back, onClick = onBack, modifier = Modifier.padding(bottom = 4.dp))
 
             when {
                 // The shape of what's coming, not a word -- the header
@@ -256,9 +258,9 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
 
                     ProfilePhoto(
                         photoUrl = c.photoUrl?.let(apiClient::resolveMediaUrl),
-                        contentDescription = "Photograph of ${c.candidateName}",
+                        contentDescription = strings.photographOf(c.candidateName),
                         ratio = 1f,
-                        caption = if (c.photoUrl == null) "No photograph on file" else null,
+                        caption = if (c.photoUrl == null) strings.noPhotographOnFile else null,
                         glyphSize = 52.dp,
                         shape = RoundedCornerShape(D2MRadius.lg),
                         modifier = Modifier.padding(top = 16.dp),
@@ -267,8 +269,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     CompatibilityCard(
                         level = c.compositeScore?.let { overallRating(it) },
                         breakdown = listOf(
-                            "Astrology" to astrologicalCompatibility(c.scores),
-                            "Preferences" to preferenceCompatibility(c.scores),
+                            strings.astrology to astrologicalCompatibility(c.scores),
+                            strings.preferences to preferenceCompatibility(c.scores),
                         ),
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                     )
@@ -296,7 +298,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             // back empty for them.
                             if (trustSummary?.familyVouched == true) {
                                 LinkText(
-                                    "See who vouched",
+                                    strings.seeWhoVouched,
                                     onClick = {
                                         vouchersDialogOpen = true
                                         if (vouchers == null) {
@@ -321,7 +323,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (identity.role == D2MRole.PARENT) {
                             D2MButton(
-                                text = if (actionInFlight) "Suggesting…" else "Suggest to child",
+                                text = if (actionInFlight) strings.suggesting else strings.suggestToChild,
                                 enabled = !actionInFlight,
                                 onClick = {
                                     val sponsorId = identity.sponsorId ?: return@D2MButton
@@ -338,23 +340,23 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             // it needs the consent-unlock gate, which isn't built on
                             // mobile (see ParentMessagesScreen.kt's doc comment).
                             D2MButton(
-                                text = if (messageParentBusy) "Opening…" else "Message their parent",
+                                text = if (messageParentBusy) strings.opening else strings.messageTheirParent,
                                 variant = D2MButtonVariant.OUTLINE,
                                 enabled = !messageParentBusy,
                                 onClick = { messageParent() },
                             )
                             D2MButton(
                                 text = when (shareState) {
-                                    "busy" -> "Creating link…"
-                                    "copied" -> "Link copied ✓"
-                                    else -> "Share this profile"
+                                    "busy" -> strings.creatingLink
+                                    "copied" -> strings.linkCopied
+                                    else -> strings.shareThisProfile
                                 },
                                 variant = D2MButtonVariant.OUTLINE,
                                 enabled = shareState != "busy",
                                 onClick = { shareProfile() },
                             )
                         } else {
-                            listOf("accept" to "Send request", "snooze" to "Snooze", "reject" to "Pass").forEach { (action, label) ->
+                            listOf("accept" to strings.sendRequest, "snooze" to strings.snooze, "reject" to strings.pass).forEach { (action, label) ->
                                 D2MButton(
                                     text = label,
                                     variant = if (action == "accept") D2MButtonVariant.SOLID else D2MButtonVariant.OUTLINE,
@@ -380,7 +382,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
             Dialog(onDismissRequest = { vouchersDialogOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 D2MCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(24.dp)) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Who vouched for ${candidate?.candidateName ?: "this profile"}", style = MaterialTheme.typography.titleMedium)
+                        Text(strings.whoVouchedFor(candidate?.candidateName ?: strings.thisProfile), style = MaterialTheme.typography.titleMedium)
                         vouchersError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                         Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(top = 14.dp)) {
                             when {
@@ -394,11 +396,11 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                         }
                                     }
                                 }
-                                vouchers?.isEmpty() == true -> Text("No match-visible vouches to show.", color = mutedText(0.55f))
+                                vouchers?.isEmpty() == true -> Text(strings.noMatchVisibleVouches, color = mutedText(0.55f))
                                 else -> vouchers?.forEach { v ->
                                     D2MCard(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                                         Column(modifier = Modifier.padding(12.dp)) {
-                                            Text(v.voucherName ?: "A family member", style = MaterialTheme.typography.titleSmall)
+                                            Text(v.voucherName ?: strings.aFamilyMember, style = MaterialTheme.typography.titleSmall)
                                             Text(
                                                 v.claimScopes.joinToString(", ") { it.lowercase().replace('_', ' ').replaceFirstChar { c -> c.uppercase() } },
                                                 style = MaterialTheme.typography.bodySmall,
@@ -411,7 +413,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             }
                         }
                         D2MButton(
-                            text = "Close",
+                            text = strings.close,
                             modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                             onClick = { vouchersDialogOpen = false },
                         )

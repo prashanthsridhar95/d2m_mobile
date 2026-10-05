@@ -18,20 +18,22 @@ import com.d2m.app.ui.theme.mutedText
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.SubHeading
+import com.d2m.app.ui.strings.LocalStrings
 
 /** Mirrors screens/entry/RolePickerScreen.jsx -- "Who's this for?". The self-signup card exists in the design reference but has no backend path (see plan §5), so it's intentionally not offered here, same as web. */
 @Composable
 fun RolePickerScreen(onPickParent: () -> Unit, onPickChild: () -> Unit) {
+    val strings = LocalStrings.current.login
     D2MTheme(flow = D2MFlow.ENTRY) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-            PageTitle("Who's this for?")
+            PageTitle(strings.whoIsThisFor)
 
             D2MCard(
                 modifier = Modifier.fillMaxWidth().padding(top = 20.dp).clickable(onClick = onPickParent),
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    SubHeading("I'm a parent, signing up for my child")
-                    Text("Set up a profile, vet matches, and guide the process.", color = mutedText(0.55f), style = MaterialTheme.typography.bodyMedium)
+                    SubHeading(strings.roleParentTitle)
+                    Text(strings.roleParentSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
@@ -39,8 +41,8 @@ fun RolePickerScreen(onPickParent: () -> Unit, onPickChild: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable(onClick = onPickChild),
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    SubHeading("I have a shared link")
-                    Text("Claim the profile your parent started for you.", color = mutedText(0.55f), style = MaterialTheme.typography.bodyMedium)
+                    SubHeading(strings.roleLinkTitle)
+                    Text(strings.roleLinkSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

@@ -29,6 +29,7 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.SubHeading
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -45,6 +46,7 @@ fun PanchangamCalendarScreen() {
     val identityStore: IdentityStore = koinInject()
     val panchangamRepo: PanchangamRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.parity
 
     var month by remember { mutableStateOf<PanchangamMonthOut?>(null) }
     var selectedDay by remember { mutableStateOf<PanchangamDayOut?>(null) }
@@ -58,13 +60,13 @@ fun PanchangamCalendarScreen() {
             month = panchangamRepo.getMonth(primaryId)
             selectedDay = panchangamRepo.getDay(primaryId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load the panchangam.")
+            error = friendlyError(e, strings.errLoadPanchangam)
         }
     }
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle("Panchangam")
+            PageTitle(strings.panchangamTitle)
 
             error?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
 
@@ -72,10 +74,10 @@ fun PanchangamCalendarScreen() {
                 D2MCard(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         SubHeading(day.date)
-                        Text("Tithi: ${day.tithi.name}  ·  Nakshatra: ${day.nakshatra.name}", color = mutedText(0.55f))
-                        Text("Yoga: ${day.yoga.name}  ·  Karana: ${day.karana.name}", color = mutedText(0.55f))
+                        Text("${strings.tithiLabel}: ${day.tithi.name}  ·  ${strings.nakshatraLabel}: ${day.nakshatra.name}", color = mutedText(0.55f))
+                        Text("${strings.yogaLabel}: ${day.yoga.name}  ·  ${strings.karanaLabel}: ${day.karana.name}", color = mutedText(0.55f))
                         Text(
-                            "Rahu Kalam: ${day.rahuKalam.start} – ${day.rahuKalam.end}",
+                            "${strings.rahuKalamLabel}: ${day.rahuKalam.start} – ${day.rahuKalam.end}",
                             color = mutedText(0.45f),
                             style = MaterialTheme.typography.labelMedium,
                         )

@@ -54,6 +54,8 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.ShareLinksStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -76,6 +78,7 @@ fun ShareLinksScreen() {
     val apiClient: ApiClient = koinInject()
     val fieldsCache: ShareLinkFieldsCache = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.shareLinks
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
@@ -123,7 +126,7 @@ fun ShareLinksScreen() {
         try {
             links = shareLinksRepo.listShareLinks(primaryId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load share links.")
+            error = friendlyError(e, strings.linksLoadError)
         } finally {
             loading = false
         }
@@ -132,28 +135,28 @@ fun ShareLinksScreen() {
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle("Share my profile")
+            PageTitle(strings.pageTitle)
             Text(
-                "Anyone with the link can view this profile at the level of detail you choose -- they never see the app itself. Turn a link off (and back on) or let it expire at any time; the link itself never changes.",
+                strings.createIntro,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
             )
 
             when {
-                notClaimed -> D2MEmptyState("Waiting on your child", "Once they claim your invite, you'll be able to share their profile from here.")
-                loading -> Text("Loading…", color = mutedText(0.55f))
+                notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
+                loading -> Text(strings.loading, color = mutedText(0.55f))
                 else -> {
                     D2MSelectField(
-                        label = "What should the link show",
+                        label = strings.linksShowLabel,
                         value = detailLevel,
                         options = listOf("full", "minimal", "custom"),
                         onValueChange = { detailLevel = it },
                         optionLabel = {
                             when (it) {
-                                "full" -> "Entire profile (all photos, full bio data, horoscope)"
-                                "minimal" -> "One photo, name, age, basic bio data & horoscope"
-                                else -> "Custom -- pick exactly which fields"
+                                "full" -> strings.detailLevelFull
+                                "minimal" -> strings.detailLevelMinimal
+                                else -> strings.detailLevelCustom
                             }
                         },
                     )
@@ -164,15 +167,15 @@ fun ShareLinksScreen() {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "${customFields.trueFieldCount()} field${if (customFields.trueFieldCount() == 1) "" else "s"} selected",
+                                strings.fieldsSelectedLabel(customFields.trueFieldCount()),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = mutedText(0.55f),
                             )
-                            D2MButton(text = "Choose fields…", onClick = { pickerOpen = true })
+                            D2MButton(text = strings.chooseFieldsCta, onClick = { pickerOpen = true })
                         }
                     }
                     D2MButton(
-                        text = if (creating) "Creating…" else "Create link",
+                        text = if (creating) strings.linksCreating else strings.linksCreateCta,
                         enabled = !creating && primaryId != null,
                         modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
                         onClick = {
@@ -187,7 +190,7 @@ fun ShareLinksScreen() {
                                     )
                                     links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "Couldn't create a share link.")
+                                    error = friendlyError(e, strings.linksCreateError)
                                 } finally {
                                     creating = false
                                 }
@@ -198,7 +201,7 @@ fun ShareLinksScreen() {
                     error?.let { D2MErrorBanner(it, modifier = Modifier.padding(bottom = 12.dp)) }
 
                     if (links.isNullOrEmpty()) {
-                        D2MEmptyState("No share links yet", "Create one above to share this profile with your network.")
+                        D2MEmptyState(strings.linksEmptyTitle, strings.linksEmptyBody)
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(links!!) { link ->
@@ -243,9 +246,9 @@ fun ShareLinksScreen() {
             Dialog(onDismissRequest = { pickerOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 D2MCard(modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(24.dp)) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Choose what this link shows", style = MaterialTheme.typography.titleMedium)
+                        Text(strings.pickerTitle, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Only the fields you turn on here will be visible to anyone with the link.",
+                            strings.pickerSubtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = mutedText(0.55f),
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
@@ -254,7 +257,7 @@ fun ShareLinksScreen() {
                             CustomFieldPicker(selection = customFields, onChange = { customFields = it })
                         }
                         D2MButton(
-                            text = "Done",
+                            text = strings.done,
                             modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                             onClick = { pickerOpen = false },
                         )
@@ -269,40 +272,41 @@ fun ShareLinksScreen() {
 
 @Composable
 private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, onToggle: () -> Unit, onExtend: () -> Unit) {
+    val strings = LocalStrings.current.shareLinks
     var menuOpen by remember { mutableStateOf(false) }
 
     D2MCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    if (link.isActive) "Active" else "Turned off",
+                    if (link.isActive) strings.linkStatusActive else strings.linkStatusOff,
                     style = MaterialTheme.typography.labelMedium,
                     color = if (link.isActive) MaterialTheme.colorScheme.primary else mutedText(0.45f),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (busy) Text("…", color = mutedText(0.45f))
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Link actions")
+                        Icon(Icons.Filled.MoreVert, contentDescription = strings.linkActions)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(text = { Text("Copy link") }, onClick = { menuOpen = false; onCopy() })
-                        DropdownMenuItem(text = { Text(if (link.isActive) "Turn off" else "Turn on") }, onClick = { menuOpen = false; onToggle() })
-                        DropdownMenuItem(text = { Text("Extend +7 days") }, onClick = { menuOpen = false; onExtend() })
+                        DropdownMenuItem(text = { Text(strings.copyLink) }, onClick = { menuOpen = false; onCopy() })
+                        DropdownMenuItem(text = { Text(if (link.isActive) strings.turnOff else strings.turnOn) }, onClick = { menuOpen = false; onToggle() })
+                        DropdownMenuItem(text = { Text(strings.extendCta) }, onClick = { menuOpen = false; onExtend() })
                     }
                 }
             }
             Text(
                 when (link.detailLevel) {
-                    "full" -> "Entire profile"
-                    "minimal" -> "One photo + basics"
-                    else -> "Custom (${link.customFields?.trueFieldCount() ?: 0} field${if ((link.customFields?.trueFieldCount() ?: 0) == 1) "" else "s"})"
+                    "full" -> strings.detailLevelFullShort
+                    "minimal" -> strings.detailLevelMinimal
+                    else -> strings.detailLevelCustomCount(link.customFields?.trueFieldCount() ?: 0)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            Text("Expires ${link.expiresAt.take(10)}", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
+            Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
             Text(
-                "${link.viewCount} view${if (link.viewCount == 1) "" else "s"}" + (link.lastViewedAt?.let { " · last viewed $it" } ?: ""),
+                strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it) } ?: ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = mutedText(0.45f),
             )
@@ -319,41 +323,42 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
  *  a mechanical mirror of the web picker, not a re-design. */
 @Composable
 private fun CustomFieldPicker(selection: CustomFieldSelection, onChange: (CustomFieldSelection) -> Unit, modifier: Modifier = Modifier) {
+    val strings = LocalStrings.current.shareLinks
     Column(modifier.fillMaxWidth()) {
-        D2MCheckboxGroup(label = "Basic & personal", first = true) {
-            D2MCheckboxRow("Height", selection.heightCm, { onChange(selection.copy(heightCm = it)) })
-            D2MCheckboxRow("Complexion", selection.complexion, { onChange(selection.copy(complexion = it)) })
-            D2MCheckboxRow("Body type", selection.bodyType, { onChange(selection.copy(bodyType = it)) })
-            D2MCheckboxRow("Mother tongue", selection.motherTongue, { onChange(selection.copy(motherTongue = it)) })
-            D2MCheckboxRow("Other languages", selection.otherLanguages, { onChange(selection.copy(otherLanguages = it)) })
-            D2MCheckboxRow("Religion", selection.religion, { onChange(selection.copy(religion = it)) })
-            D2MCheckboxRow("Community", selection.casteCommunity, { onChange(selection.copy(casteCommunity = it)) })
-            D2MCheckboxRow("Sect", selection.sect, { onChange(selection.copy(sect = it)) })
-            D2MCheckboxRow("Gothram", selection.gothram, { onChange(selection.copy(gothram = it)) })
-            D2MCheckboxRow("Citizenship", selection.citizenshipStatus, { onChange(selection.copy(citizenshipStatus = it)) })
+        D2MCheckboxGroup(label = strings.groupBasicPersonal, first = true) {
+            D2MCheckboxRow(strings.fieldHeight, selection.heightCm, { onChange(selection.copy(heightCm = it)) })
+            D2MCheckboxRow(strings.fieldComplexion, selection.complexion, { onChange(selection.copy(complexion = it)) })
+            D2MCheckboxRow(strings.fieldBodyType, selection.bodyType, { onChange(selection.copy(bodyType = it)) })
+            D2MCheckboxRow(strings.fieldMotherTongue, selection.motherTongue, { onChange(selection.copy(motherTongue = it)) })
+            D2MCheckboxRow(strings.fieldOtherLanguages, selection.otherLanguages, { onChange(selection.copy(otherLanguages = it)) })
+            D2MCheckboxRow(strings.fieldReligion, selection.religion, { onChange(selection.copy(religion = it)) })
+            D2MCheckboxRow(strings.fieldCommunity, selection.casteCommunity, { onChange(selection.copy(casteCommunity = it)) })
+            D2MCheckboxRow(strings.fieldSect, selection.sect, { onChange(selection.copy(sect = it)) })
+            D2MCheckboxRow(strings.fieldGothram, selection.gothram, { onChange(selection.copy(gothram = it)) })
+            D2MCheckboxRow(strings.fieldCitizenship, selection.citizenshipStatus, { onChange(selection.copy(citizenshipStatus = it)) })
         }
-        D2MCheckboxGroup(label = "Education & career") {
-            D2MCheckboxRow("Education", selection.highestEducation, { onChange(selection.copy(highestEducation = it)) })
-            D2MCheckboxRow("Institution", selection.institution, { onChange(selection.copy(institution = it)) })
-            D2MCheckboxRow("Occupation", selection.occupationTitle, { onChange(selection.copy(occupationTitle = it)) })
-            D2MCheckboxRow("Employer", selection.employer, { onChange(selection.copy(employer = it)) })
-            D2MCheckboxRow("Employment sector", selection.employmentSector, { onChange(selection.copy(employmentSector = it)) })
-            D2MCheckboxRow("Financial status", selection.financialStatus, { onChange(selection.copy(financialStatus = it)) })
+        D2MCheckboxGroup(label = strings.groupEducationCareer) {
+            D2MCheckboxRow(strings.fieldEducation, selection.highestEducation, { onChange(selection.copy(highestEducation = it)) })
+            D2MCheckboxRow(strings.fieldInstitution, selection.institution, { onChange(selection.copy(institution = it)) })
+            D2MCheckboxRow(strings.fieldOccupation, selection.occupationTitle, { onChange(selection.copy(occupationTitle = it)) })
+            D2MCheckboxRow(strings.fieldEmployer, selection.employer, { onChange(selection.copy(employer = it)) })
+            D2MCheckboxRow(strings.fieldEmploymentSector, selection.employmentSector, { onChange(selection.copy(employmentSector = it)) })
+            D2MCheckboxRow(strings.fieldFinancialStatus, selection.financialStatus, { onChange(selection.copy(financialStatus = it)) })
         }
-        D2MCheckboxGroup(label = "Family") {
-            D2MCheckboxRow("Elder brothers", selection.elderBrothersCount, { onChange(selection.copy(elderBrothersCount = it)) })
-            D2MCheckboxRow("Younger brothers", selection.youngerBrothersCount, { onChange(selection.copy(youngerBrothersCount = it)) })
-            D2MCheckboxRow("Elder sisters", selection.elderSistersCount, { onChange(selection.copy(elderSistersCount = it)) })
-            D2MCheckboxRow("Younger sisters", selection.youngerSistersCount, { onChange(selection.copy(youngerSistersCount = it)) })
-            D2MCheckboxRow("Native place", selection.nativity, { onChange(selection.copy(nativity = it)) })
-            D2MCheckboxRow("Family type", selection.familyType, { onChange(selection.copy(familyType = it)) })
-            D2MCheckboxRow("Family values", selection.familyValues, { onChange(selection.copy(familyValues = it)) })
+        D2MCheckboxGroup(label = strings.groupFamily) {
+            D2MCheckboxRow(strings.fieldElderBrothers, selection.elderBrothersCount, { onChange(selection.copy(elderBrothersCount = it)) })
+            D2MCheckboxRow(strings.fieldYoungerBrothers, selection.youngerBrothersCount, { onChange(selection.copy(youngerBrothersCount = it)) })
+            D2MCheckboxRow(strings.fieldElderSisters, selection.elderSistersCount, { onChange(selection.copy(elderSistersCount = it)) })
+            D2MCheckboxRow(strings.fieldYoungerSisters, selection.youngerSistersCount, { onChange(selection.copy(youngerSistersCount = it)) })
+            D2MCheckboxRow(strings.fieldNativePlace, selection.nativity, { onChange(selection.copy(nativity = it)) })
+            D2MCheckboxRow(strings.fieldFamilyType, selection.familyType, { onChange(selection.copy(familyType = it)) })
+            D2MCheckboxRow(strings.fieldFamilyValues, selection.familyValues, { onChange(selection.copy(familyValues = it)) })
         }
-        D2MCheckboxGroup(label = "Horoscope") {
-            D2MCheckboxRow("Nakshatra, pada, D1/D9 chart & dasha", selection.horoscope, { onChange(selection.copy(horoscope = it)) })
+        D2MCheckboxGroup(label = strings.fieldHoroscope) {
+            D2MCheckboxRow(strings.fieldHoroscopeDetail, selection.horoscope, { onChange(selection.copy(horoscope = it)) })
         }
         D2MTextField(
-            label = "How many photos",
+            label = strings.fieldPhotoCount,
             value = selection.photoCount.toString(),
             onValueChange = { text -> onChange(selection.copy(photoCount = text.toIntOrNull()?.coerceAtLeast(1) ?: 1)) },
             keyboardType = KeyboardType.Number,

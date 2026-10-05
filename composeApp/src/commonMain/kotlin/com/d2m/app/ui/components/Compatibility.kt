@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SubScoreBreakdown
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.SharedComponentsStrings
 import com.d2m.app.ui.theme.D2MStroke
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
@@ -58,6 +60,14 @@ fun overallRating(compositeScore: Double): String = when {
     else -> "Low"
 }
 
+/** Maps levelForScore()/overallRating()'s internal English key (also what toneForLevel matches on) to its display label -- never shown directly, since D2MLevelPill/CompatibilityCard are the only render sites for a `level` string. */
+fun levelLabel(level: String, strings: SharedComponentsStrings): String = when (level) {
+    "Exceptional" -> strings.compatExceptional
+    "High" -> strings.compatHigh
+    "Medium" -> strings.compatMedium
+    else -> strings.compatLow
+}
+
 private fun toneForLevel(level: String): D2MBadgeTone = when (level) {
     "Exceptional" -> D2MBadgeTone.SUCCESS
     "High" -> D2MBadgeTone.INFO
@@ -86,7 +96,8 @@ fun levelColor(level: String): Color {
 /** Mirrors components/LevelPill.jsx -- a level word (Low/Medium/High/Exceptional) rendered as a toned pill. */
 @Composable
 fun D2MLevelPill(level: String) {
-    D2MBadge(text = level, tone = toneForLevel(level))
+    val strings = LocalStrings.current.sharedComponents
+    D2MBadge(text = levelLabel(level, strings), tone = toneForLevel(level))
 }
 
 enum class CompatibilityCardSize { Large, Small }
@@ -116,10 +127,11 @@ fun CompatibilityCard(
     size: CompatibilityCardSize = CompatibilityCardSize.Large,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalStrings.current.sharedComponents
     SectionCard(modifier = modifier) {
         if (level == null) {
             Text(
-                "This pairing hasn't been scored yet.",
+                strings.notScoredYet,
                 style = MaterialTheme.typography.bodyMedium,
                 color = d2m.meta,
             )
@@ -132,8 +144,8 @@ fun CompatibilityCard(
             MaterialTheme.typography.titleLarge
         }
 
-        LabelText("Overall compatibility")
-        Text(level, style = overallStyle, color = levelColor(level), modifier = Modifier.padding(top = 4.dp))
+        LabelText(strings.overallCompatibility)
+        Text(levelLabel(level, strings), style = overallStyle, color = levelColor(level), modifier = Modifier.padding(top = 4.dp))
 
         if (breakdown.isNotEmpty()) {
             Column(Modifier.padding(top = 16.dp)) {
@@ -163,7 +175,7 @@ fun CompatibilityCard(
                     Column(Modifier.weight(1f)) {
                         LabelText(label)
                         Text(
-                            value ?: "—",
+                            value?.let { levelLabel(it, strings) } ?: "—",
                             style = subStyle,
                             color = value?.let { levelColor(it) } ?: d2m.faint,
                             modifier = Modifier.padding(top = 4.dp),

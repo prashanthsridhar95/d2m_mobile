@@ -47,6 +47,8 @@ import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.StepUpController
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.TrustStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -122,6 +124,7 @@ fun TrustScreen() {
     val dashboardRepo: DashboardRepository = koinInject()
     val stepUpController: StepUpController = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.trust
 
     var notClaimed by remember { mutableStateOf(false) }
     var tabIndex by remember { mutableStateOf(0) }
@@ -146,16 +149,16 @@ fun TrustScreen() {
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle("Trust & vouches")
+            PageTitle(strings.pageTitle)
             Text(
-                "Vouches, trusted connections, and endorsements from WedLock's identity network -- people who know this family can back up details on this profile.",
+                strings.introBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
             )
 
             D2MTabs(
-                titles = listOf("Vouches", "Connections", "Endorsements", "Recommendations", "References"),
+                titles = listOf(strings.tabVouches, strings.tabConnections, strings.tabEndorsements, strings.tabRecommendations, strings.tabReferences),
                 selectedIndex = tabIndex,
                 onSelect = { tabIndex = it },
             )
@@ -183,6 +186,7 @@ private fun VouchesSection(
     trustRepo: TrustRepository,
     stepUpController: StepUpController,
 ) {
+    val strings = LocalStrings.current.trust
     val scope = rememberCoroutineScope()
     var vouches by remember { mutableStateOf<List<VouchOut>?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -207,7 +211,7 @@ private fun VouchesSection(
             try {
                 givenVouches = trustRepo.listGivenVouches(forceRefresh = true)
             } catch (e: Exception) {
-                givenError = friendlyError(e, "Couldn't load vouches you've given.")
+                givenError = friendlyError(e, strings.errLoadGivenVouches)
             } finally {
                 givenLoading = false
             }
@@ -222,7 +226,7 @@ private fun VouchesSection(
             try {
                 vouches = trustRepo.listVouches(id, forceRefresh = true)
             } catch (e: Exception) {
-                error = friendlyError(e, "Couldn't load vouches.")
+                error = friendlyError(e, strings.errLoadVouches)
             } finally {
                 loading = false
             }
@@ -241,7 +245,7 @@ private fun VouchesSection(
         try {
             vouches = trustRepo.listVouches(id)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load vouches.")
+            error = friendlyError(e, strings.errLoadVouches)
         } finally {
             loading = false
         }
@@ -253,7 +257,7 @@ private fun VouchesSection(
         try {
             givenVouches = trustRepo.listGivenVouches()
         } catch (e: Exception) {
-            givenError = friendlyError(e, "Couldn't load vouches you've given.")
+            givenError = friendlyError(e, strings.errLoadGivenVouches)
         } finally {
             givenLoading = false
         }
@@ -272,7 +276,7 @@ private fun VouchesSection(
                 action(vouchId, token)
                 reload()
             } catch (e: Exception) {
-                error = friendlyError(e, "That didn't go through.")
+                error = friendlyError(e, strings.errGeneric)
             } finally {
                 busyId = null
             }
@@ -280,14 +284,14 @@ private fun VouchesSection(
     }
 
     when {
-        notClaimed -> D2MEmptyState("Waiting on your child", "Once they claim your invite, you'll be able to manage vouches from here.")
-        primaryId == null && role == D2MRole.PARENT -> Text("Loading…", color = mutedText(0.55f))
+        notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyVouches)
+        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Ask someone to vouch for this profile", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.vouchCreateTitle, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Choose what they're confirming, then send them the request outside the app -- they'll approve it from their own WedLock account.",
+                        strings.vouchCreateBody,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
@@ -302,7 +306,7 @@ private fun VouchesSection(
                         )
                     }
                     D2MSelectField(
-                        label = "Visibility",
+                        label = strings.visibilityLabel,
                         value = visibility,
                         options = VISIBILITY_OPTIONS,
                         onValueChange = { visibility = it },
@@ -310,7 +314,7 @@ private fun VouchesSection(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                     D2MButton(
-                        text = if (creating) "Creating…" else "Create vouch",
+                        text = if (creating) strings.creatingEllipsis else strings.createVouch,
                         enabled = !creating && selectedScopes.isNotEmpty() && primaryId != null,
                         modifier = Modifier.padding(top = 12.dp),
                         onClick = {
@@ -328,7 +332,7 @@ private fun VouchesSection(
                                     selectedScopes = emptySet()
                                     reload()
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "Couldn't create a vouch.")
+                                    error = friendlyError(e, strings.errCreateVouch)
                                 } finally {
                                     creating = false
                                 }
@@ -339,7 +343,7 @@ private fun VouchesSection(
             }
 
             D2MTabs(
-                titles = listOf("Received", "Given"),
+                titles = listOf(strings.tabReceived, strings.tabGiven),
                 selectedIndex = vouchTab,
                 onSelect = { vouchTab = it },
                 modifier = Modifier.padding(top = 16.dp),
@@ -351,7 +355,7 @@ private fun VouchesSection(
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     when {
                         loading -> TrustListSkeleton()
-                        vouches.isNullOrEmpty() -> D2MEmptyState("No vouches yet", "Vouches you request or receive will appear here.")
+                        vouches.isNullOrEmpty() -> D2MEmptyState(strings.vouchesEmptyTitle, strings.vouchesEmptyBody)
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(vouches!!) { v ->
                                 D2MCard(modifier = Modifier.fillMaxWidth()) {
@@ -365,25 +369,25 @@ private fun VouchesSection(
                                             style = MaterialTheme.typography.bodyMedium,
                                             modifier = Modifier.padding(top = 6.dp),
                                         )
-                                        v.createdAt?.let { Text("Created $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
+                                        v.createdAt?.let { Text(strings.created(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
 
                                         val busy = busyId == v.id
                                         Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             if (v.status.contains("PENDING")) {
                                                 D2MButton(
-                                                    text = "Approve", size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                    text = strings.approve, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy,
                                                     onClick = { act(v.id) { id2, token -> trustRepo.approveVouch(primaryId!!, id2, token) } },
                                                 )
                                                 D2MButton(
-                                                    text = "Decline", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                    text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy,
                                                     onClick = { act(v.id) { id2, token -> trustRepo.declineVouch(primaryId!!, id2, token) } },
                                                 )
                                             }
                                             if (v.status.contains("PENDING") || v.status == "APPROVED") {
                                                 D2MButton(
-                                                    text = "Withdraw", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                    text = strings.withdraw, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy,
                                                     onClick = { act(v.id) { id2, token -> trustRepo.withdrawVouch(primaryId!!, id2, token) } },
                                                 )
@@ -401,14 +405,14 @@ private fun VouchesSection(
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     when {
                         givenLoading -> TrustListSkeleton()
-                        givenVouches.isNullOrEmpty() -> D2MEmptyState("You haven't vouched for anyone yet", "Vouches you give, on any profile, will appear here.")
+                        givenVouches.isNullOrEmpty() -> D2MEmptyState(strings.givenVouchesEmptyTitle, strings.givenVouchesEmptyBody)
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(givenVouches!!) { v ->
                                 D2MCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(modifier = Modifier.padding(12.dp)) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                v.subjectName ?: "Profile no longer available",
+                                                v.subjectName ?: strings.subjectProfileUnavailable,
                                                 style = MaterialTheme.typography.titleSmall,
                                             )
                                             D2MBadge(v.status, statusTone(v.status))
@@ -418,13 +422,13 @@ private fun VouchesSection(
                                             style = MaterialTheme.typography.bodyMedium,
                                             modifier = Modifier.padding(top = 6.dp),
                                         )
-                                        v.createdAt?.let { Text("Created $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
+                                        v.createdAt?.let { Text(strings.created(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
 
                                         val busy = busyId == v.id
                                         if (v.status.contains("PENDING") || v.status == "APPROVED") {
                                             Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
                                                 D2MButton(
-                                                    text = "Withdraw", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                    text = strings.withdraw, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy,
                                                     onClick = {
                                                         busyId = v.id
@@ -438,7 +442,7 @@ private fun VouchesSection(
                                                                 trustRepo.withdrawVouch(v.subjectPrimaryId ?: "", v.id, token)
                                                                 reloadGiven()
                                                             } catch (e: Exception) {
-                                                                givenError = friendlyError(e, "That didn't go through.")
+                                                                givenError = friendlyError(e, strings.errGeneric)
                                                             } finally {
                                                                 busyId = null
                                                             }
@@ -462,6 +466,7 @@ private fun VouchesSection(
 
 @Composable
 private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: StepUpController) {
+    val strings = LocalStrings.current.trust
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     var connections by remember { mutableStateOf<List<ConnectionOut>?>(null) }
@@ -481,7 +486,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
             try {
                 connections = trustRepo.listConnections(forceRefresh = true)
             } catch (e: Exception) {
-                error = friendlyError(e, "Couldn't load trusted connections.")
+                error = friendlyError(e, strings.errLoadConnections)
             } finally {
                 loading = false
             }
@@ -492,7 +497,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
         try {
             connections = trustRepo.listConnections()
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load trusted connections.")
+            error = friendlyError(e, strings.errLoadConnections)
         } finally {
             loading = false
         }
@@ -500,22 +505,22 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
 
     D2MCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Invite a trusted connection", style = MaterialTheme.typography.titleSmall)
+            Text(strings.inviteConnectionTitle, style = MaterialTheme.typography.titleSmall)
             Text(
-                "Creates a one-time invite link to share outside the app. Whoever accepts it can later endorse specific details on this profile.",
+                strings.inviteConnectionBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
                 modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
             )
             D2MSelectField(
-                label = "Relationship",
+                label = strings.relationshipLabel,
                 value = connectionType,
                 options = CONNECTION_TYPES,
                 onValueChange = { connectionType = it },
                 optionLabel = ::humanize,
             )
             D2MButton(
-                text = if (inviting) "Creating…" else "Create invite",
+                text = if (inviting) strings.creatingEllipsis else strings.createInvite,
                 enabled = !inviting,
                 modifier = Modifier.padding(top = 12.dp),
                 onClick = {
@@ -532,7 +537,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
                             lastInviteToken = invite.inviteToken
                             reload()
                         } catch (e: Exception) {
-                            error = friendlyError(e, "Couldn't create an invite.")
+                            error = friendlyError(e, strings.errCreateInvite)
                         } finally {
                             inviting = false
                         }
@@ -545,9 +550,9 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Invite ready -- share it once", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                    Text(strings.inviteReadyLabel, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                     D2MButton(
-                        text = "Copy",
+                        text = strings.copy,
                         size = com.d2m.app.ui.components.D2MButtonSize.SM,
                         variant = D2MButtonVariant.OUTLINE,
                         onClick = { clipboard.setText(AnnotatedString(inv)) },
@@ -559,16 +564,16 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
 
     D2MCard(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Accept an invite", style = MaterialTheme.typography.titleSmall)
+            Text(strings.acceptInviteTitle, style = MaterialTheme.typography.titleSmall)
             D2MTextField(
-                label = "Invite code",
+                label = strings.inviteCodeLabel,
                 value = acceptToken,
                 onValueChange = { acceptToken = it },
-                placeholder = "Paste the invite someone shared with you",
+                placeholder = strings.inviteCodePlaceholder,
                 modifier = Modifier.padding(top = 8.dp),
             )
             D2MButton(
-                text = if (accepting) "Accepting…" else "Accept",
+                text = if (accepting) strings.acceptingEllipsis else strings.accept,
                 enabled = !accepting && acceptToken.isNotBlank(),
                 modifier = Modifier.padding(top = 12.dp),
                 onClick = {
@@ -585,7 +590,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
                             acceptToken = ""
                             reload()
                         } catch (e: Exception) {
-                            error = friendlyError(e, "Couldn't accept that invite.")
+                            error = friendlyError(e, strings.errAcceptInvite)
                         } finally {
                             accepting = false
                         }
@@ -600,7 +605,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
     Column(modifier = Modifier.padding(top = 16.dp)) {
         when {
             loading -> TrustListSkeleton()
-            connections.isNullOrEmpty() -> D2MEmptyState("No trusted connections yet", "Connections you invite or accept will appear here.")
+            connections.isNullOrEmpty() -> D2MEmptyState(strings.connectionsEmptyTitle, strings.connectionsEmptyBody)
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(connections!!) { c ->
                     D2MCard(modifier = Modifier.fillMaxWidth()) {
@@ -609,12 +614,12 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
                                 D2MBadge(c.status, statusTone(c.status))
                                 Text(humanize(c.connectionType), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
                             }
-                            c.expiresAt?.let { Text("Expires $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp)) }
+                            c.expiresAt?.let { Text(strings.expires(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp)) }
 
                             val busy = busyId == c.id
                             if (c.status == "ACTIVE" || c.status == "PENDING") {
                                 D2MButton(
-                                    text = "Revoke",
+                                    text = strings.revoke,
                                     variant = D2MButtonVariant.OUTLINE,
                                     size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                     enabled = !busy,
@@ -631,7 +636,7 @@ private fun ConnectionsSection(trustRepo: TrustRepository, stepUpController: Ste
                                                 trustRepo.revokeConnection(c.id, token)
                                                 reload()
                                             } catch (e: Exception) {
-                                                error = friendlyError(e, "Couldn't revoke that connection.")
+                                                error = friendlyError(e, strings.errRevoke)
                                             } finally {
                                                 busyId = null
                                             }
@@ -657,6 +662,7 @@ private fun EndorsementsSection(
     trustRepo: TrustRepository,
     stepUpController: StepUpController,
 ) {
+    val strings = LocalStrings.current.trust
     val scope = rememberCoroutineScope()
     var endorsements by remember { mutableStateOf<List<EndorsementOut>?>(null) }
     var connections by remember { mutableStateOf<List<ConnectionOut>?>(null) }
@@ -676,7 +682,7 @@ private fun EndorsementsSection(
             try {
                 endorsements = trustRepo.listEndorsements(id, forceRefresh = true)
             } catch (e: Exception) {
-                error = friendlyError(e, "Couldn't load endorsements.")
+                error = friendlyError(e, strings.errLoadEndorsements)
             } finally {
                 loading = false
             }
@@ -694,7 +700,7 @@ private fun EndorsementsSection(
         try {
             endorsements = trustRepo.listEndorsements(id)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load endorsements.")
+            error = friendlyError(e, strings.errLoadEndorsements)
         } finally {
             loading = false
         }
@@ -702,31 +708,31 @@ private fun EndorsementsSection(
     }
 
     when {
-        notClaimed -> D2MEmptyState("Waiting on your child", "Once they claim your invite, you'll be able to manage endorsements from here.")
-        primaryId == null && role == D2MRole.PARENT -> Text("Loading…", color = mutedText(0.55f))
+        notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyEndorsements)
+        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Request an endorsement", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.endorsementRequestTitle, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Built on an active trusted connection -- add one from the Connections tab first if the list below is empty.",
+                        strings.endorsementRequestBody,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     )
                     if (connections.isNullOrEmpty()) {
-                        Text("No active trusted connections yet.", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                        Text(strings.noActiveConnections, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                     } else {
                         D2MSelectField(
-                            label = "Trusted connection",
+                            label = strings.trustedConnectionLabel,
                             value = selectedConnectionId,
                             options = connections!!.map { it.id },
                             onValueChange = { selectedConnectionId = it },
                             optionLabel = { id -> connections!!.firstOrNull { it.id == id }?.let { humanize(it.connectionType) } ?: id },
-                            placeholderWhenEmpty = "Choose one",
+                            placeholderWhenEmpty = strings.chooseOnePlaceholder,
                         )
                         D2MSelectField(
-                            label = "What are they confirming",
+                            label = strings.whatConfirmingLabel,
                             value = claimScope,
                             options = ENDORSEMENT_CLAIM_SCOPES,
                             onValueChange = { claimScope = it },
@@ -734,7 +740,7 @@ private fun EndorsementsSection(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                         D2MSelectField(
-                            label = "Visibility",
+                            label = strings.visibilityLabel,
                             value = visibility,
                             options = VISIBILITY_OPTIONS,
                             onValueChange = { visibility = it },
@@ -742,7 +748,7 @@ private fun EndorsementsSection(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                         D2MButton(
-                            text = if (creating) "Creating…" else "Request endorsement",
+                            text = if (creating) strings.creatingEllipsis else strings.requestEndorsement,
                             enabled = !creating && selectedConnectionId.isNotEmpty() && primaryId != null,
                             modifier = Modifier.padding(top = 12.dp),
                             onClick = {
@@ -759,7 +765,7 @@ private fun EndorsementsSection(
                                         trustRepo.createEndorsement(id, selectedConnectionId, claimScope, visibility, token)
                                         reload()
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't request an endorsement.")
+                                        error = friendlyError(e, strings.errRequestEndorsement)
                                     } finally {
                                         creating = false
                                     }
@@ -775,7 +781,7 @@ private fun EndorsementsSection(
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
                     loading -> TrustListSkeleton()
-                    endorsements.isNullOrEmpty() -> D2MEmptyState("No endorsements yet", "Endorsements you request or receive will appear here.")
+                    endorsements.isNullOrEmpty() -> D2MEmptyState(strings.endorsementsEmptyTitle, strings.endorsementsEmptyBody)
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(endorsements!!) { e ->
                             D2MCard(modifier = Modifier.fillMaxWidth()) {
@@ -785,13 +791,13 @@ private fun EndorsementsSection(
                                         e.visibility?.let { Text(humanize(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f)) }
                                     }
                                     Text(humanize(e.claimScope), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
-                                    e.createdAt?.let { Text("Created $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
+                                    e.createdAt?.let { Text(strings.created(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
 
                                     val busy = busyId == e.id
                                     Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         if (e.status.contains("PENDING")) {
                                             D2MButton(
-                                                text = "Approve", size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.approve, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = e.id
@@ -799,13 +805,13 @@ private fun EndorsementsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.approveEndorsement(primaryId!!, e.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
                                             )
                                             D2MButton(
-                                                text = "Decline", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = e.id
@@ -813,7 +819,7 @@ private fun EndorsementsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.declineEndorsement(primaryId!!, e.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -821,7 +827,7 @@ private fun EndorsementsSection(
                                         }
                                         if (e.status.contains("PENDING") || e.status == "APPROVED") {
                                             D2MButton(
-                                                text = "Withdraw", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.withdraw, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = e.id
@@ -829,7 +835,7 @@ private fun EndorsementsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.withdrawEndorsement(primaryId!!, e.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -873,6 +879,7 @@ private fun RecommendationsSection(
     trustRepo: TrustRepository,
     stepUpController: StepUpController,
 ) {
+    val strings = LocalStrings.current.trust
     val scope = rememberCoroutineScope()
     var recommendations by remember { mutableStateOf<List<RecommendationOut>?>(null) }
     var connections by remember { mutableStateOf<List<ConnectionOut>?>(null) }
@@ -897,7 +904,7 @@ private fun RecommendationsSection(
             try {
                 recommendations = trustRepo.listRecommendations(id, forceRefresh = true)
             } catch (e: Exception) {
-                error = friendlyError(e, "Couldn't load recommendations.")
+                error = friendlyError(e, strings.errLoadRecommendations)
             } finally {
                 loading = false
             }
@@ -915,7 +922,7 @@ private fun RecommendationsSection(
         try {
             recommendations = trustRepo.listRecommendations(id)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load recommendations.")
+            error = friendlyError(e, strings.errLoadRecommendations)
         } finally {
             loading = false
         }
@@ -930,31 +937,31 @@ private fun RecommendationsSection(
     }
 
     when {
-        notClaimed -> D2MEmptyState("Waiting on your child", "Once they claim your invite, you'll be able to manage recommendations from here.")
-        primaryId == null && role == D2MRole.PARENT -> Text("Loading…", color = mutedText(0.55f))
+        notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyRecommendations)
+        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Request a recommendation", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.recommendationRequestTitle, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Built on an active trusted connection -- add one from the Connections tab first if the list below is empty. They'll write it themselves once you send the request.",
+                        strings.recommendationRequestBody,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     )
                     if (connections.isNullOrEmpty()) {
-                        Text("No active trusted connections yet.", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                        Text(strings.noActiveConnections, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                     } else {
                         D2MSelectField(
-                            label = "Trusted connection",
+                            label = strings.trustedConnectionLabel,
                             value = selectedConnectionId,
                             options = connections!!.map { it.id },
                             onValueChange = { selectedConnectionId = it },
                             optionLabel = { id -> connections!!.firstOrNull { it.id == id }?.let { humanize(it.connectionType) } ?: id },
-                            placeholderWhenEmpty = "Choose one",
+                            placeholderWhenEmpty = strings.chooseOnePlaceholder,
                         )
                         D2MSelectField(
-                            label = "Visibility",
+                            label = strings.visibilityLabel,
                             value = visibility,
                             options = VISIBILITY_OPTIONS,
                             onValueChange = { visibility = it },
@@ -962,7 +969,7 @@ private fun RecommendationsSection(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                         D2MButton(
-                            text = if (creating) "Requesting…" else "Request recommendation",
+                            text = if (creating) strings.requestingEllipsis else strings.requestRecommendation,
                             enabled = !creating && selectedConnectionId.isNotEmpty() && primaryId != null,
                             modifier = Modifier.padding(top = 12.dp),
                             onClick = {
@@ -979,7 +986,7 @@ private fun RecommendationsSection(
                                         trustRepo.requestRecommendation(id, selectedConnectionId, visibility, token)
                                         reload()
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't request a recommendation.")
+                                        error = friendlyError(e, strings.errRequestRecommendation)
                                     } finally {
                                         creating = false
                                     }
@@ -995,7 +1002,7 @@ private fun RecommendationsSection(
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
                     loading -> TrustListSkeleton()
-                    recommendations.isNullOrEmpty() -> D2MEmptyState("No recommendations yet", "Recommendations you request or receive will appear here.")
+                    recommendations.isNullOrEmpty() -> D2MEmptyState(strings.recommendationsEmptyTitle, strings.recommendationsEmptyBody)
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(recommendations!!) { r ->
                             D2MCard(modifier = Modifier.fillMaxWidth()) {
@@ -1009,20 +1016,20 @@ private fun RecommendationsSection(
                                     r.confirmedScopes?.takeIf { it.isNotEmpty() }?.let {
                                         Text(it.joinToString(", ") { s -> humanize(s) }, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp))
                                     }
-                                    r.createdAt?.let { Text("Created $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
+                                    r.createdAt?.let { Text(strings.created(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
 
                                     val busy = busyId == r.id
                                     Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         if (r.status == "DRAFT") {
                                             D2MButton(
-                                                text = "Submit", size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.submit, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = { if (submittingId == r.id) submittingId = null else openSubmitForm(r.id) },
                                             )
                                         }
                                         if (r.status == "PENDING_OWNER_APPROVAL") {
                                             D2MButton(
-                                                text = "Approve", size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.approve, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1030,7 +1037,7 @@ private fun RecommendationsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.approveRecommendation(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -1038,7 +1045,7 @@ private fun RecommendationsSection(
                                         }
                                         if (r.status == "PENDING_OWNER_APPROVAL" || r.status == "APPROVED") {
                                             D2MButton(
-                                                text = "Hide", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.hide, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1046,7 +1053,7 @@ private fun RecommendationsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.hideRecommendation(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -1054,7 +1061,7 @@ private fun RecommendationsSection(
                                         }
                                         if (r.status == "DRAFT" || r.status == "PENDING_OWNER_APPROVAL" || r.status == "APPROVED") {
                                             D2MButton(
-                                                text = "Withdraw", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.withdraw, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1062,7 +1069,7 @@ private fun RecommendationsSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.withdrawRecommendation(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -1072,7 +1079,7 @@ private fun RecommendationsSection(
 
                                     if (submittingId == r.id) {
                                         Column(modifier = Modifier.padding(top = 12.dp)) {
-                                            Text("What are you confirming?", style = MaterialTheme.typography.labelMedium)
+                                            Text(strings.whatConfirmingQuestion, style = MaterialTheme.typography.labelMedium)
                                             RECOMMENDATION_CONFIRMED_SCOPES.forEach { s ->
                                                 D2MCheckboxRow(
                                                     label = humanize(s),
@@ -1083,19 +1090,19 @@ private fun RecommendationsSection(
                                                 )
                                             }
                                             D2MTextField(
-                                                label = "Your recommendation",
+                                                label = strings.yourRecommendationLabel,
                                                 value = submitText,
                                                 onValueChange = { submitText = it },
-                                                placeholder = "20-500 characters",
+                                                placeholder = strings.recommendationPlaceholder,
                                                 singleLine = false,
                                                 minLines = 3,
                                                 modifier = Modifier.padding(top = 4.dp),
                                             )
                                             D2MTextField(
-                                                label = "Known since year",
+                                                label = strings.knownSinceYearLabel,
                                                 value = submitYear,
                                                 onValueChange = { text -> submitYear = text.filter { it.isDigit() }.take(4) },
-                                                placeholder = "Optional, e.g. 2015",
+                                                placeholder = strings.knownSinceYearPlaceholder,
                                                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
                                                 optional = true,
                                                 modifier = Modifier.padding(top = 8.dp),
@@ -1103,7 +1110,7 @@ private fun RecommendationsSection(
                                             val canSend = submitScopes.isNotEmpty() && submitText.trim().length >= 20
                                             Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 D2MButton(
-                                                    text = if (busy) "Sending…" else "Send",
+                                                    text = if (busy) strings.sendingEllipsis else strings.send,
                                                     size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy && canSend,
                                                     onClick = {
@@ -1119,7 +1126,7 @@ private fun RecommendationsSection(
                                                                 submittingId = null
                                                                 reload()
                                                             } catch (ex: Exception) {
-                                                                error = friendlyError(ex, "Couldn't submit that recommendation.")
+                                                                error = friendlyError(ex, strings.errSubmitRecommendation)
                                                             } finally {
                                                                 busyId = null
                                                             }
@@ -1127,7 +1134,7 @@ private fun RecommendationsSection(
                                                     },
                                                 )
                                                 D2MButton(
-                                                    text = "Cancel", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                    text = strings.cancel, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                     enabled = !busy,
                                                     onClick = { submittingId = null },
                                                 )
@@ -1170,6 +1177,7 @@ private fun ExternalReferencesSection(
     trustRepo: TrustRepository,
     stepUpController: StepUpController,
 ) {
+    val strings = LocalStrings.current.trust
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     var references by remember { mutableStateOf<List<ExternalReferenceOut>?>(null) }
@@ -1189,7 +1197,7 @@ private fun ExternalReferencesSection(
             try {
                 references = trustRepo.listExternalReferences(id, forceRefresh = true)
             } catch (e: Exception) {
-                error = friendlyError(e, "Couldn't load external references.")
+                error = friendlyError(e, strings.errLoadReferences)
             } finally {
                 loading = false
             }
@@ -1207,40 +1215,40 @@ private fun ExternalReferencesSection(
         try {
             references = trustRepo.listExternalReferences(id)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load external references.")
+            error = friendlyError(e, strings.errLoadReferences)
         } finally {
             loading = false
         }
     }
 
     when {
-        notClaimed -> D2MEmptyState("Waiting on your child", "Once they claim your invite, you'll be able to manage external references from here.")
-        primaryId == null && role == D2MRole.PARENT -> Text("Loading…", color = mutedText(0.55f))
+        notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyReferences)
+        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Invite an external reference", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.inviteReferenceTitle, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Someone outside your trusted connections -- a colleague, family friend, anyone who knows you. They'll get a link to confirm a few details about you, valid for $EXTERNAL_REFERENCE_EXPIRES_HOURS hours.",
+                        strings.inviteReferenceBody(EXTERNAL_REFERENCE_EXPIRES_HOURS),
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                     )
                     D2MTextField(
-                        label = "Their email or phone",
+                        label = strings.contactLabel,
                         value = contact,
                         onValueChange = { contact = it },
-                        placeholder = "email@example.com or +91...",
+                        placeholder = strings.contactPlaceholder,
                     )
                     D2MTextField(
-                        label = "How do you know them",
+                        label = strings.relationshipHowLabel,
                         value = relationshipType,
                         onValueChange = { relationshipType = it },
-                        placeholder = "e.g. colleague, family friend",
+                        placeholder = strings.relationshipHowPlaceholder,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                     D2MButton(
-                        text = if (creating) "Sending…" else "Send invite",
+                        text = if (creating) strings.sendingEllipsis else strings.sendInvite,
                         enabled = !creating && contact.isNotBlank() && relationshipType.trim().length >= 2 && primaryId != null,
                         modifier = Modifier.padding(top = 12.dp),
                         onClick = {
@@ -1260,7 +1268,7 @@ private fun ExternalReferencesSection(
                                     relationshipType = ""
                                     reload()
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "Couldn't send that invite.")
+                                    error = friendlyError(e, strings.errSendInvite)
                                 } finally {
                                     creating = false
                                 }
@@ -1273,9 +1281,9 @@ private fun ExternalReferencesSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Invite ready -- share it once", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                            Text(strings.inviteReadyLabel, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                             D2MButton(
-                                text = "Copy",
+                                text = strings.copy,
                                 size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                 variant = D2MButtonVariant.OUTLINE,
                                 onClick = { clipboard.setText(AnnotatedString(inv)) },
@@ -1290,7 +1298,7 @@ private fun ExternalReferencesSection(
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 when {
                     loading -> TrustListSkeleton()
-                    references.isNullOrEmpty() -> D2MEmptyState("No external references yet", "References you invite will appear here.")
+                    references.isNullOrEmpty() -> D2MEmptyState(strings.referencesEmptyTitle, strings.referencesEmptyBody)
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(references!!) { r ->
                             D2MCard(modifier = Modifier.fillMaxWidth()) {
@@ -1303,13 +1311,13 @@ private fun ExternalReferencesSection(
                                     r.confirmedScopes?.takeIf { it.isNotEmpty() }?.let {
                                         Text(it.joinToString(", ") { s -> humanize(s) }, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp))
                                     }
-                                    r.expiresAt?.let { Text("Expires $it", style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
+                                    r.expiresAt?.let { Text(strings.expires(it), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f), modifier = Modifier.padding(top = 4.dp)) }
 
                                     val busy = busyId == r.id
                                     Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         if (r.status == "PENDING_OWNER_APPROVAL") {
                                             D2MButton(
-                                                text = "Approve", size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.approve, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1317,13 +1325,13 @@ private fun ExternalReferencesSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.approveExternalReference(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
                                             )
                                             D2MButton(
-                                                text = "Decline", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1331,7 +1339,7 @@ private fun ExternalReferencesSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.declineExternalReference(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -1339,7 +1347,7 @@ private fun ExternalReferencesSection(
                                         }
                                         if (r.status == "APPROVED") {
                                             D2MButton(
-                                                text = "Hide", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.hide, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1347,7 +1355,7 @@ private fun ExternalReferencesSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.hideExternalReference(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },
@@ -1355,7 +1363,7 @@ private fun ExternalReferencesSection(
                                         }
                                         if (r.status == "PENDING_SUBMISSION" || r.status == "PENDING_OWNER_APPROVAL" || r.status == "APPROVED") {
                                             D2MButton(
-                                                text = "Withdraw", variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
+                                                text = strings.withdraw, variant = D2MButtonVariant.OUTLINE, size = com.d2m.app.ui.components.D2MButtonSize.SM,
                                                 enabled = !busy,
                                                 onClick = {
                                                     busyId = r.id
@@ -1363,7 +1371,7 @@ private fun ExternalReferencesSection(
                                                         val token = stepUpController.confirmStepUp()
                                                         if (token == null) { busyId = null; return@launch }
                                                         try { trustRepo.withdrawExternalReference(primaryId!!, r.id, token); reload() }
-                                                        catch (ex: Exception) { error = friendlyError(ex, "That didn't go through.") }
+                                                        catch (ex: Exception) { error = friendlyError(ex, strings.errGeneric) }
                                                         finally { busyId = null }
                                                     }
                                                 },

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MStroke
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
@@ -110,7 +111,7 @@ fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Mod
         Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(message, color = danger.fg, style = MaterialTheme.typography.bodyMedium)
             if (onRetry != null) {
-                LinkText("Retry", onRetry, Modifier.padding(top = 2.dp))
+                LinkText(LocalStrings.current.sharedComponents.retry, onRetry, Modifier.padding(top = 2.dp))
             }
         }
     }

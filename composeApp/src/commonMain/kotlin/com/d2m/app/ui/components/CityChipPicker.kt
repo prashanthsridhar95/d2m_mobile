@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.network.GeocodingApi
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.delay
 
@@ -45,6 +47,8 @@ fun CityChipPicker(
     modifier: Modifier = Modifier,
     disabled: Boolean = false,
 ) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<String>>(emptyList()) }
     var expanded by remember { mutableStateOf(false) }
@@ -81,12 +85,12 @@ fun CityChipPicker(
                         // ("Chennai, Tamil Nadu, India"), which is already
                         // properly capitalized and has no underscore to
                         // split on.
-                        label = { Text(Taxonomy.toLabel(city)) },
+                        label = { Text(Taxonomy.toLabel(city, locale)) },
                         trailingIcon = if (!disabled) {
                             {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Remove $city",
+                                    contentDescription = strings.removeCity(city),
                                     modifier = Modifier.padding(2.dp),
                                 )
                             }
@@ -101,7 +105,7 @@ fun CityChipPicker(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Start typing a city…") },
+                placeholder = { Text(strings.startTypingACity) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )

@@ -65,6 +65,7 @@ import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.ProfilePhoto
 import com.d2m.app.ui.components.ProfileThumb
 import com.d2m.app.ui.components.SubHeading
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -167,6 +168,7 @@ fun ChildHomeScreen(
     var consentBusyId by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
+    val strings = LocalStrings.current.childHome
 
     LaunchedEffect(primaryId) {
         if (primaryId == null) return@LaunchedEffect
@@ -208,7 +210,7 @@ fun ChildHomeScreen(
             consentRequests = consentDeferred.await()
             requestsLoaded = true
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load your home feed.")
+            error = friendlyError(e, strings.errLoadHomeFeed)
         }
     }
 
@@ -218,10 +220,10 @@ fun ChildHomeScreen(
             matchBusyId = candidateId
             try {
                 val res = suggestionsRepo.act(pid, candidateId, action)
-                if (res.mutualMatch) matchBanner = "It's a match! Head to Matches to say hi."
+                if (res.mutualMatch) matchBanner = strings.matchBanner
                 received = received.filter { it.candidateId != candidateId }
             } catch (e: Exception) {
-                actionError = friendlyError(e, "Couldn't record that decision.")
+                actionError = friendlyError(e, strings.errRecordDecision)
             } finally {
                 matchBusyId = null
             }
@@ -236,7 +238,7 @@ fun ChildHomeScreen(
                 val res = consentRepo.decide(pid, requestId, decision)
                 consentRequests = consentRequests.map { if (it.requestId == requestId) it.copy(status = res.status) else it }
             } catch (e: Exception) {
-                actionError = friendlyError(e, "Couldn't record that decision.")
+                actionError = friendlyError(e, strings.errRecordDecision)
             } finally {
                 consentBusyId = null
             }
@@ -254,13 +256,13 @@ fun ChildHomeScreen(
         val pendingOnMe = threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
         val showPicks = !discoverDisabled && suggestions.isNotEmpty()
 
-        val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "there"
+        val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: strings.greetingFallbackName
         val subtitle = when {
-            pendingOnMe > 0 -> "Someone's waiting on your decision in Matches 💛"
-            receivedFiltered.isNotEmpty() -> "${receivedFiltered.size} new ${if (receivedFiltered.size == 1) "person" else "people"} sent you a request 👀"
-            pendingConsentList.isNotEmpty() -> "Your Sponsor wants to see more about someone you're talking to."
-            showPicks -> "A few new profiles showed up for you today ✨"
-            else -> "You're all caught up -- nothing waiting on you right now."
+            pendingOnMe > 0 -> strings.subtitlePendingDecision
+            receivedFiltered.isNotEmpty() -> strings.subtitleNewRequest(receivedFiltered.size)
+            pendingConsentList.isNotEmpty() -> strings.subtitleConsentPending
+            showPicks -> strings.subtitleNewPicks
+            else -> strings.subtitleCaughtUp
         }
 
         val listItems = buildList {
@@ -283,11 +285,11 @@ fun ChildHomeScreen(
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
-                        PageTitle("Hey $firstName 👋")
+                        PageTitle(strings.greeting(firstName))
                         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        Icon(Icons.Filled.Settings, contentDescription = strings.settingsContentDescription)
                     }
                 }
             }
@@ -336,8 +338,8 @@ fun ChildHomeScreen(
                                 when (item) {
                                     HomeListItem.Empty -> HomeListRow(
                                         avatar = { GlyphCircle("👀") },
-                                        title = "No one new yet",
-                                        subtitle = "But they will -- your profile's out there working for you.",
+                                        title = strings.noOneNewYetTitle,
+                                        subtitle = strings.emptyListSubtitle,
                                     )
 
                                     is HomeListItem.Received -> {
@@ -345,12 +347,12 @@ fun ChildHomeScreen(
                                         HomeListRow(
                                             avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
                                             title = item.s.candidateName,
-                                            subtitle = "Wants to match with you",
+                                            subtitle = strings.wantsToMatch,
                                             onClick = { onOpenProfile(item.s.candidateId) },
                                             action = {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton("Accept", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "accept") })
-                                                    D2MButton("Decline", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "reject") })
+                                                    D2MButton(strings.accept, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "accept") })
+                                                    D2MButton(strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "reject") })
                                                 }
                                             },
                                         )
@@ -360,11 +362,11 @@ fun ChildHomeScreen(
                                         val busy = consentBusyId == item.r.requestId
                                         HomeListRow(
                                             avatar = { GlyphCircle("💛") },
-                                            title = "Your Sponsor wants to see more about ${item.r.prospectName ?: "your match"}",
+                                            title = strings.consentRowTitle(item.r.prospectName ?: strings.consentFallbackName),
                                             action = {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton("Grant", size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "grant") })
-                                                    D2MButton("Deny", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "deny") })
+                                                    D2MButton(strings.grant, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "grant") })
+                                                    D2MButton(strings.deny, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "deny") })
                                                 }
                                             },
                                         )
@@ -373,26 +375,26 @@ fun ChildHomeScreen(
                                     is HomeListItem.Sent -> HomeListRow(
                                         avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
                                         title = item.s.candidateName,
-                                        subtitle = "Waiting for a response",
+                                        subtitle = strings.waitingForResponse,
                                         onClick = { onOpenProfile(item.s.candidateId) },
                                     )
 
                                     is HomeListItem.Picks -> HomeListRow(
                                         avatar = { GlyphCircle("💌") },
-                                        title = "Today's picks",
-                                        subtitle = "${item.count} new ${if (item.count == 1) "profile" else "profiles"} worth a look",
+                                        title = strings.todaysPicksTitle,
+                                        subtitle = strings.todaysPicksSubtitle(item.count),
                                         onClick = onOpenDiscover,
-                                        action = { D2MButton("Take a look", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, onClick = onOpenDiscover) },
+                                        action = { D2MButton(strings.takeALook, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, onClick = onOpenDiscover) },
                                     )
 
                                     HomeListItem.Profile -> HomeListRow(
                                         avatar = { PhotoCircle(ownPhotoUrl, profile?.name, 40.dp, apiClient) },
-                                        title = "How you're showing up",
-                                        subtitle = "A peek at what people see when they check you out.",
+                                        title = strings.yourProfileTitle,
+                                        subtitle = strings.yourProfileSubtitle,
                                         onClick = onOpenChildProfileDialog,
                                         action = {
                                             Text(
-                                                if (profile?.profileCompleted == true) "View & edit" else "Complete profile",
+                                                if (profile?.profileCompleted == true) strings.viewAndEdit else strings.completeProfile,
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.primary,
@@ -440,6 +442,7 @@ private fun HeroBanner(
     onOpenDiscover: () -> Unit,
 ) {
     val shape = RoundedCornerShape(D2MRadius.lg)
+    val strings = LocalStrings.current.childHome
 
     if (!loaded) {
         D2MSkeleton(modifier = Modifier.fillMaxWidth(), height = 220.dp, radius = D2MRadius.lg)
@@ -474,7 +477,7 @@ private fun HeroBanner(
                     Column {
                         Text(activeThread.otherParticipantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            if (isExclusive) "You two are getting serious 💛" else "You matched -- say hi 💬",
+                            if (isExclusive) strings.heroGettingSerious else strings.heroMatched,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.9f),
                             modifier = Modifier.padding(top = 2.dp),
@@ -483,7 +486,7 @@ private fun HeroBanner(
                 }
 
                 D2MButton(
-                    "Open chat",
+                    strings.openChat,
                     onClick = onOpenChat,
                     size = D2MButtonSize.SM,
                     modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
@@ -503,16 +506,16 @@ private fun HeroBanner(
             verticalArrangement = Arrangement.Center,
         ) {
             Text("✨", fontSize = 40.sp)
-            SubHeading("Your person's out there", Modifier.padding(top = 10.dp))
+            SubHeading(strings.emptyHeroTitle, Modifier.padding(top = 10.dp))
             Text(
-                "No matches yet -- let's find someone worth a hello.",
+                strings.emptyHeroSubtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = d2m.meta,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 4.dp),
             )
             if (!discoverDisabled) {
-                D2MButton("Let's go", onClick = onOpenDiscover, size = D2MButtonSize.SM, modifier = Modifier.padding(top = 16.dp))
+                D2MButton(strings.emptyHeroCta, onClick = onOpenDiscover, size = D2MButtonSize.SM, modifier = Modifier.padding(top = 16.dp))
             }
         }
     }

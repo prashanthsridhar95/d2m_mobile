@@ -38,6 +38,8 @@ import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.SubHeading
 import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.ParentHomeStrings
 import com.d2m.app.ui.theme.D2MFlow
 import kotlinx.coroutines.launch
 import com.d2m.app.ui.theme.D2MTheme
@@ -81,6 +83,7 @@ fun ParentHomeScreen(
     val sponsorId = identity.sponsorId
     val childPrimaryId = identity.childPrimaryId
     val scope = rememberCoroutineScope()
+    val strings = LocalStrings.current.parentHome
 
     // Neither list rendered a shortlist star at all before this port (see
     // MatchCard.kt's redesign note) -- now that COMPACT actually shows one,
@@ -132,7 +135,7 @@ fun ParentHomeScreen(
                 topSuggestions = suggestionsRepo.getSuggestions(childPrimaryId)
             }
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load your dashboard.")
+            error = friendlyError(e, strings.errLoadDashboard)
         } finally {
             loading = false
         }
@@ -157,15 +160,15 @@ fun ParentHomeScreen(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            PageTitle("Your child's matches")
+            PageTitle(strings.pageTitle)
 
             when {
                 loading -> Column { repeat(3) { FieldSkeleton(modifier = Modifier.padding(bottom = 12.dp)) } }
                 error != null -> D2MErrorBanner(error!!)
                 else -> {
                     ProfileSummaryCard(
-                        name = "Your child",
-                        subtitle = if (dashboard?.childProfileCompleted == true) "Profile complete" else "Profile incomplete",
+                        name = strings.yourChild,
+                        subtitle = if (dashboard?.childProfileCompleted == true) strings.profileComplete else strings.profileIncomplete,
                         onClick = onOpenChildProfileDialog,
                     )
 
@@ -174,6 +177,7 @@ fun ParentHomeScreen(
                             statusLabel = statusLabel,
                             pendingCount = dashboard?.unreadNotificationCount ?: 0,
                             onOpenMessages = onOpenMessages,
+                            strings = strings,
                         )
                     }
 
@@ -187,8 +191,8 @@ fun ParentHomeScreen(
                     // anywhere in the app before this -- see its own
                     // redesign note in MatchCard.kt.
                     Column {
-                        Text("Suggested for you to review", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("${topSuggestions.size} suggestions", color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
+                        Text(strings.suggestedForYouToReview, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(strings.suggestionsCount(topSuggestions.size), color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
                             topSuggestions.forEach { s ->
                                 MatchCard(
@@ -204,7 +208,7 @@ fun ParentHomeScreen(
                     }
 
                     Column {
-                        Text("Shortlisted", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(strings.shortlisted, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
                             shortlist.forEach { s ->
                                 MatchCard(
@@ -235,12 +239,12 @@ private fun ProfileSummaryCard(name: String, subtitle: String, onClick: () -> Un
 }
 
 @Composable
-private fun ConsentStatusCard(statusLabel: String, pendingCount: Int, onOpenMessages: () -> Unit) {
+private fun ConsentStatusCard(statusLabel: String, pendingCount: Int, onOpenMessages: () -> Unit, strings: ParentHomeStrings) {
     D2MCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenMessages)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            SubHeading("Status: $statusLabel")
+            SubHeading(strings.statusLabel(statusLabel))
             if (pendingCount > 0) {
-                D2MBadge("$pendingCount unread", D2MBadgeTone.INFO)
+                D2MBadge(strings.unreadCount(pendingCount), D2MBadgeTone.INFO)
             }
         }
     }

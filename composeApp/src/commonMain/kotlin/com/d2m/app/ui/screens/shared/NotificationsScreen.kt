@@ -33,6 +33,8 @@ import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.NotificationsStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -52,6 +54,7 @@ fun NotificationsScreen() {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.notifications
     val scope = rememberCoroutineScope()
 
     var notifications by remember { mutableStateOf<List<NotificationOut>>(emptyList()) }
@@ -69,7 +72,7 @@ fun NotificationsScreen() {
         try {
             notifications = notificationsRepo.getNotifications(accountId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load notifications.")
+            error = friendlyError(e, strings.loadError)
         } finally {
             loading = false
         }
@@ -83,14 +86,14 @@ fun NotificationsScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                PageTitle("Notifications")
+                PageTitle(strings.pageTitle)
                 // "Notification panel needs a Mark all read button",
                 // reported directly. Only shown once there's something to
                 // clear -- an always-visible disabled button just adds
                 // noise to a page that's usually already read.
                 if (unreadCount > 0 && accountId != null) {
                     D2MButton(
-                        text = if (markingAll) "Marking…" else "Mark all read",
+                        text = if (markingAll) strings.marking else strings.markAllRead,
                         enabled = !markingAll,
                         onClick = {
                             markingAll = true
@@ -104,9 +107,9 @@ fun NotificationsScreen() {
                 }
             }
             when {
-                loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
+                loading -> Text(strings.loading, color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
                 error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                notifications.isEmpty() -> D2MEmptyState("Nothing yet", "New suggestions, requests, and match updates will show up here.")
+                notifications.isEmpty() -> D2MEmptyState(strings.emptyTitle, strings.emptyDescription)
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
                     items(notifications) { n ->
                         D2MCard(
@@ -117,7 +120,7 @@ fun NotificationsScreen() {
                             },
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text(notificationTitle(n.type), fontWeight = if (n.readAt == null) FontWeight.Bold else FontWeight.Normal)
+                                Text(notificationTitle(n.type, strings), fontWeight = if (n.readAt == null) FontWeight.Bold else FontWeight.Normal)
                                 Text(n.createdAt, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
                             }
                         }
@@ -128,15 +131,17 @@ fun NotificationsScreen() {
     }
 }
 
-private fun notificationTitle(type: String): String = when (type) {
-    "new_suggestion" -> "New suggestion in your feed"
-    "mutual_match" -> "You have a new match"
-    "serious_mode_request" -> "Someone wants to go Serious"
-    "serious_mode_accepted" -> "Serious Mode confirmed"
-    "serious_mode_revoked" -> "Serious Mode was revoked"
-    "consent_request" -> "A parent requested access to your details"
-    "consent_granted" -> "Access request granted"
-    "request_received" -> "You received a new request"
-    "share_link_viewed" -> "Your shared profile was viewed"
+private fun notificationTitle(type: String, strings: NotificationsStrings): String = when (type) {
+    "new_suggestion" -> strings.typeNewSuggestion
+    "mutual_match" -> strings.typeMutualMatch
+    "serious_mode_request" -> strings.typeSeriousModeRequest
+    "serious_mode_accepted" -> strings.typeSeriousModeAccepted
+    "serious_mode_revoked" -> strings.typeSeriousModeRevoked
+    "consent_request" -> strings.typeConsentRequest
+    "consent_granted" -> strings.typeConsentGranted
+    "request_received" -> strings.typeRequestReceived
+    "share_link_viewed" -> strings.typeShareLinkViewed
+    "mutual_sponsor_interest" -> strings.typeMutualSponsorInterest
+    "shortlisted_profile_updated" -> strings.typeShortlistedProfileUpdated
     else -> type
 }

@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MStroke
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
 
@@ -68,7 +69,7 @@ fun D2MBadge(
  * profile is featured") rather than as styling.
  */
 @Composable
-fun FeaturedBadge(text: String = "Featured", modifier: Modifier = Modifier) {
+fun FeaturedBadge(text: String = LocalStrings.current.sharedComponents.featured, modifier: Modifier = Modifier) {
     D2MBadge(text, D2MBadgeTone.GOLD, modifier)
 }
 

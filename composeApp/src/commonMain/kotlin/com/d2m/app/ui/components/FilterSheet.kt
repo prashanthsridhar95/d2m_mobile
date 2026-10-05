@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.d2m
 
 /*
@@ -86,6 +87,7 @@ private const val VISIBLE_ROWS = 6
 
 @Composable
 private fun FacetGroupBlock(group: FacetGroup, first: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
     var expanded by remember { mutableStateOf(false) }
     if (group.options.isEmpty()) return
 
@@ -101,7 +103,7 @@ private fun FacetGroupBlock(group: FacetGroup, first: Boolean) {
         first = first,
         trailing = {
             if (group.state.isActive) {
-                LinkText("Clear", onClick = { group.onChange(group.state.copy(values = emptySet())) })
+                LinkText(strings.clear, onClick = { group.onChange(group.state.copy(values = emptySet())) })
             }
         },
     ) {
@@ -111,7 +113,7 @@ private fun FacetGroupBlock(group: FacetGroup, first: Boolean) {
         // sheet with nothing to act on.
         if (group.state.isActive) {
             D2MSegmented(
-                options = listOf("Include", "Exclude"),
+                options = listOf(strings.include, strings.exclude),
                 selectedIndex = if (group.state.mode == FacetMode.EXCLUDE) 1 else 0,
                 onSelect = { group.onChange(group.state.copy(mode = if (it == 1) FacetMode.EXCLUDE else FacetMode.INCLUDE)) },
                 accentActive = true,
@@ -133,7 +135,7 @@ private fun FacetGroupBlock(group: FacetGroup, first: Boolean) {
             )
         }
         if (overflow > 0) {
-            LinkText(if (expanded) "Show fewer" else "Show all ${ordered.size}", onClick = { expanded = !expanded })
+            LinkText(if (expanded) strings.showFewer else strings.showAll(ordered.size), onClick = { expanded = !expanded })
         }
     }
 }
@@ -150,6 +152,7 @@ fun D2MFilterSheet(
     ageRange: ClosedFloatingPointRange<Float>? = null,
     onAgeChange: ((ClosedFloatingPointRange<Float>?) -> Unit)? = null,
 ) {
+    val strings = LocalStrings.current.sharedComponents
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val anyActive = groups.any { it.state.isActive } || ageRange != null
 
@@ -165,14 +168,14 @@ fun D2MFilterSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SectionHeading("Filters")
-                if (anyActive) LinkText("Clear all", onClearAll)
+                SectionHeading(strings.filtersTitle)
+                if (anyActive) LinkText(strings.clearAll, onClearAll)
             }
             // The live readout the comps put under the rail heading. On a
             // phone it earns its place twice over: while the sheet is open
             // the results are behind it, so this is the only feedback that
             // a tap did anything.
-            MetaText("$resultCount of $totalCount profiles match", Modifier.padding(bottom = 6.dp))
+            MetaText(strings.resultsMatch(resultCount, totalCount), Modifier.padding(bottom = 6.dp))
 
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 groups.forEachIndexed { i, g -> FacetGroupBlock(g, first = i == 0) }
@@ -180,8 +183,8 @@ fun D2MFilterSheet(
                 if (ageBounds != null && onAgeChange != null && ageBounds.start < ageBounds.endInclusive) {
                     val current = ageRange ?: ageBounds
                     D2MCheckboxGroup(
-                        label = "Age",
-                        trailing = { if (ageRange != null) LinkText("Clear", onClick = { onAgeChange(null) }) },
+                        label = strings.ageLabel,
+                        trailing = { if (ageRange != null) LinkText(strings.clear, onClick = { onAgeChange(null) }) },
                     ) {
                         RangeSlider(
                             value = current,
@@ -194,7 +197,7 @@ fun D2MFilterSheet(
                             ),
                         )
                         Text(
-                            text = "${current.start.toInt()} – ${current.endInclusive.toInt()} years",
+                            text = strings.ageYearsRange(current.start.toInt(), current.endInclusive.toInt()),
                             style = MaterialTheme.typography.bodyMedium,
                             color = d2m.meta,
                         )
@@ -203,7 +206,7 @@ fun D2MFilterSheet(
             }
 
             D2MButton(
-                text = "Show $resultCount profiles",
+                text = strings.showResultCount(resultCount),
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
             )

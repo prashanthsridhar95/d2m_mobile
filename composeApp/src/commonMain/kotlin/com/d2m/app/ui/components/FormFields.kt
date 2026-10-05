@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.d2m
 
@@ -176,7 +177,7 @@ fun D2MSelectField(
     enabled: Boolean = true,
     hint: String? = null,
     optional: Boolean = false,
-    placeholderWhenEmpty: String = "Not set",
+    placeholderWhenEmpty: String = LocalStrings.current.sharedComponents.notSet,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {

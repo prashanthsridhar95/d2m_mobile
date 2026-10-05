@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.components.D2MDivider
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.CommonStrings
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.d2m
 
 /**
@@ -73,8 +75,21 @@ enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
 val ParentTabs = listOf(D2MTab.ParentDashboard, D2MTab.ParentSearch, D2MTab.ParentSharing, D2MTab.ParentSettings)
 val ChildTabs = listOf(D2MTab.ChildHome, D2MTab.ChildDiscover, D2MTab.ChildMatches, D2MTab.ChildNotifications)
 
+/** D2MTab.label is a fixed English key; this resolves the localized copy to actually show. */
+fun D2MTab.localizedLabel(common: CommonStrings): String = when (this) {
+    D2MTab.ParentDashboard -> common.tabDashboard
+    D2MTab.ParentSearch -> common.tabSearch
+    D2MTab.ParentSharing -> common.tabSharing
+    D2MTab.ParentSettings -> common.tabSettings
+    D2MTab.ChildHome -> common.tabHome
+    D2MTab.ChildDiscover -> common.tabDiscover
+    D2MTab.ChildMatches -> common.tabMatches
+    D2MTab.ChildNotifications -> common.tabNotifications
+}
+
 @Composable
 fun D2MBottomBar(tabs: List<D2MTab>, currentRoute: String?, onTabSelected: (D2MTab) -> Unit) {
+    val common = LocalStrings.current.common
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         // A hairline instead of Material's tonal elevation -- nothing in
         // this design floats, and an elevated bar over a cream page reads
@@ -86,11 +101,12 @@ fun D2MBottomBar(tabs: List<D2MTab>, currentRoute: String?, onTabSelected: (D2MT
             tonalElevation = 0.dp,
         ) {
             tabs.forEach { tab ->
+                val label = tab.localizedLabel(common)
                 NavigationBarItem(
                     selected = currentRoute == tab.route,
                     onClick = { onTabSelected(tab) },
-                    icon = { Icon(tab.icon, contentDescription = tab.label) },
-                    label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) },
+                    icon = { Icon(tab.icon, contentDescription = label) },
+                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = d2m.accent,
                         selectedTextColor = d2m.accent,

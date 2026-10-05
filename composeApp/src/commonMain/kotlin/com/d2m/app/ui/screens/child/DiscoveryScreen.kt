@@ -55,6 +55,7 @@ import com.d2m.app.ui.components.astrologicalCompatibility
 import com.d2m.app.ui.components.overallRating
 import com.d2m.app.ui.components.preferenceCompatibility
 import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -113,6 +114,7 @@ fun DiscoveryScreen() {
     var actionInFlight by remember { mutableStateOf(false) }
 
     val primaryId = identity.primaryId
+    val strings = LocalStrings.current.discovery
 
     LaunchedEffect(primaryId) {
         if (primaryId == null) return@LaunchedEffect
@@ -125,7 +127,7 @@ fun DiscoveryScreen() {
             // toward the current queue size on every optimistic mutation.
             total = queue.size
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load candidates.")
+            error = friendlyError(e, strings.errLoadCandidates)
         } finally {
             loading = false
         }
@@ -146,9 +148,9 @@ fun DiscoveryScreen() {
     D2MTheme(flow = D2MFlow.CHILD) {
         Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             when {
-                loading -> Text("Loading…", color = mutedText(0.55f))
+                loading -> Text(strings.loading, color = mutedText(0.55f))
                 error != null -> D2MErrorBanner(error!!)
-                queue.isEmpty() -> D2MEmptyState("No more candidates right now", "Check back later for new suggestions.")
+                queue.isEmpty() -> D2MEmptyState(strings.noMoreCandidatesTitle, strings.noMoreCandidatesBody)
                 else -> {
                     val current = queue.first()
                     val seen = total - queue.size
@@ -160,7 +162,7 @@ fun DiscoveryScreen() {
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         if (total > 0) {
                             Text(
-                                "${seen + 1} of $total",
+                                strings.seenOfTotal(seen + 1, total),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = mutedText(0.45f),
                                 modifier = Modifier.padding(bottom = 10.dp),
@@ -248,7 +250,7 @@ fun DiscoveryScreen() {
 
                                     CompatibilityCard(
                                         level = rating,
-                                        breakdown = listOf("Astrology" to astroLevel, "Preferences" to prefLevel),
+                                        breakdown = listOf(strings.astrology to astroLevel, strings.preferences to prefLevel),
                                         size = CompatibilityCardSize.Small,
                                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                                     )
@@ -257,7 +259,7 @@ fun DiscoveryScreen() {
                         }
 
                         Text(
-                            "More about ${current.candidateName.substringBefore(" ")}",
+                            strings.moreAbout(current.candidateName.substringBefore(" ")),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 20.dp, bottom = 10.dp),
@@ -268,9 +270,9 @@ fun DiscoveryScreen() {
                             modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            D2MButton("Pass", variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("reject") }, modifier = Modifier.weight(1f))
-                            D2MButton("Snooze", variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("snooze") }, modifier = Modifier.weight(1f))
-                            D2MButton("Accept", enabled = !actionInFlight, onClick = { act("accept") }, modifier = Modifier.weight(1f))
+                            D2MButton(strings.pass, variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("reject") }, modifier = Modifier.weight(1f))
+                            D2MButton(strings.snooze, variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("snooze") }, modifier = Modifier.weight(1f))
+                            D2MButton(strings.accept, enabled = !actionInFlight, onClick = { act("accept") }, modifier = Modifier.weight(1f))
                         }
                     }
                 }

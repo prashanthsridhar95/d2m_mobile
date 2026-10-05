@@ -77,6 +77,8 @@ import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.MatchesStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -142,7 +144,7 @@ private fun localDateOf(epochMillis: Long): LocalDate =
  * (private to that file, so re-implemented here rather than exported across
  * an unrelated module boundary for one shared helper).
  */
-private fun fmtThreadListTime(epochMillis: Long): String {
+private fun fmtThreadListTime(epochMillis: Long, yesterdayLabel: String): String {
     if (epochMillis <= 0) return ""
     val now = Clock.System.now().toEpochMilliseconds()
     val date = localDateOf(epochMillis)
@@ -152,7 +154,7 @@ private fun fmtThreadListTime(epochMillis: Long): String {
         val amPm = if (dt.hour < 12) "AM" else "PM"
         return "$hour12:${dt.minute.toString().padStart(2, '0')} $amPm"
     }
-    if (date == localDateOf(now - 86_400_000L)) return "Yesterday"
+    if (date == localDateOf(now - 86_400_000L)) return yesterdayLabel
     return "${SHORT_MONTH_NAMES[date.monthNumber - 1]} ${date.dayOfMonth}"
 }
 
@@ -235,6 +237,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
     var actionError by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
+    val strings = LocalStrings.current.matches
 
     // Union status only means anything once a thread is exclusive, and
     // getUnionStatus is a read-only peek (never creates a row) -- safe to
@@ -271,7 +274,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 offboardingRepo.confirmUnion(pid, t.otherParticipantId)
                 loadUnionStatus()
             } catch (e: Exception) {
-                unionError = friendlyError(e, "Couldn't confirm the union.")
+                unionError = friendlyError(e, strings.errConfirmUnion)
             } finally {
                 unionBusy = false
             }
@@ -288,7 +291,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 offboardingRepo.galleryOptIn(pid, t.otherParticipantId, consent)
                 loadUnionStatus()
             } catch (e: Exception) {
-                unionError = friendlyError(e, "Couldn't update gallery opt-in.")
+                unionError = friendlyError(e, strings.errUpdateGalleryOptin)
             } finally {
                 unionBusy = false
             }
@@ -316,7 +319,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
             threads = seriousModeRepo.getThreads(primaryId, forceRefresh = true)
             threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
-            actionError = friendlyError(e, "Couldn't refresh your matches.")
+            actionError = friendlyError(e, strings.errRefreshMatches)
         }
     }
 
@@ -340,7 +343,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
             // real name is known before any notification for them can arrive.
             threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load your matches.")
+            error = friendlyError(e, strings.errLoadMatches)
         } finally {
             loading = false
         }
@@ -351,7 +354,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
         try {
             receivedRequests = suggestionsRepo.getReceivedRequests(primaryId)
         } catch (e: Exception) {
-            requestsError = friendlyError(e, "Couldn't load received requests.")
+            requestsError = friendlyError(e, strings.errLoadReceivedRequests)
         }
     }
 
@@ -361,7 +364,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
         try {
             sentRequests = suggestionsRepo.getSentRequests(primaryId)
         } catch (e: Exception) {
-            requestsError = friendlyError(e, "Couldn't load sent requests.")
+            requestsError = friendlyError(e, strings.errLoadSentRequests)
         }
     }
 
@@ -437,9 +440,9 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
         if (t == null) {
             // Thread list, full width -- default pane.
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                PageTitle("Matches")
+                PageTitle(strings.pageTitle)
                 D2MTabs(
-                    titles = listOf("Matches", "Received", "Sent"),
+                    titles = listOf(strings.tabMatches, strings.tabReceived, strings.tabSent),
                     selectedIndex = matchesTab,
                     onSelect = { matchesTab = it },
                     modifier = Modifier.padding(top = 10.dp),
@@ -448,7 +451,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                     0 -> when {
                         loading -> MatchesListSkeleton()
                         error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                        visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
+                        visibleThreads.isEmpty() -> D2MEmptyState(strings.noMatchesTitle, strings.noMatchesBody)
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                             items(visibleThreads) { thread ->
                                 ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
@@ -459,7 +462,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                         requestsError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                         when {
                             receivedRequests == null -> MatchesListSkeleton()
-                            receivedRequests!!.isEmpty() -> D2MEmptyState("No requests waiting", "When someone sends you a request, it shows up here.")
+                            receivedRequests!!.isEmpty() -> D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
                             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                                 items(receivedRequests!!, key = { it.candidateId }) { r ->
                                     val busy = requestBusyId == r.candidateId
@@ -467,10 +470,10 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                         Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
-                                            Text("Wants to match with you", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                            Text(strings.wantsToMatch, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                                         }
                                         D2MButton(
-                                            text = "Accept", size = D2MButtonSize.SM, enabled = !busy,
+                                            text = strings.accept, size = D2MButtonSize.SM, enabled = !busy,
                                             onClick = {
                                                 val pid = primaryId ?: return@D2MButton
                                                 requestBusyId = r.candidateId
@@ -479,7 +482,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                                         suggestionsRepo.act(pid, r.candidateId, "accept")
                                                         refreshReceived()
                                                     } catch (e: Exception) {
-                                                        requestsError = friendlyError(e, "Couldn't accept that request.")
+                                                        requestsError = friendlyError(e, strings.errAcceptRequest)
                                                     } finally {
                                                         requestBusyId = null
                                                     }
@@ -487,7 +490,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                             },
                                         )
                                         D2MButton(
-                                            text = "Decline", variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
+                                            text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
                                             onClick = {
                                                 val pid = primaryId ?: return@D2MButton
                                                 requestBusyId = r.candidateId
@@ -496,7 +499,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                                         suggestionsRepo.act(pid, r.candidateId, "reject")
                                                         refreshReceived()
                                                     } catch (e: Exception) {
-                                                        requestsError = friendlyError(e, "Couldn't decline that request.")
+                                                        requestsError = friendlyError(e, strings.errDeclineRequest)
                                                     } finally {
                                                         requestBusyId = null
                                                     }
@@ -510,14 +513,14 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                     }
                     else -> when {
                         sentRequests == null -> MatchesListSkeleton()
-                        sentRequests!!.isEmpty() -> D2MEmptyState("No requests sent", "Accept a suggestion from Discover to send a request.")
+                        sentRequests!!.isEmpty() -> D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
                             items(sentRequests!!, key = { it.candidateId }) { r ->
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                                     Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
                                     Column {
                                         Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
-                                        Text("Waiting for a reply", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                        Text(strings.waitingForReply, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
                                     }
                                 }
                             }
@@ -550,7 +553,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                     try {
                                         seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't send that Serious Mode request.")
+                                        actionError = friendlyError(e, strings.errSendSeriousModeRequest)
                                     }
                                     refresh()
                                 }
@@ -561,7 +564,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                     try {
                                         seriousModeRepo.revoke(pid, t.threadId)
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't revoke Serious Mode.")
+                                        actionError = friendlyError(e, strings.errRevokeSeriousMode)
                                     }
                                     refresh()
                                 }
@@ -573,7 +576,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                         seriousModeRepo.unmatch(pid, t.threadId)
                                         chatUiState.setActiveThreadId(null)
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't unmatch.")
+                                        actionError = friendlyError(e, strings.errUnmatch)
                                     }
                                     refresh()
                                 }
@@ -585,7 +588,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                     try {
                                         seriousModeRepo.respond(pid, reqId, "accept")
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't accept that Serious Mode request.")
+                                        actionError = friendlyError(e, strings.errAcceptSeriousModeRequest)
                                     }
                                     refresh()
                                 }
@@ -597,7 +600,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                     try {
                                         seriousModeRepo.respond(pid, reqId, "decline")
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't decline that Serious Mode request.")
+                                        actionError = friendlyError(e, strings.errDeclineSeriousModeRequest)
                                     }
                                     refresh()
                                 }
@@ -624,10 +627,10 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             if (myUnionConfirmed) {
-                                Text("Waiting on ${t.otherParticipantName} to confirm your union.", style = MaterialTheme.typography.bodySmall)
+                                Text(strings.waitingOnThemToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall)
                             } else {
-                                Text("${t.otherParticipantName} wants to confirm your union.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                D2MButton(text = "Confirm Union", size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
+                                Text(strings.themWantsToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                D2MButton(text = strings.confirmUnion, size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
                             }
                         }
                     }
@@ -636,21 +639,21 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 if (t.status == "exclusive" && unionStatus?.status == "confirmed") {
                     D2MCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                         Column(modifier = Modifier.padding(14.dp)) {
-                            Text("Union confirmed 🎉", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(strings.unionConfirmedTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "Share your story in the Success Gallery? Anonymized (5-year age buckets only) -- requires both sides to opt in, and you can revoke any time.",
+                                strings.unionConfirmedBody,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = mutedText(0.55f),
                                 modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
                             )
                             D2MCheckboxRow(
-                                label = "Opt in to the Success Gallery",
+                                label = strings.optInSuccessGallery,
                                 checked = myGalleryConsent,
                                 enabled = !unionBusy,
                                 onCheckedChange = { toggleGalleryOptIn(it) },
                             )
                             D2MButton(
-                                text = "View the Success Gallery",
+                                text = strings.viewSuccessGallery,
                                 variant = D2MButtonVariant.OUTLINE,
                                 size = D2MButtonSize.SM,
                                 modifier = Modifier.padding(top = 10.dp),
@@ -701,6 +704,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
 @Composable
 private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
     val messagingRepo: MessagingRepository = koinInject()
+    val strings = LocalStrings.current.matches
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
@@ -722,13 +726,13 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
     val previewText = remember(lastMessage) {
         when {
             lastMessage == null -> ""
-            lastMessage.deleted -> "This message was deleted"
+            lastMessage.deleted -> strings.messageDeleted
             lastMessage.media != null -> mediaLabel(lastMessage.media)
             else -> lastMessage.text
         }
     }
-    val subtitleBase = if (peerTyping) "typing…" else previewText.ifBlank { threadStatusLabel(thread.status) }
-    val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) "$subtitleBase · Serious Mode pending" else subtitleBase
+    val subtitleBase = if (peerTyping) strings.typing else previewText.ifBlank { threadStatusLabel(thread.status, strings) }
+    val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) strings.seriousModePendingSuffix(subtitleBase) else subtitleBase
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -747,7 +751,7 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
                 Text(thread.otherParticipantName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (lastMessage != null) {
                     Text(
-                        fmtThreadListTime(lastMessage.sentAt),
+                        fmtThreadListTime(lastMessage.sentAt, strings.yesterday),
                         style = MaterialTheme.typography.labelSmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(start = 8.dp),
@@ -793,6 +797,7 @@ private fun ConversationHeader(
     menuContent: @Composable () -> Unit,
 ) {
     val messagingRepo: MessagingRepository = koinInject()
+    val strings = LocalStrings.current.matches
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
@@ -804,7 +809,7 @@ private fun ConversationHeader(
         modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.backToMatches)
         }
         // "tapping the user avatar inside chat is not taking me to the
         // user's profile" -- matches web's own header (MatchesScreen.jsx:
@@ -823,20 +828,20 @@ private fun ConversationHeader(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (messagingRepo.isProductionGradeEncryption) {
-                        Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
+                        Icon(Icons.Filled.Lock, contentDescription = strings.endToEndEncrypted, modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
                     }
                 }
                 val subtitle = when {
-                    peerTyping -> "typing…"
-                    peerOnline -> "Online"
-                    else -> threadStatusLabel(thread.status)
+                    peerTyping -> strings.typing
+                    peerOnline -> strings.online
+                    else -> threadStatusLabel(thread.status, strings)
                 }
                 Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call", onClick = onStartAudioCall)
-            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call", onClick = onStartVideoCall)
+            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = strings.audioCall, onClick = onStartAudioCall)
+            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = strings.videoCall, onClick = onStartVideoCall)
             menuContent()
         }
     }
@@ -870,27 +875,28 @@ private fun MoreOptionsMenu(
     onConfirmUnion: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val strings = LocalStrings.current.matches
     Box {
         // "more menu button on the toolbar also should have rounded
         // outline" -- was a bare IconButton (no outline at all), visibly
         // inconsistent with the two call buttons right next to it
         // (HeaderIconButton's 38dp outlined circle). Same visual now.
-        HeaderIconButton(icon = Icons.Filled.MoreVert, contentDescription = "More options", onClick = { menuOpen = true })
+        HeaderIconButton(icon = Icons.Filled.MoreVert, contentDescription = strings.moreOptions, onClick = { menuOpen = true })
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(D2MRadius.lg)) {
             if (thread.pendingSeriousModeRequestId != null) {
-                DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
-                DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
+                DropdownMenuItem(text = { Text(strings.acceptSeriousMode) }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
+                DropdownMenuItem(text = { Text(strings.declineSeriousMode) }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
             }
             if (thread.status == "active") {
-                DropdownMenuItem(text = { Text("Go Serious") }, onClick = { menuOpen = false; onGoSerious() })
+                DropdownMenuItem(text = { Text(strings.goSerious) }, onClick = { menuOpen = false; onGoSerious() })
             }
             if (thread.status == "exclusive") {
-                DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
+                DropdownMenuItem(text = { Text(strings.revokeSeriousMode) }, onClick = { menuOpen = false; onRevoke() })
             }
             if (showConfirmUnion) {
-                DropdownMenuItem(text = { Text("Confirm Union") }, onClick = { menuOpen = false; onConfirmUnion() })
+                DropdownMenuItem(text = { Text(strings.confirmUnion) }, onClick = { menuOpen = false; onConfirmUnion() })
             }
-            DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
+            DropdownMenuItem(text = { Text(strings.unmatch) }, onClick = { menuOpen = false; onUnmatch() })
         }
     }
 }
@@ -905,10 +911,10 @@ private fun PresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-private fun threadStatusLabel(status: String): String = when (status) {
-    "active" -> "Matched"
-    "exclusive" -> "Serious exploration"
-    "sunsetting" -> "Sunsetting"
-    "closed" -> "Closed"
+private fun threadStatusLabel(status: String, strings: MatchesStrings): String = when (status) {
+    "active" -> strings.statusMatched
+    "exclusive" -> strings.statusSeriousExploration
+    "sunsetting" -> strings.statusSunsetting
+    "closed" -> strings.statusClosed
     else -> status
 }

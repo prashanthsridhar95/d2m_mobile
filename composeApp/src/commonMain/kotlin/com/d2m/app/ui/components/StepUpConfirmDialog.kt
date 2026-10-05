@@ -20,6 +20,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.domain.repository.TrustRepository
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -93,6 +94,7 @@ class StepUpController(private val trustRepo: TrustRepository) {
 @Composable
 fun StepUpConfirmDialogHost(controller: StepUpController) {
     val deferred = controller.pending ?: return
+    val strings = LocalStrings.current.sharedComponents
     var password by remember(deferred) { mutableStateOf("") }
     var busy by remember(deferred) { mutableStateOf(false) }
     var error by remember(deferred) { mutableStateOf<String?>(null) }
@@ -106,7 +108,7 @@ fun StepUpConfirmDialogHost(controller: StepUpController) {
             controller.submit(password)
                 .onSuccess { token -> controller.resolve(token) }
                 .onFailure { e ->
-                    error = friendlyError(e, "Couldn't confirm your password.")
+                    error = friendlyError(e, strings.errConfirmPassword)
                     busy = false
                 }
         }
@@ -118,15 +120,15 @@ fun StepUpConfirmDialogHost(controller: StepUpController) {
     ) {
         D2MCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(24.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Confirm your password", style = MaterialTheme.typography.titleMedium)
+                Text(strings.confirmYourPassword, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "For your security, re-enter your password to continue with this action.",
+                    strings.reenterPasswordBody,
                     style = MaterialTheme.typography.bodySmall,
                     color = mutedText(0.55f),
                     modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
                 )
                 D2MTextField(
-                    label = "Password",
+                    label = strings.passwordLabel,
                     value = password,
                     onValueChange = { password = it; error = null },
                     isPassword = true,
@@ -138,14 +140,14 @@ fun StepUpConfirmDialogHost(controller: StepUpController) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     D2MButton(
-                        text = "Cancel",
+                        text = strings.cancel,
                         variant = D2MButtonVariant.OUTLINE,
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
                         onClick = { controller.resolve(null) },
                     )
                     D2MButton(
-                        text = if (busy) "Confirming…" else "Confirm",
+                        text = if (busy) strings.confirmingEllipsis else strings.confirm,
                         enabled = !busy && password.isNotBlank(),
                         modifier = Modifier.weight(1f),
                         onClick = { submit() },

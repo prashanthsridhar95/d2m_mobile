@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.network.CitySuggestion
 import com.d2m.app.data.network.GeocodingApi
+import com.d2m.app.ui.strings.LocalStrings
 import kotlinx.coroutines.delay
 
 /**
@@ -40,7 +41,7 @@ fun CityAutocomplete(
     onSelect: (CitySuggestion) -> Unit,
     onRawTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Start typing a city…",
+    placeholder: String = LocalStrings.current.sharedComponents.startTypingACity,
 ) {
     var query by remember(value) { mutableStateOf(value) }
     var results by remember { mutableStateOf<List<CitySuggestion>>(emptyList()) }

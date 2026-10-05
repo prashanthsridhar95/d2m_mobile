@@ -35,6 +35,9 @@ import com.d2m.app.data.model.ExtendedBioDataOut
 import com.d2m.app.data.network.ApiError
 import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.IdentityRepository
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.SharedComponentsStrings
 import com.d2m.app.ui.theme.D2MNoteStyle
 import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
@@ -98,6 +101,7 @@ import org.koin.compose.koinInject
 // needs the real check.
 @Composable
 fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false) {
+    val strings = LocalStrings.current.sharedComponents
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
 
@@ -134,7 +138,7 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
         chartLoaded = true
     }
 
-    val tabLabels = if (showAboutMe) listOf("About Me", "Bio data", "Chart") else listOf("Bio data", "Chart")
+    val tabLabels = if (showAboutMe) listOf(strings.tabAboutMe, strings.tabBioData, strings.tabChart) else listOf(strings.tabBioData, strings.tabChart)
 
     D2MCard(modifier = modifier) {
         Column {
@@ -159,55 +163,57 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
 
 @Composable
 private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
     when {
-        !loaded -> Text("Loading…", color = mutedText(0.45f))
-        bio == null -> Text("No bio data on file for this profile yet.", color = mutedText(0.45f))
+        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        bio == null -> Text(strings.noBioDataYet, color = mutedText(0.45f))
         else -> Column {
             BioSection(
-                "Basic & personal",
+                strings.sectionBasicPersonal,
                 listOf(bio.heightCm, bio.complexion, bio.motherTongue, bio.otherLanguages, bio.bodyType),
             ) {
-                BioRow("Height", bio.heightCm?.let(::cmToFeetInches))
-                BioRow("Body type", bio.bodyType?.let(Taxonomy::toLabel))
-                BioRow("Complexion", bio.complexion)
-                BioRow("Mother tongue", bio.motherTongue)
-                BioRow("Other languages", bio.otherLanguages?.takeIf { it.isNotEmpty() }?.joinToString(", "))
+                BioRow(strings.rowHeight, bio.heightCm?.let(::cmToFeetInches))
+                BioRow(strings.rowBodyType, bio.bodyType?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowComplexion, bio.complexion)
+                BioRow(strings.rowMotherTongue, bio.motherTongue)
+                BioRow(strings.rowOtherLanguages, bio.otherLanguages?.takeIf { it.isNotEmpty() }?.joinToString(", "))
             }
             BioSection(
-                "Religious & astrological",
+                strings.sectionReligiousAstrological,
                 listOf(bio.religion, bio.casteCommunity, bio.sect, bio.gothram, bio.horoscopeMatchPreference),
             ) {
-                BioRow("Religion", bio.religion)
-                BioRow("Caste / community", bio.casteCommunity?.let(Taxonomy::toLabel))
-                BioRow("Sect", bio.sect)
-                BioRow("Gothram", bio.gothram)
-                BioRow("Horoscope match preference", bio.horoscopeMatchPreference?.let(Taxonomy::toLabel))
+                BioRow(strings.rowReligion, bio.religion)
+                BioRow(strings.rowCasteCommunity, bio.casteCommunity?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowSect, bio.sect)
+                BioRow(strings.rowGothram, bio.gothram)
+                BioRow(strings.rowHoroscopeMatchPreference, bio.horoscopeMatchPreference?.let { Taxonomy.toLabel(it, locale) })
             }
             BioSection(
-                "Education & career",
+                strings.sectionEducationCareer,
                 listOf(bio.highestEducation, bio.institution, bio.occupationTitle, bio.employer, bio.employmentSector, bio.monthlyIncomeAmount),
             ) {
-                BioRow("Highest education", bio.highestEducation?.let(Taxonomy::toLabel))
-                BioRow("Institution", bio.institution)
-                BioRow("Occupation", bio.occupationTitle)
-                BioRow("Employer", bio.employer)
-                BioRow("Employed in", bio.employmentSector?.let(Taxonomy::toLabel))
-                BioRow("Monthly income", bio.monthlyIncomeAmount?.let { "$it ${bio.monthlyIncomeCurrency.orEmpty()}".trim() })
+                BioRow(strings.rowHighestEducation, bio.highestEducation?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowInstitution, bio.institution)
+                BioRow(strings.rowOccupation, bio.occupationTitle)
+                BioRow(strings.rowEmployer, bio.employer)
+                BioRow(strings.rowEmployedIn, bio.employmentSector?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowMonthlyIncome, bio.monthlyIncomeAmount?.let { "$it ${bio.monthlyIncomeCurrency.orEmpty()}".trim() })
             }
             BioSection(
-                "Family background",
+                strings.sectionFamilyBackground,
                 listOf(bio.fatherName, bio.motherName, bio.nativity, bio.familyType, bio.familyValues, bio.financialStatus),
             ) {
-                BioRow("Father", listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" -- ").ifBlank { null })
-                BioRow("Mother", listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" -- ").ifBlank { null })
-                BioRow("Siblings", siblingsSummary(bio))
-                BioRow("Native place", bio.nativity)
-                BioRow("Family type", bio.familyType?.let(Taxonomy::toLabel))
-                BioRow("Family values", bio.familyValues?.let(Taxonomy::toLabel))
-                BioRow("Financial status", bio.financialStatus)
+                BioRow(strings.rowFather, listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" -- ").ifBlank { null })
+                BioRow(strings.rowMother, listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" -- ").ifBlank { null })
+                BioRow(strings.rowSiblings, siblingsSummary(bio, strings))
+                BioRow(strings.rowNativePlace, bio.nativity)
+                BioRow(strings.rowFamilyType, bio.familyType?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowFamilyValues, bio.familyValues?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowFinancialStatus, bio.financialStatus)
             }
-            BioSection("Location & contact", listOf(bio.citizenshipStatus)) {
-                BioRow("Citizenship / residing status", bio.citizenshipStatus?.let(Taxonomy::toLabel))
+            BioSection(strings.sectionLocationContact, listOf(bio.citizenshipStatus)) {
+                BioRow(strings.rowCitizenshipResiding, bio.citizenshipStatus?.let { Taxonomy.toLabel(it, locale) })
             }
         }
     }
@@ -215,15 +221,16 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
 
 @Composable
 private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
     when {
-        !loaded -> Text("Loading…", color = mutedText(0.45f))
-        aboutMe == null -> Text("This profile hasn't filled in About Me yet.", color = mutedText(0.45f))
+        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        aboutMe == null -> Text(strings.noAboutMeYet, color = mutedText(0.45f))
         else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             aboutMe.aboutPrompts.forEach { p -> PromptCard(p.prompt, p.answer) }
 
             if (aboutMe.fitnessRoutine != null || aboutMe.sleepSchedule != null || aboutMe.pets != null || aboutMe.socialEnergy != null) {
                 CasualCard {
-                    Text("Lifestyle", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("🏃", aboutMe.fitnessRoutine)
                         IconBubble("🌙", aboutMe.sleepSchedule)
@@ -235,7 +242,7 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
 
             if (aboutMe.partnerQualities.isNotEmpty()) {
                 CasualCard {
-                    Text("What I value in a partner", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.whatIValueInPartner, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         aboutMe.partnerQualities.forEach { PlainBubble(it) }
                     }
@@ -243,12 +250,12 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
             }
 
             if (!aboutMe.whatMattersMost.isNullOrBlank()) {
-                PromptCard("What matters most to me", aboutMe.whatMattersMost)
+                PromptCard(strings.whatMattersMostToMe, aboutMe.whatMattersMost)
             }
 
             if (aboutMe.careerAfterMarriage != null || aboutMe.livingArrangement != null || aboutMe.openToRelocation != null) {
                 CasualCard {
-                    Text("Life & future plans", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("💼", aboutMe.careerAfterMarriage)
                         IconBubble("🏠", aboutMe.livingArrangement)
@@ -259,7 +266,7 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
 
             if (aboutMe.favoriteCuisine != null || aboutMe.dreamDestination != null || aboutMe.loveLanguage != null) {
                 CasualCard {
-                    Text("Quick facts", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("🍽️", aboutMe.favoriteCuisine)
                         IconBubble("✈️", aboutMe.dreamDestination)
@@ -351,11 +358,11 @@ private fun PromptCard(prompt: String, answer: String) {
     }
 }
 
-private fun siblingsSummary(bio: ExtendedBioDataOut): String? = listOfNotNull(
-    bio.elderBrothersCount?.takeIf { it > 0 }?.let { "$it elder brother${if (it > 1) "s" else ""}" },
-    bio.youngerBrothersCount?.takeIf { it > 0 }?.let { "$it younger brother${if (it > 1) "s" else ""}" },
-    bio.elderSistersCount?.takeIf { it > 0 }?.let { "$it elder sister${if (it > 1) "s" else ""}" },
-    bio.youngerSistersCount?.takeIf { it > 0 }?.let { "$it younger sister${if (it > 1) "s" else ""}" },
+private fun siblingsSummary(bio: ExtendedBioDataOut, strings: SharedComponentsStrings): String? = listOfNotNull(
+    bio.elderBrothersCount?.takeIf { it > 0 }?.let(strings::elderBrothersCount),
+    bio.youngerBrothersCount?.takeIf { it > 0 }?.let(strings::youngerBrothersCount),
+    bio.elderSistersCount?.takeIf { it > 0 }?.let(strings::elderSistersCount),
+    bio.youngerSistersCount?.takeIf { it > 0 }?.let(strings::youngerSistersCount),
 ).joinToString(", ").ifBlank { null }
 
 /** label:value pairs, skipping anything not set -- an empty section would just be visual noise. */
@@ -398,9 +405,10 @@ private fun BioRow(label: String, value: String?) {
  */
 @Composable
 private fun ChartTab(chart: ChartOut?, chartNotComputed: Boolean, loaded: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
     when {
-        !loaded -> Text("Loading…", color = mutedText(0.45f))
-        chartNotComputed || chart == null -> Text("This profile's chart hasn't been computed yet.", color = mutedText(0.45f))
+        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        chartNotComputed || chart == null -> Text(strings.chartNotComputedYet, color = mutedText(0.45f))
         else -> AstrologyChartView(
             d1 = chart.chartJson["d1"] as? JsonObject,
             d9 = chart.chartJson["d9"] as? JsonObject,

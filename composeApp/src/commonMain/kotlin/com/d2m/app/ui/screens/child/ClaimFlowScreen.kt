@@ -30,6 +30,8 @@ import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.Taxonomy
 import com.d2m.app.ui.components.SectionHeading
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -87,23 +89,25 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
     var primaryId by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val strings = LocalStrings.current.onboarding
+    val locale = LocalAppLocale.current
 
     D2MTheme(flow = D2MFlow.CHILD) {
         Column(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             when (step) {
                 0 -> {
-                    SectionHeading("Someone set this up for you 💌")
-                    Text("Claim it to make it yours.", color = mutedText(0.55f))
-                    D2MButton(text = "Claim your profile", onClick = { step = 1 })
+                    SectionHeading(strings.claimLandingTitle)
+                    Text(strings.claimLandingSubtitle, color = mutedText(0.55f))
+                    D2MButton(text = strings.claimYourProfile, onClick = { step = 1 })
                 }
                 1 -> {
-                    SectionHeading("First, let's create your account.")
+                    SectionHeading(strings.createAccountHeading)
                     when (accountSubStep) {
                         0 -> {
-                            D2MTextField(label = "Your email", value = wedlockEmail, onValueChange = { wedlockEmail = it; accountError = null }, keyboardType = KeyboardType.Email)
+                            D2MTextField(label = strings.yourEmail, value = wedlockEmail, onValueChange = { wedlockEmail = it; accountError = null }, keyboardType = KeyboardType.Email)
                             accountError?.let { D2MErrorBanner(it) }
                             D2MButton(
-                                text = if (accountLoading) "Sending code…" else "Send code",
+                                text = if (accountLoading) strings.sendCodeBusy else strings.sendCode,
                                 enabled = wedlockEmail.isNotBlank() && !accountLoading,
                                 onClick = {
                                     scope.launch {
@@ -113,7 +117,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                             wedLockApi.sendRegistrationOtp(wedlockEmail)
                                             accountSubStep = 1
                                         } catch (e: Exception) {
-                                            accountError = friendlyError(e, "Couldn't send a code to that email.")
+                                            accountError = friendlyError(e, strings.errSendCodeFailed)
                                         } finally {
                                             accountLoading = false
                                         }
@@ -122,12 +126,12 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                             )
                         }
                         1 -> {
-                            Text("We sent a 6-digit code to $wedlockEmail.", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
-                            D2MTextField(label = "Verification code", value = wedlockOtp, onValueChange = { wedlockOtp = it; accountError = null }, keyboardType = KeyboardType.Number)
+                            Text(strings.otpSentTo(wedlockEmail), style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                            D2MTextField(label = strings.verificationCodeLabel, value = wedlockOtp, onValueChange = { wedlockOtp = it; accountError = null }, keyboardType = KeyboardType.Number)
                             accountError?.let { D2MErrorBanner(it) }
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 D2MButton(
-                                    text = if (accountLoading) "Verifying…" else "Verify",
+                                    text = if (accountLoading) strings.verifyBusy else strings.verify,
                                     enabled = wedlockOtp.length == 6 && !accountLoading,
                                     onClick = {
                                         scope.launch {
@@ -137,27 +141,27 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                                 wedLockApi.verifyRegistrationOtp(wedlockEmail, wedlockOtp)
                                                 accountSubStep = 2
                                             } catch (e: Exception) {
-                                                accountError = friendlyError(e, "That code didn't check out.")
+                                                accountError = friendlyError(e, strings.errOtpInvalid)
                                             } finally {
                                                 accountLoading = false
                                             }
                                         }
                                     },
                                 )
-                                D2MButton(text = "Back", variant = D2MButtonVariant.OUTLINE, onClick = { accountSubStep = 0; wedlockOtp = ""; accountError = null })
+                                D2MButton(text = strings.back, variant = D2MButtonVariant.OUTLINE, onClick = { accountSubStep = 0; wedlockOtp = ""; accountError = null })
                             }
                         }
                         2 -> {
                             D2MTextField(
-                                label = "Password",
+                                label = strings.passwordLabel,
                                 value = wedlockPassword,
                                 onValueChange = { wedlockPassword = it; accountError = null },
                                 isPassword = true,
-                                hint = "At least 8 characters.",
+                                hint = strings.passwordHint,
                             )
                             accountError?.let { D2MErrorBanner(it) }
                             D2MButton(
-                                text = if (accountLoading) "Creating account…" else "Create account",
+                                text = if (accountLoading) strings.createAccountBusy else strings.createAccount,
                                 enabled = wedlockPassword.length >= 8 && !accountLoading,
                                 onClick = {
                                     scope.launch {
@@ -169,7 +173,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                             identityStore.setWedlockAccessToken(tokens.accessToken)
                                             step = 2
                                         } catch (e: Exception) {
-                                            accountError = friendlyError(e, "Couldn't create that account.")
+                                            accountError = friendlyError(e, strings.errCreateAccountFailed)
                                         } finally {
                                             accountLoading = false
                                         }
@@ -180,16 +184,16 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                     }
                 }
                 2 -> {
-                    SectionHeading("Let's make sure it's really you.")
-                    D2MTextField("Your name", name, { name = it })
-                    D2MTextField("Contact info (phone or email)", contactInfo, { contactInfo = it })
-                    D2MSelectField("Gender", gender, Taxonomy.GENDERS, { gender = it }, optionLabel = Taxonomy::toLabel)
-                    D2MSelectField("Seeking", seekingGender, Taxonomy.GENDERS, { seekingGender = it }, optionLabel = Taxonomy::toLabel)
-                    D2MSelectField("Marital status", maritalStatus, Taxonomy.MARITAL_STATUSES, { maritalStatus = it }, optionLabel = Taxonomy::toLabel)
-                    D2MTextField("Location", location, { location = it })
+                    SectionHeading(strings.confirmIdentityHeading)
+                    D2MTextField(strings.yourName, name, { name = it })
+                    D2MTextField(strings.contactInfoLabel, contactInfo, { contactInfo = it })
+                    D2MSelectField(strings.gender, gender, Taxonomy.GENDERS, { gender = it }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                    D2MSelectField(strings.seeking, seekingGender, Taxonomy.GENDERS, { seekingGender = it }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                    D2MSelectField(strings.maritalStatusLabel, maritalStatus, Taxonomy.MARITAL_STATUSES, { maritalStatus = it }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                    D2MTextField(strings.locationLabel, location, { location = it })
                     error?.let { D2MErrorBanner(it) }
                     D2MButton(
-                        text = if (submitting) "Verifying…" else "Continue",
+                        text = if (submitting) strings.verifyBusy else strings.continueAction,
                         enabled = !submitting && token != null,
                         onClick = {
                             scope.launch {
@@ -213,7 +217,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                     primaryId = result.primaryId
                                     step = 3
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "That link doesn't look right -- ask for a fresh one.")
+                                    error = friendlyError(e, strings.errBadClaimLink)
                                 } finally {
                                     submitting = false
                                 }
@@ -222,15 +226,15 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                     )
                 }
                 3 -> {
-                    SectionHeading("Who are you hoping to meet?")
+                    SectionHeading(strings.whoAreYouHopingToMeet)
                     androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        D2MTextField("Min age", minAge, { minAge = it }, modifier = Modifier.weight(1f))
-                        D2MTextField("Max age", maxAge, { maxAge = it }, modifier = Modifier.weight(1f))
+                        D2MTextField(strings.minAge, minAge, { minAge = it }, modifier = Modifier.weight(1f))
+                        D2MTextField(strings.maxAge, maxAge, { maxAge = it }, modifier = Modifier.weight(1f))
                     }
-                    D2MSelectField("Relationship goal", relationshipGoal, Taxonomy.RELATIONSHIP_GOALS, { relationshipGoal = it }, optionLabel = Taxonomy::toLabel)
+                    D2MSelectField(strings.relationshipGoalLabel, relationshipGoal, Taxonomy.RELATIONSHIP_GOALS, { relationshipGoal = it }, optionLabel = { Taxonomy.toLabel(it, locale) })
                     error?.let { D2MErrorBanner(it) }
                     D2MButton(
-                        text = if (submitting) "Saving…" else "Looks good, let's go",
+                        text = if (submitting) strings.saving else strings.looksGoodLetsGo,
                         enabled = !submitting,
                         onClick = {
                             val pid = primaryId ?: return@D2MButton
@@ -249,7 +253,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                     identityStore.setChild(pid)
                                     onComplete()
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "Couldn't save your preferences.")
+                                    error = friendlyError(e, strings.errSavePreferencesFailed)
                                 } finally {
                                     submitting = false
                                 }

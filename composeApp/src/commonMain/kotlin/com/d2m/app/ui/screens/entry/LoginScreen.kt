@@ -24,10 +24,13 @@ import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.D2MBrand
 import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.LanguageSwitcherCompact
 import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.D2MTabs
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.LocaleStore
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -83,24 +86,36 @@ fun LoginScreen(
     val identityRepo: IdentityRepository = koinInject()
     val identityStore: IdentityStore = koinInject()
     val wedLockApi: WedLockApi = koinInject()
+    val localeStore: LocaleStore = koinInject()
     val scope = rememberCoroutineScopeSafe()
 
     var tab by remember { mutableStateOf(0) } // 0 = Login, 1 = Register
+    val strings = LocalStrings.current.login
 
     D2MTheme(flow = D2MFlow.ENTRY) {
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+        // "Change language from... login screen," reported directly --
+        // available before any identity exists, same reasoning as
+        // d2m_web's own LoginScreen.jsx LanguageSwitcherCompact placement.
+        LanguageSwitcherCompact(
+            localeStore = localeStore,
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.TopEnd)
+                .padding(top = 24.dp, end = 24.dp),
+        )
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             D2MBrand(markSize = 34.dp)
             MetaText(
-                "Every union begins with the stars.",
+                strings.tagline,
                 Modifier.padding(top = 8.dp),
             )
 
             Column(modifier = Modifier.padding(top = 24.dp).widthIn(max = 420.dp)) {
                 D2MTabs(
-                    titles = listOf("Log in", "Register"),
+                    titles = listOf(strings.tabLogIn, strings.tabRegister),
                     selectedIndex = tab,
                     onSelect = { i -> tab = i },
                 )
@@ -123,6 +138,7 @@ fun LoginScreen(
                     )
                 }
             }
+        }
         }
     }
 }
@@ -152,6 +168,7 @@ private fun LoginPane(
     var confirmName by remember { mutableStateOf<String?>(null) }
     var idLoading by remember { mutableStateOf(false) }
     var idError by remember { mutableStateOf<String?>(null) }
+    val strings = LocalStrings.current.login
 
     // Tries GET /me right after a WedLock session is established (see this
     // file's own doc comment). True on success -- identity is set and the
@@ -189,17 +206,17 @@ private fun LoginPane(
 
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (resolving) {
-            Text("Signed in. Finding your account…", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+            Text(strings.resolving, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
         } else if (!authenticated) {
-            Text("Log in with your WedLock account.", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+            Text(strings.logInWithWedlock, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
-            D2MTextField(label = "Email", value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Email)
-            D2MTextField(label = "Password", value = password, onValueChange = { password = it; authError = null }, isPassword = true)
+            D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Email)
+            D2MTextField(label = strings.passwordLabel, value = password, onValueChange = { password = it; authError = null }, isPassword = true)
 
             authError?.let { D2MErrorBanner(it) }
 
             D2MButton(
-                text = if (authLoading) "Logging in…" else "Log in",
+                text = if (authLoading) strings.logInBusy else strings.logIn,
                 enabled = email.isNotBlank() && password.isNotBlank() && !authLoading,
                 onClick = {
                     scope.launch {
@@ -210,7 +227,7 @@ private fun LoginPane(
                             identityStore.setWedlockAccessToken(tokens.accessToken)
                             if (!resolveAndEnter()) authenticated = true
                         } catch (e: Exception) {
-                            authError = friendlyError(e, "Couldn't log in. Check your email and password.")
+                            authError = friendlyError(e, strings.errLoginFailed)
                         } finally {
                             authLoading = false
                         }
@@ -218,10 +235,10 @@ private fun LoginPane(
                 },
             )
 
-            MetaText("or", Modifier.padding(top = 4.dp))
+            MetaText(strings.or, Modifier.padding(top = 4.dp))
 
             GoogleAuthButton(
-                label = "Continue with Google",
+                label = strings.continueWithGoogle,
                 enabled = !authLoading,
                 identityStore = identityStore,
                 wedLockApi = wedLockApi,
@@ -230,28 +247,28 @@ private fun LoginPane(
                 onSuccess = { scope.launch { if (!resolveAndEnter()) authenticated = true } },
             )
         } else {
-            Text("Which profile do you want to open?", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+            Text(strings.whichProfile, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 D2MButton(
-                    text = "I'm a parent",
+                    text = strings.imAParent,
                     onClick = { idIsParent = true },
                     variant = if (idIsParent) com.d2m.app.ui.components.D2MButtonVariant.SOLID else com.d2m.app.ui.components.D2MButtonVariant.OUTLINE,
                 )
                 D2MButton(
-                    text = "I'm the child",
+                    text = strings.imTheChild,
                     onClick = { idIsParent = false },
                     variant = if (!idIsParent) com.d2m.app.ui.components.D2MButtonVariant.SOLID else com.d2m.app.ui.components.D2MButtonVariant.OUTLINE,
                 )
             }
 
-            D2MTextField(label = if (idIsParent) "Sponsor id" else "Primary id", value = idInput, onValueChange = { idInput = it; confirmName = null })
+            D2MTextField(label = if (idIsParent) strings.sponsorIdLabel else strings.primaryIdLabel, value = idInput, onValueChange = { idInput = it; confirmName = null })
 
             idError?.let { D2MErrorBanner(it) }
 
             if (confirmName == null) {
                 D2MButton(
-                    text = if (idLoading) "Checking…" else "Continue",
+                    text = if (idLoading) strings.checking else strings.continueAction,
                     enabled = idInput.isNotBlank() && !idLoading,
                     onClick = {
                         scope.launch {
@@ -268,7 +285,7 @@ private fun LoginPane(
                                 // "couldn't find that id" for every exception -- see
                                 // the equivalent comment this replaced for why that
                                 // used to hide real bugs.
-                                idError = friendlyError(e, "Couldn't find that id. Double check and try again.")
+                                idError = friendlyError(e, strings.errIdNotFound)
                             } finally {
                                 idLoading = false
                             }
@@ -276,10 +293,10 @@ private fun LoginPane(
                     },
                 )
             } else {
-                Text("Logging in as $confirmName — confirm?", style = MaterialTheme.typography.bodyLarge)
+                Text(strings.loggingInAsConfirm(confirmName!!), style = MaterialTheme.typography.bodyLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     D2MButton(
-                        text = "Confirm",
+                        text = strings.confirm,
                         onClick = {
                             if (idIsParent) {
                                 identityStore.setParent(idInput)
@@ -290,7 +307,7 @@ private fun LoginPane(
                             }
                         },
                     )
-                    D2MButton(text = "Not me", variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { confirmName = null; idInput = "" })
+                    D2MButton(text = strings.notMe, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { confirmName = null; idInput = "" })
                 }
             }
         }
@@ -311,16 +328,17 @@ private fun RegisterPane(
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val strings = LocalStrings.current.login
 
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Set up your account as a parent.", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+        Text(strings.setUpAsParent, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
         when (step) {
             0 -> {
-                D2MTextField(label = "Email", value = email, onValueChange = { email = it; error = null }, keyboardType = KeyboardType.Email)
+                D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; error = null }, keyboardType = KeyboardType.Email)
                 error?.let { D2MErrorBanner(it) }
                 D2MButton(
-                    text = if (loading) "Sending code…" else "Send code",
+                    text = if (loading) strings.sendCodeBusy else strings.sendCode,
                     enabled = email.isNotBlank() && !loading,
                     onClick = {
                         scope.launch {
@@ -330,7 +348,7 @@ private fun RegisterPane(
                                 wedLockApi.sendRegistrationOtp(email)
                                 step = 1
                             } catch (e: Exception) {
-                                error = friendlyError(e, "Couldn't send a code to that email.")
+                                error = friendlyError(e, strings.errSendCodeFailed)
                             } finally {
                                 loading = false
                             }
@@ -338,7 +356,7 @@ private fun RegisterPane(
                     },
                 )
 
-                MetaText("or", Modifier.padding(top = 4.dp))
+                MetaText(strings.or, Modifier.padding(top = 4.dp))
 
                 // Skips OTP/password entirely -- a verified Google identity
                 // already establishes ownership of the email address, same
@@ -346,7 +364,7 @@ private fun RegisterPane(
                 // of register-then-login. See this file's own top doc
                 // comment on why accountType is always PARENT_GUARDIAN here.
                 GoogleAuthButton(
-                    label = "Sign up with Google",
+                    label = strings.signUpWithGoogle,
                     enabled = !loading,
                     identityStore = identityStore,
                     wedLockApi = wedLockApi,
@@ -356,12 +374,12 @@ private fun RegisterPane(
                 )
             }
             1 -> {
-                Text("We sent a 6-digit code to $email.", style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
-                D2MTextField(label = "Verification code", value = otp, onValueChange = { otp = it; error = null }, keyboardType = KeyboardType.Number)
+                Text(strings.otpSentTo(email), style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                D2MTextField(label = strings.verificationCodeLabel, value = otp, onValueChange = { otp = it; error = null }, keyboardType = KeyboardType.Number)
                 error?.let { D2MErrorBanner(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     D2MButton(
-                        text = if (loading) "Verifying…" else "Verify",
+                        text = if (loading) strings.verifyBusy else strings.verify,
                         enabled = otp.length == 6 && !loading,
                         onClick = {
                             scope.launch {
@@ -371,27 +389,27 @@ private fun RegisterPane(
                                     wedLockApi.verifyRegistrationOtp(email, otp)
                                     step = 2
                                 } catch (e: Exception) {
-                                    error = friendlyError(e, "That code didn't check out.")
+                                    error = friendlyError(e, strings.errOtpInvalid)
                                 } finally {
                                     loading = false
                                 }
                             }
                         },
                     )
-                    D2MButton(text = "Back", variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { step = 0; otp = ""; error = null })
+                    D2MButton(text = strings.back, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { step = 0; otp = ""; error = null })
                 }
             }
             2 -> {
                 D2MTextField(
-                    label = "Password",
+                    label = strings.passwordLabel,
                     value = password,
                     onValueChange = { password = it; error = null },
                     isPassword = true,
-                    hint = "At least 8 characters.",
+                    hint = strings.passwordHint,
                 )
                 error?.let { D2MErrorBanner(it) }
                 D2MButton(
-                    text = if (loading) "Creating account…" else "Create account",
+                    text = if (loading) strings.createAccountBusy else strings.createAccount,
                     enabled = password.length >= 8 && !loading,
                     onClick = {
                         scope.launch {
@@ -403,7 +421,7 @@ private fun RegisterPane(
                                 identityStore.setWedlockAccessToken(tokens.accessToken)
                                 onRegistered()
                             } catch (e: Exception) {
-                                error = friendlyError(e, "Couldn't create that account.")
+                                error = friendlyError(e, strings.errCreateAccountFailed)
                             } finally {
                                 loading = false
                             }
@@ -450,6 +468,7 @@ private fun GoogleAuthButton(
     onSuccess: () -> Unit,
 ) {
     var signingIn by remember { mutableStateOf(false) }
+    val strings = LocalStrings.current.login
 
     val launchGoogleSignIn = rememberGoogleSignInLauncher { result ->
         when (result) {
@@ -463,7 +482,7 @@ private fun GoogleAuthButton(
                         identityStore.setWedlockAccessToken(tokens.accessToken)
                         onSuccess()
                     } catch (e: Exception) {
-                        onError(friendlyError(e, "Couldn't sign in with Google."))
+                        onError(friendlyError(e, strings.errGoogleSignIn))
                     } finally {
                         signingIn = false
                     }
@@ -477,7 +496,7 @@ private fun GoogleAuthButton(
     }
 
     D2MButton(
-        text = if (signingIn) "Signing in…" else label,
+        text = if (signingIn) strings.signingIn else label,
         variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE,
         enabled = enabled && !signingIn,
         onClick = { launchGoogleSignIn() },

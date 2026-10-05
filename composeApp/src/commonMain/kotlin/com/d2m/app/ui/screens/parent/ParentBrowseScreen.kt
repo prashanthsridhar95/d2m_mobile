@@ -45,6 +45,7 @@ import com.d2m.app.ui.components.FacetState
 import com.d2m.app.ui.components.MatchCard
 import com.d2m.app.ui.navigation.ScreenHeader
 import com.d2m.app.ui.screens.parity.BrowseTable
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.d2m
@@ -111,6 +112,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     var ageRange by remember { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
 
     val childPrimaryId = identity.childPrimaryId ?: identity.primaryId
+    val strings = LocalStrings.current.parentBrowse
 
     LaunchedEffect(childPrimaryId, mode) {
         if (childPrimaryId == null) return@LaunchedEffect
@@ -120,7 +122,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
             if (mode == 0) matching = suggestionsRepo.getSuggestions(childPrimaryId)
             else all = suggestionsRepo.getBrowseAll(childPrimaryId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load profiles.")
+            error = friendlyError(e, strings.errLoadProfiles)
         } finally {
             loading = false
         }
@@ -182,13 +184,13 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
             .eachCount()
 
     val groups = listOf(
-        FacetGroup("City", pool.mapNotNull { it.city ?: it.nativity }.distinct().sorted(),
+        FacetGroup(strings.facetCity, pool.mapNotNull { it.city ?: it.nativity }.distinct().sorted(),
             countsFor("city") { it.city ?: it.nativity }, cityFacet) { cityFacet = it },
-        FacetGroup("Gothram", pool.mapNotNull { it.gothram }.distinct().sorted(),
+        FacetGroup(strings.facetGothram, pool.mapNotNull { it.gothram }.distinct().sorted(),
             countsFor("gothram") { it.gothram }, gothramFacet) { gothramFacet = it },
-        FacetGroup("Sect", pool.mapNotNull { it.sect }.distinct().sorted(),
+        FacetGroup(strings.facetSect, pool.mapNotNull { it.sect }.distinct().sorted(),
             countsFor("sect") { it.sect }, sectFacet) { sectFacet = it },
-        FacetGroup("Nakshatra", pool.mapNotNull { it.moonNakshatra }.distinct().sorted(),
+        FacetGroup(strings.facetNakshatra, pool.mapNotNull { it.moonNakshatra }.distinct().sorted(),
             countsFor("star") { it.moonNakshatra }, starFacet) { starFacet = it },
     )
     val activeFacetCount = groups.count { it.state.isActive } + (if (ageRange != null) 1 else 0)
@@ -196,10 +198,8 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             ScreenHeader(
-                title = "Browse",
-                meta = if (!loading && error == null) {
-                    "${filtered.size} of ${pool.size} profile${if (pool.size == 1) "" else "s"}"
-                } else null,
+                title = strings.browseTitle,
+                meta = if (!loading && error == null) strings.filteredOfPool(filtered.size, pool.size) else null,
                 modifier = Modifier.padding(top = 12.dp),
             )
 
@@ -212,11 +212,11 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                     label = "",
                     value = shortIdQuery,
                     onValueChange = { shortIdQuery = it; shortIdError = null },
-                    placeholder = "Find profile by ID…",
+                    placeholder = strings.findProfileByIdPlaceholder,
                     modifier = Modifier.weight(1f),
                 )
                 D2MButton(
-                    text = if (shortIdSearching) "Finding…" else "Find",
+                    text = if (shortIdSearching) strings.finding else strings.find,
                     enabled = shortIdQuery.isNotBlank() && !shortIdSearching,
                     size = D2MButtonSize.SM,
                     onClick = {
@@ -229,7 +229,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                 shortIdQuery = ""
                                 onOpenProfile(result.primaryId)
                             } catch (e: Exception) {
-                                shortIdError = friendlyError(e, "Couldn't search for that ID.")
+                                shortIdError = friendlyError(e, strings.errSearchById)
                             } finally {
                                 shortIdSearching = false
                             }
@@ -245,19 +245,19 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             ) {
                 D2MSegmented(
-                    options = listOf("Matching", "All profiles"),
+                    options = listOf(strings.matching, strings.allProfiles),
                     selectedIndex = mode,
                     onSelect = { mode = it },
                 )
                 if (mode == 1) {
                     D2MSegmented(
-                        options = listOf("Grid", "Table"),
+                        options = listOf(strings.grid, strings.table),
                         selectedIndex = if (tableView) 1 else 0,
                         onSelect = { tableView = it == 1 },
                     )
                 }
                 D2MButton(
-                    text = if (activeFacetCount > 0) "Filters ($activeFacetCount)" else "Filters",
+                    text = if (activeFacetCount > 0) strings.filtersWithCount(activeFacetCount) else strings.filters,
                     onClick = { sheetOpen = true },
                     variant = if (activeFacetCount > 0) D2MButtonVariant.ACCENT_OUTLINE else D2MButtonVariant.OUTLINE,
                     size = D2MButtonSize.SM,
@@ -283,10 +283,10 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 mode == 1 && tableView -> BrowseTable(rows = all, onOpenProfile = onOpenProfile)
 
                 filtered.isEmpty() && pool.isNotEmpty() -> D2MEmptyState(
-                    title = "Nothing matches those filters",
-                    subtitle = "Clear a filter or two and the list will fill back in.",
+                    title = strings.nothingMatchesFiltersTitle,
+                    subtitle = strings.nothingMatchesFiltersBody,
                     action = {
-                        D2MButton("Clear filters", variant = D2MButtonVariant.ACCENT_OUTLINE, size = D2MButtonSize.SM, onClick = {
+                        D2MButton(strings.clearFilters, variant = D2MButtonVariant.ACCENT_OUTLINE, size = D2MButtonSize.SM, onClick = {
                             cityFacet = FacetState(); gothramFacet = FacetState()
                             sectFacet = FacetState(); starFacet = FacetState(); ageRange = null
                         })
@@ -294,12 +294,8 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 )
 
                 filtered.isEmpty() -> D2MEmptyState(
-                    title = "No profiles yet",
-                    subtitle = if (mode == 0) {
-                        "Once the matching engine has scored some candidates for your child, they show up here."
-                    } else {
-                        "There are no active profiles in the pool right now."
-                    },
+                    title = strings.noProfilesYetTitle,
+                    subtitle = if (mode == 0) strings.noProfilesMatchingBody else strings.noProfilesAllBody,
                 )
 
                 else -> LazyColumn(

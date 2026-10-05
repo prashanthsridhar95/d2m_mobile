@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.BrowseCandidateOut
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.mutedText
 
 /**
@@ -32,7 +33,11 @@ private val COLUMN_WIDTH = 120.dp
 
 @Composable
 fun BrowseTable(rows: List<BrowseCandidateOut>, onOpenProfile: (String) -> Unit) {
-    val headers = listOf("Name", "Age", "City", "Occupation", "Gothram", "Sect", "Height", "Score")
+    val strings = LocalStrings.current.parity
+    val headers = listOf(
+        strings.colName, strings.colAge, strings.colCity, strings.colOccupation,
+        strings.colGothram, strings.colSect, strings.colHeight, strings.colScore,
+    )
     Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
         Row(modifier = Modifier.background(mutedText(0.06f)).padding(vertical = 8.dp)) {
             headers.forEach { h -> Text(h, fontWeight = FontWeight.Bold, modifier = Modifier.width(COLUMN_WIDTH).padding(horizontal = 8.dp)) }

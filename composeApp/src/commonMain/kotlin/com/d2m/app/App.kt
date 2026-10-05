@@ -66,6 +66,10 @@ import com.d2m.app.ui.navigation.D2MBottomBar
 import com.d2m.app.ui.navigation.D2MNavGraph
 import com.d2m.app.ui.navigation.ParentTabs
 import com.d2m.app.ui.navigation.Routes
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.LocaleStore
+import com.d2m.app.ui.strings.stringsFor
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import kotlinx.coroutines.launch
@@ -103,6 +107,8 @@ fun App() {
     // -- provided once here so every ProfilePhoto/ProfileThumb below picks it
     // up via LocalPhotoImageLoader instead of the app-wide Coil default.
     val photoImageLoader: ImageLoader = koinInject()
+    val localeStore: LocaleStore = koinInject()
+    val locale by localeStore.locale.collectAsState()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
     val messagingStartupError by messagingRepo.startupError.collectAsState()
@@ -261,7 +267,12 @@ fun App() {
     // also factors in the shared conversationOpen flag.
     val showBottomBar = tabs != null && tabs.any { it.route == currentRoute } && !conversationOpen
 
-    CompositionLocalProvider(LocalPhotoImageLoader provides photoImageLoader) {
+    CompositionLocalProvider(
+        LocalPhotoImageLoader provides photoImageLoader,
+        LocalStrings provides stringsFor(locale),
+        LocalAppLocale provides locale,
+    ) {
+    val strings = LocalStrings.current.sharedComponents
     D2MTheme(flow = D2MFlow.ENTRY) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
@@ -399,13 +410,13 @@ fun App() {
                     ) {
                         Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            "Screen recording detected",
+                            strings.screenRecordingDetected,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            "Profile content is hidden while your screen is being recorded or mirrored.",
+                            strings.profileContentHiddenWhileRecording,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,

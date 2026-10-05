@@ -45,8 +45,12 @@ import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MTextField
+import com.d2m.app.ui.components.LanguageSettingControl
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.ProfileThumb
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.LocaleStore
+import com.d2m.app.ui.strings.SettingsStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.d2m
@@ -67,7 +71,9 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val trustRepo: TrustRepository = koinInject()
+    val localeStore: LocaleStore = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.settings
     val scope = rememberCoroutineScope()
 
     var muted by remember { mutableStateOf(false) }
@@ -92,15 +98,21 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            PageTitle("Settings")
+            PageTitle(strings.pageTitle)
 
             AccountHeader(identity = identity, accountId = accountId)
             HorizontalDivider()
 
+            Column {
+                Text(strings.languageTitle, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                LanguageSettingControl(localeStore = localeStore, hint = strings.languageHint)
+            }
+            HorizontalDivider()
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("Mute notifications", fontWeight = FontWeight.Bold)
-                    Text("Turn off all push and in-app alerts", color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
+                    Text(strings.muteNotificationsTitle, fontWeight = FontWeight.Bold)
+                    Text(strings.muteNotificationsSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
                 }
                 Switch(
                     checked = muted,
@@ -120,7 +132,7 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
             // side's only entry point, same placement as web's
             // SettingsScreen.jsx "Share my profile" button.
             if (identity.role == D2MRole.CHILD) {
-                D2MButton(text = "Share my profile", variant = D2MButtonVariant.OUTLINE, onClick = onOpenShareLinks)
+                D2MButton(text = strings.shareMyProfile, variant = D2MButtonVariant.OUTLINE, onClick = onOpenShareLinks)
             }
 
             // WedLock trust subsystem (vouches/trusted connections/
@@ -128,13 +140,13 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
             // slot (both already have 4, see AppScaffold.kt's D2MTab), so
             // this is the entry point for both roles, same "Settings" home
             // "Share my profile" is already using for the child side.
-            D2MButton(text = "Trust & vouches", variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
+            D2MButton(text = strings.trustAndVouches, variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
 
             if (linkedPrimaryId != null) {
                 FamilyLinkSection(identity = identity, linkedPrimaryId = linkedPrimaryId, trustRepo = trustRepo)
             }
 
-            D2MButton(text = "Log out", variant = D2MButtonVariant.OUTLINE, onClick = {
+            D2MButton(text = strings.logOut, variant = D2MButtonVariant.OUTLINE, onClick = {
                 identityStore.clear()
                 onLogout()
             })
@@ -152,6 +164,7 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
 // straight through instead.
 @Composable
 private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trustRepo: TrustRepository) {
+    val strings = LocalStrings.current.settings
     val scope = rememberCoroutineScope()
     var dialogOpen by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
@@ -161,27 +174,23 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
 
     HorizontalDivider()
     Column {
-        Text("Family link", fontWeight = FontWeight.Bold)
+        Text(strings.familyLinkTitle, fontWeight = FontWeight.Bold)
         if (done) {
             Text(
-                "This account is no longer linked to a family member. Log out and back in to refresh the app.",
+                strings.familyLinkUnlinkedNotice,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
                 modifier = Modifier.padding(top = 4.dp),
             )
         } else {
             Text(
-                if (identity.role == D2MRole.PARENT) {
-                    "Removes the family link between you and your child's account. Your child's profile and data stay intact, just no longer paired with you."
-                } else {
-                    "Removes the family link between you and your parent's account. Your own profile and data stay intact, just no longer paired with them."
-                },
+                if (identity.role == D2MRole.PARENT) strings.familyLinkUnlinkDescParent else strings.familyLinkUnlinkDescChild,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
                 modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
             )
             D2MButton(
-                text = "Unlink family account",
+                text = strings.unlinkFamilyAccount,
                 variant = D2MButtonVariant.OUTLINE,
                 onClick = { password = ""; error = null; dialogOpen = true },
             )
@@ -192,23 +201,23 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
         Dialog(onDismissRequest = { if (!busy) dialogOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             D2MCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(24.dp)) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Confirm with your password", style = MaterialTheme.typography.titleMedium)
+                    Text(strings.confirmWithPassword, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "This permanently severs the family link -- re-enter your password to continue.",
+                        strings.unlinkModalSubtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                         modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
                     )
-                    D2MTextField(label = "Password", value = password, onValueChange = { password = it }, isPassword = true)
+                    D2MTextField(label = strings.passwordLabel, value = password, onValueChange = { password = it }, isPassword = true)
                     error?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         D2MButton(
-                            text = "Cancel", variant = D2MButtonVariant.OUTLINE, enabled = !busy,
+                            text = strings.cancel, variant = D2MButtonVariant.OUTLINE, enabled = !busy,
                             modifier = Modifier.weight(1f),
                             onClick = { dialogOpen = false },
                         )
                         D2MButton(
-                            text = if (busy) "Unlinking…" else "Unlink",
+                            text = if (busy) strings.unlinking else strings.unlink,
                             enabled = !busy && password.isNotBlank(),
                             modifier = Modifier.weight(1f),
                             onClick = {
@@ -220,7 +229,7 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
                                         done = true
                                         dialogOpen = false
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, "Couldn't unlink right now.")
+                                        error = friendlyError(e, strings.errUnlink)
                                     } finally {
                                         busy = false
                                     }
@@ -250,6 +259,7 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
 // ChildHomeScreen's own profile row does.
 @Composable
 private fun AccountHeader(identity: Identity, accountId: String?) {
+    val strings = LocalStrings.current.settings
     val identityRepo: IdentityRepository = koinInject()
     var name by remember { mutableStateOf<String?>(null) }
     var contactInfo by remember { mutableStateOf<String?>(null) }
@@ -287,7 +297,7 @@ private fun AccountHeader(identity: Identity, accountId: String?) {
             }
             if (accountId != null) {
                 Text(
-                    if (copied) "Copied" else accountId,
+                    if (copied) strings.copied else accountId,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (copied) d2m.accentStrong else mutedText(0.45f),
                     modifier = Modifier.padding(top = 4.dp).clickable {

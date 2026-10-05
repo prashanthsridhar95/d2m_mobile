@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.d2m
 
@@ -67,6 +68,7 @@ fun MatchCard(
     onToggleShortlist: (() -> Unit)? = null,
     tag: String? = null,
 ) {
+    val strings = LocalStrings.current.sharedComponents
     val photo = suggestion.photoUrl?.let(resolvePhotoUrl)
     // "27 · Chennai" -- assembled from whatever the backend actually sent
     // rather than a fixed template, so a profile with no age renders
@@ -81,9 +83,9 @@ fun MatchCard(
             Column(Modifier.clickable(onClick = onClick)) {
                 ProfilePhoto(
                     photoUrl = photo,
-                    contentDescription = "Photograph of ${suggestion.candidateName}",
+                    contentDescription = strings.photographOf(suggestion.candidateName),
                     ratio = 4f / 3f,
-                    caption = if (photo == null) "No photograph on file" else null,
+                    caption = if (photo == null) strings.noPhotographOnFile else null,
                     glyphSize = 40.dp,
                     overlay = {
                         if (tag != null) {
@@ -119,12 +121,12 @@ fun MatchCard(
 
                 val facts = buildList {
                     listOfNotNull(suggestion.gothram, suggestion.sect).joinToString(", ")
-                        .takeIf { it.isNotEmpty() }?.let { add("Gothram" to it) }
+                        .takeIf { it.isNotEmpty() }?.let { add(strings.matchRowGothram to it) }
                     suggestion.moonNakshatra?.let { n ->
-                        add("Star" to (suggestion.moonPada?.let { "$n, pada $it" } ?: n))
+                        add(strings.matchRowStar to (suggestion.moonPada?.let { "$n, pada $it" } ?: n))
                     }
-                    suggestion.occupationTitle?.let { add("Work" to it) }
-                    suggestion.employer?.takeIf { it.isNotBlank() }?.let { add("Organisation" to it) }
+                    suggestion.occupationTitle?.let { add(strings.matchRowWork to it) }
+                    suggestion.employer?.takeIf { it.isNotBlank() }?.let { add(strings.matchRowOrganisation to it) }
                 }
                 if (facts.isNotEmpty()) {
                     D2MDivider(Modifier.padding(top = 12.dp))
@@ -135,7 +137,7 @@ fun MatchCard(
 
                 if (suggestion.doshaFlags.isNotEmpty()) {
                     Text(
-                        text = "${suggestion.doshaFlags.size} dosha flag${if (suggestion.doshaFlags.size > 1) "s" else ""} noted",
+                        text = strings.doshaFlagsNoted(suggestion.doshaFlags.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = d2m.label,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
@@ -144,7 +146,7 @@ fun MatchCard(
 
                 // The comps' card closes on a full-width outline action.
                 D2MButton(
-                    text = "View profile",
+                    text = strings.viewProfile,
                     onClick = onClick,
                     variant = D2MButtonVariant.ACCENT_OUTLINE,
                     size = D2MButtonSize.SM,
@@ -198,7 +200,7 @@ fun MatchCard(
             ) {
                 ProfileThumb(
                     photoUrl = photo,
-                    contentDescription = "Photograph of ${suggestion.candidateName}",
+                    contentDescription = strings.photographOf(suggestion.candidateName),
                     size = 68.dp,
                     shape = RoundedCornerShape(percent = 50),
                     overlay = {
@@ -220,7 +222,7 @@ fun MatchCard(
                     if (place != null) MetaText(place, Modifier.padding(top = 2.dp))
                     if (suggestion.doshaFlags.isNotEmpty()) {
                         Text(
-                            text = "${suggestion.doshaFlags.size} dosha flag${if (suggestion.doshaFlags.size > 1) "s" else ""}",
+                            text = strings.doshaFlags(suggestion.doshaFlags.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = d2m.meta,
                             modifier = Modifier.padding(top = 6.dp),
@@ -256,6 +258,7 @@ fun ShortlistStar(
     modifier: Modifier = Modifier,
     onPhoto: Boolean = false,
 ) {
+    val strings = LocalStrings.current.sharedComponents
     val shape = if (onPhoto) RoundedCornerShape(percent = 50) else RoundedCornerShape(D2MRadius.sm)
     Box(
         modifier
@@ -270,7 +273,7 @@ fun ShortlistStar(
         IconButton(onClick = onToggle, modifier = Modifier.size(32.dp)) {
             Icon(
                 imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                contentDescription = if (shortlisted) "Remove from shortlist" else "Add to shortlist",
+                contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
                 tint = if (shortlisted) d2m.goldStrong else d2m.label,
                 modifier = Modifier.size(18.dp),
             )
@@ -287,6 +290,7 @@ fun ShortlistStar(
  */
 @Composable
 fun UnavailableMatchCard(name: String, modifier: Modifier = Modifier, photoUrl: String? = null) {
+    val strings = LocalStrings.current.sharedComponents
     D2MCard(modifier) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),
@@ -297,7 +301,7 @@ fun UnavailableMatchCard(name: String, modifier: Modifier = Modifier, photoUrl: 
             Column(Modifier.weight(1f)) {
                 SubHeading(name)
                 MetaText(
-                    "No longer available — they've gone Serious with someone else",
+                    strings.noLongerAvailable,
                     Modifier.padding(top = 3.dp),
                 )
             }
