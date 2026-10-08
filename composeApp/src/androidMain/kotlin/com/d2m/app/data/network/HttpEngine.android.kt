@@ -26,8 +26,12 @@ actual fun httpEngine(): HttpClient = HttpClient(OkHttp)
 // 127.0.0.1:8000) or your host's real LAN IP for a physical device.
 actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
 
-// WedLock IAM has no production tunnel yet -- see WedLockApi.kt's doc
-// comment on resolveWedlockBaseUrl(). 10.0.2.2 is the Android emulator's
-// alias for the host machine's 127.0.0.1, same as the local-dev override
-// noted above for resolveDefaultBaseUrl().
-actual fun resolveWedlockBaseUrl(): String = "http://10.0.2.2:8010/api/v1"
+// WedLock IAM now has its own Cloudflare Tunnel (auth.prashanthsridhar.com),
+// same deployment pattern as d2m_core_engine above -- the web app's own
+// VITE_WEDLOCK_BASE_URL already points here. See WedLockApi.kt's doc
+// comment on resolveWedlockBaseUrl().
+//
+// For local-only dev against a laptop-hosted wedlock_iam instead, swap
+// this for "http://10.0.2.2:8010/api/v1" (the same emulator loopback
+// alias noted above for resolveDefaultBaseUrl()).
+actual fun resolveWedlockBaseUrl(): String = "https://auth.prashanthsridhar.com/api/v1"

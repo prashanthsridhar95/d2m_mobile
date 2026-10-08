@@ -177,12 +177,11 @@ class WedLockApi(
 }
 
 /**
- * WedLock isn't deployed behind a production tunnel yet (unlike
- * d2m_core_engine -- see ApiConfig.DEFAULT_BASE_URL/resolveDefaultBaseUrl()),
- * so both platform actuals point at a locally-running instance, following
- * the same per-platform loopback convention HttpEngine.android.kt /
- * HttpEngine.ios.kt already document: the Android emulator can't reach the
- * host's 127.0.0.1 directly and needs the 10.0.2.2 alias, while the iOS
- * simulator shares the host's loopback interface as-is.
+ * WedLock IAM now has its own Cloudflare Tunnel (auth.prashanthsridhar.com),
+ * same deployment pattern as d2m_core_engine -- see ApiConfig.DEFAULT_BASE_URL/
+ * resolveDefaultBaseUrl(). Both platform actuals default there now, matching
+ * the web app's own VITE_WEDLOCK_BASE_URL; see HttpEngine.android.kt /
+ * HttpEngine.ios.kt for the local-dev loopback values to swap in instead
+ * when working against a laptop-hosted wedlock_iam.
  */
 expect fun resolveWedlockBaseUrl(): String
