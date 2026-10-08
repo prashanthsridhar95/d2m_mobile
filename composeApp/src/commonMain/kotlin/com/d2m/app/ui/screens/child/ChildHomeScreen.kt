@@ -72,6 +72,7 @@ import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -174,41 +175,60 @@ fun ChildHomeScreen(
         if (primaryId == null) return@LaunchedEffect
         error = null
         try {
-            val profileDeferred = async { identityRepo.getPrimaryProfile(primaryId) }
-            val photosDeferred = async { runCatching { identityRepo.getPhotos(primaryId) }.getOrDefault(emptyList()) }
-            val sponsorStatusDeferred = async { seriousModeRepo.getSponsorStatus(primaryId) }
-            val threadsDeferred = async { seriousModeRepo.getThreads(primaryId) }
-            val suggestionsDeferred = async { suggestionsRepo.getSuggestions(primaryId) }
-            val receivedDeferred = async { suggestionsRepo.getReceivedRequests(primaryId) }
-            val sentDeferred = async { suggestionsRepo.getSentRequests(primaryId) }
-            val consentDeferred = async { runCatching { consentRepo.getConsentRequests(primaryId) }.getOrDefault(emptyList()) }
+            // coroutineScope{} (not just the implicit LaunchedEffect scope
+            // every async{} below would otherwise launch directly on) is
+            // load-bearing, not decorative. Without it, these eight async{}
+            // calls are direct siblings of THIS try/catch's own coroutine --
+            // structured concurrency propagates a child's failure to the
+            // parent Job the moment it happens, independent of whether that
+            // specific Deferred has been .await()-ed yet. A profile/thread/
+            // suggestion call failing (session expired mid-load, say -- see
+            // ApiError's "authentication required") while an EARLIER await()
+            // is still suspended could crash straight past this catch block
+            // instead of being caught by it (uncaught exception on
+            // AndroidUiDispatcher's own coroutine, not a thrown-and-caught
+            // one this try/catch would ever see -- reported directly as a
+            // FATAL EXCEPTION crash). coroutineScope{} makes the whole group
+            // fail as one unit: the first failure cancels the rest and is
+            // rethrown from the coroutineScope{} call itself, which *is*
+            // ordinary thrown-exception control flow this try/catch catches.
+            coroutineScope {
+                val profileDeferred = async { identityRepo.getPrimaryProfile(primaryId) }
+                val photosDeferred = async { runCatching { identityRepo.getPhotos(primaryId) }.getOrDefault(emptyList()) }
+                val sponsorStatusDeferred = async { seriousModeRepo.getSponsorStatus(primaryId) }
+                val threadsDeferred = async { seriousModeRepo.getThreads(primaryId) }
+                val suggestionsDeferred = async { suggestionsRepo.getSuggestions(primaryId) }
+                val receivedDeferred = async { suggestionsRepo.getReceivedRequests(primaryId) }
+                val sentDeferred = async { suggestionsRepo.getSentRequests(primaryId) }
+                val consentDeferred = async { runCatching { consentRepo.getConsentRequests(primaryId) }.getOrDefault(emptyList()) }
 
-            // Await order (not just launch order) doubles as the reveal
-            // order -- profile/hero data first since the greeting and hero
-            // are the first things on screen, the shared list last since
-            // its dependents (showPicks, discoverDisabled) need suggestions
-            // and sponsorStatus already resolved by the time it renders.
-            profile = profileDeferred.await()
-            ownPhotoUrl = photosDeferred.await().firstOrNull()?.url
-            profileLoaded = true
+                // Await order (not just launch order) doubles as the reveal
+                // order -- profile/hero data first since the greeting and hero
+                // are the first things on screen, the shared list last since
+                // its dependents (showPicks, discoverDisabled) need suggestions
+                // and sponsorStatus already resolved by the time it renders.
+                profile = profileDeferred.await()
+                ownPhotoUrl = photosDeferred.await().firstOrNull()?.url
+                profileLoaded = true
 
-            sponsorStatus = sponsorStatusDeferred.await()
-            threads = threadsDeferred.await()
-            threadsLoaded = true
+                sponsorStatus = sponsorStatusDeferred.await()
+                threads = threadsDeferred.await()
+                threadsLoaded = true
 
-            val active = threads.filter { it.status != "closed" }
-                .let { open -> open.find { it.status == "exclusive" } ?: open.firstOrNull() }
-            activeCandidatePhotoUrl = active?.let {
-                runCatching { suggestionsRepo.getCandidate(primaryId, it.otherParticipantId).photoUrl }.getOrNull()
+                val active = threads.filter { it.status != "closed" }
+                    .let { open -> open.find { it.status == "exclusive" } ?: open.firstOrNull() }
+                activeCandidatePhotoUrl = active?.let {
+                    runCatching { suggestionsRepo.getCandidate(primaryId, it.otherParticipantId).photoUrl }.getOrNull()
+                }
+
+                suggestions = suggestionsDeferred.await()
+                suggestionsLoaded = true
+
+                received = receivedDeferred.await()
+                sent = sentDeferred.await()
+                consentRequests = consentDeferred.await()
+                requestsLoaded = true
             }
-
-            suggestions = suggestionsDeferred.await()
-            suggestionsLoaded = true
-
-            received = receivedDeferred.await()
-            sent = sentDeferred.await()
-            consentRequests = consentDeferred.await()
-            requestsLoaded = true
         } catch (e: Exception) {
             error = friendlyError(e, strings.errLoadHomeFeed)
         }
