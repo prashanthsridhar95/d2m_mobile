@@ -250,6 +250,9 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         if (c.isFoundingMember) {
                             FeaturedBadge(LocalStrings.current.sharedComponents.foundingMember, Modifier.padding(start = 8.dp))
                         }
+                        if (c.isVerified) {
+                            D2MBadge(LocalStrings.current.sharedComponents.verified, D2MBadgeTone.ACCENT, Modifier.padding(start = 8.dp))
+                        }
                     }
                     val meta = listOfNotNull(
                         c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") }

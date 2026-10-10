@@ -29,6 +29,27 @@ class IdentityApi(private val api: ApiClient) {
     suspend fun setHideNameOverride(primaryId: String, body: HideNameIn): HideNameOut =
         api.put("/primaries/$primaryId/hide-name", body)
 
+    // KYC "Verified" badge (Phase 3 of the backlog this session is
+    // working, confirmed scope: one govt photo ID + one selfie, admin-
+    // reviewed via the control panel only). null before the first-ever
+    // submission -- see app/routers/identity.py's own Optional response.
+    suspend fun getIdentityVerification(primaryId: String): IdentityVerificationOut? =
+        api.get("/primaries/$primaryId/identity-verification")
+
+    suspend fun submitIdentityVerification(
+        primaryId: String, documentType: String,
+        documentFileName: String, documentContentType: String, documentBytes: ByteArray,
+        selfieFileName: String, selfieContentType: String, selfieBytes: ByteArray,
+    ): IdentityVerificationOut =
+        api.postMultipart(
+            "/primaries/$primaryId/identity-verification",
+            fields = mapOf("document_type" to documentType),
+            files = listOf(
+                ApiClient.MultipartFile("document", documentFileName, documentContentType, documentBytes),
+                ApiClient.MultipartFile("selfie", selfieFileName, selfieContentType, selfieBytes),
+            ),
+        )
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         api.get("/primaries/$primaryId/sponsor")
 

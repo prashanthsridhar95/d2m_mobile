@@ -136,6 +136,7 @@ data class PrimaryProfileOut(
     // shape still deserializes.
     val hideNameOverride: Boolean = false,
     val isFoundingMember: Boolean = false,
+    val isVerified: Boolean = false,
 )
 
 @Serializable

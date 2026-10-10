@@ -67,7 +67,7 @@ import org.koin.compose.koinInject
  * logout page (no equivalent basic-data/filters concept for sponsors).
  */
 @Composable
-fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTrust: () -> Unit) {
+fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTrust: () -> Unit, onOpenVerification: () -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
@@ -170,6 +170,15 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
             // this is the entry point for both roles, same "Settings" home
             // "Share my profile" is already using for the child side.
             D2MButton(text = strings.trustAndVouches, variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
+
+            // "Verified" badge submission (Phase 3 of the backlog this
+            // session is working) -- parent-managed on behalf of their
+            // child, same posture web's own Verification tab uses, so
+            // shown for the parent role only (same linkedPrimaryId gate
+            // FamilyLinkSection below already needs).
+            if (identity.role == D2MRole.PARENT && linkedPrimaryId != null) {
+                D2MButton(text = strings.verification, variant = D2MButtonVariant.OUTLINE, onClick = onOpenVerification)
+            }
 
             if (linkedPrimaryId != null) {
                 FamilyLinkSection(identity = identity, linkedPrimaryId = linkedPrimaryId, trustRepo = trustRepo)

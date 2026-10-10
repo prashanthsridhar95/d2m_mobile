@@ -222,6 +222,34 @@ class ApiClient(
             )
         }
 
+    /**
+     * Generalized multipart upload -- postForm() above only ever sends one
+     * file under a fixed "file" field name (every existing caller needed
+     * exactly that). Identity-verification submission (Phase 3 of the
+     * backlog this session is working) needs two named files (document,
+     * selfie) plus a plain text field (document_type) in one request, same
+     * as the backend's own Form(...) + two File(...) params.
+     */
+    data class MultipartFile(val fieldName: String, val fileName: String, val contentType: String, val bytes: ByteArray)
+
+    suspend inline fun <reified T> postMultipart(path: String, fields: Map<String, String>, files: List<MultipartFile>): T =
+        withRateLimitRetry {
+            unwrap(
+                client.post(url(path)) {
+                    applyAuthHeader()
+                    setBody(MultiPartFormDataContent(formData {
+                        fields.forEach { (name, value) -> append(name, value) }
+                        files.forEach { f ->
+                            append(f.fieldName, f.bytes, Headers.build {
+                                append(HttpHeaders.ContentType, f.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${f.fileName}\"")
+                            })
+                        }
+                    }))
+                }
+            )
+        }
+
     suspend inline fun <reified T> unwrap(response: HttpResponse): T {
         if (!response.status.isSuccess()) {
             val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()

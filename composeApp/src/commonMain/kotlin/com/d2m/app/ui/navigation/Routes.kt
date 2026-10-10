@@ -42,6 +42,11 @@ object Routes {
     // roles, same placement pattern ShareLinksScreen uses on the child side.
     const val TRUST = "trust"
 
+    // KYC identity verification (Phase 3 of the backlog this session is
+    // working) -- another Settings entry point, same placement pattern as
+    // SHARE_LINKS/TRUST above.
+    const val IDENTITY_VERIFICATION = "identity_verification"
+
     const val CHILD_PROFILE_DIALOG = "child_profile_dialog"
 
     // Phase 4 -- parity closeout

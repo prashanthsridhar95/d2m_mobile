@@ -56,6 +56,23 @@ class IdentityRepository(
         return result
     }
 
+    // Not cached -- a status that can change server-side (admin review)
+    // without any action on this device, so a stale cached "pending"
+    // would silently hide an approval/rejection.
+    suspend fun getIdentityVerification(primaryId: String): IdentityVerificationOut? =
+        api.getIdentityVerification(primaryId)
+
+    suspend fun submitIdentityVerification(
+        primaryId: String, documentType: String,
+        documentFileName: String, documentContentType: String, documentBytes: ByteArray,
+        selfieFileName: String, selfieContentType: String, selfieBytes: ByteArray,
+    ): IdentityVerificationOut =
+        api.submitIdentityVerification(
+            primaryId, documentType,
+            documentFileName, documentContentType, documentBytes,
+            selfieFileName, selfieContentType, selfieBytes,
+        )
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         cache.get("primary-sponsor:$primaryId") { api.getPrimarySponsor(primaryId) }.value
 

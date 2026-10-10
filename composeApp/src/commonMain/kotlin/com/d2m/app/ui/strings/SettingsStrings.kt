@@ -9,6 +9,7 @@ interface SettingsStrings {
     val hideNameSubtitle: String
     val shareMyProfile: String
     val trustAndVouches: String
+    val verification: String
     val logOut: String
     val familyLinkTitle: String
     val familyLinkUnlinkedNotice: String
@@ -35,6 +36,7 @@ object SettingsStringsEn : SettingsStrings {
     override val hideNameSubtitle = "Keep my name masked, even after a match"
     override val shareMyProfile = "Share my profile"
     override val trustAndVouches = "Trust & vouches"
+    override val verification = "Verification"
     override val logOut = "Log out"
     override val familyLinkTitle = "Family link"
     override val familyLinkUnlinkedNotice = "This account is no longer linked to a family member. Log out and back in to refresh the app."
@@ -61,6 +63,7 @@ object SettingsStringsHi : SettingsStrings {
     override val hideNameSubtitle = "मैच होने के बाद भी मेरा नाम छिपा रहने दें"
     override val shareMyProfile = "मेरी प्रोफ़ाइल शेयर करें"
     override val trustAndVouches = "विश्वास और वाउच"
+    override val verification = "सत्यापन"
     override val logOut = "लॉग आउट करें"
     override val familyLinkTitle = "पारिवारिक लिंक"
     override val familyLinkUnlinkedNotice = "यह खाता अब किसी परिवार के सदस्य से लिंक नहीं है। ऐप रिफ्रेश करने के लिए लॉग आउट करें और फिर से लॉगिन करें।"
@@ -87,6 +90,7 @@ object SettingsStringsTa : SettingsStrings {
     override val hideNameSubtitle = "பொருத்தமான பிறகும் என் பெயரை மறைத்து வைக்கவும்"
     override val shareMyProfile = "என் சுயவிவரத்தைப் பகிரவும்"
     override val trustAndVouches = "நம்பிக்கை & வவுச்கள்"
+    override val verification = "சரிபார்ப்பு"
     override val logOut = "வெளியேறு"
     override val familyLinkTitle = "குடும்ப இணைப்பு"
     override val familyLinkUnlinkedNotice = "இந்தக் கணக்கு இனி ஒரு குடும்ப உறுப்பினருடன் இணைக்கப்படவில்லை. ஆப்பைப் புதுப்பிக்க வெளியேறி மீண்டும் உள்நுழையவும்."

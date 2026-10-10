@@ -25,6 +25,7 @@ import com.d2m.app.ui.screens.parity.AdminGalleryModerationScreen
 import com.d2m.app.ui.screens.parity.PanchangamCalendarScreen
 import com.d2m.app.ui.screens.parity.SuccessGalleryScreen
 import com.d2m.app.ui.screens.public.ProfileLinkScreen
+import com.d2m.app.ui.screens.shared.IdentityVerificationScreen
 import com.d2m.app.ui.screens.shared.NotificationsScreen
 import com.d2m.app.ui.screens.shared.SettingsScreen
 import com.d2m.app.ui.screens.shared.ShareLinksScreen
@@ -143,11 +144,14 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
 
         composable(Routes.TRUST) { TrustScreen() }
 
+        composable(Routes.IDENTITY_VERIFICATION) { IdentityVerificationScreen(onBack = { navController.popBackStack() }) }
+
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
                 onOpenShareLinks = { navController.navigate(Routes.SHARE_LINKS) },
                 onOpenTrust = { navController.navigate(Routes.TRUST) },
+                onOpenVerification = { navController.navigate(Routes.IDENTITY_VERIFICATION) },
             )
         }
 

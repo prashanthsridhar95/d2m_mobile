@@ -120,6 +120,9 @@ fun MatchCard(
                         if (suggestion.isFoundingMember) {
                             FeaturedBadge(strings.foundingMember, Modifier.padding(start = 8.dp))
                         }
+                        if (suggestion.isVerified) {
+                            D2MBadge(strings.verified, D2MBadgeTone.ACCENT, Modifier.padding(start = 8.dp))
+                        }
                     }
                     if (meta.isNotEmpty()) MetaText(meta, Modifier.padding(top = 2.dp))
                 }
