@@ -6,8 +6,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -95,26 +100,46 @@ fun FeaturedBadge(text: String = LocalStrings.current.sharedComponents.featured,
  * theirs. Uses this app's own accent color rather than Meta's blue, so it
  * still reads as this app's own mark, not a borrowed one. Drawn on a
  * Canvas (not an Icons.Filled.Check glyph) so the checkmark is centered
- * and weighted to match d2m_web's identical SVG path exactly.
+ * and weighted to match d2m_web's identical SVG path exactly. The
+ * surrounding Row(verticalAlignment = CenterVertically) every call site
+ * already uses is what keeps this centered against the name text --
+ * unlike CSS flex, Compose Rows never default to baseline, so no extra
+ * alignment fix is needed here the way d2m_web's own header row needed.
+ *
+ * "on hover, explain what the tick means" (reported directly) -- wrapped
+ * in Material3's TooltipBox/PlainTooltip rather than a hand-rolled
+ * bubble: it already supports both long-press (the real mobile
+ * equivalent of hover on a touchscreen) and pointer hover (trackpad/
+ * mouse input), matching d2m_web's BubbleTooltip explanation without
+ * needing a second, platform-specific implementation.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VerifiedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
     val circleColor = d2m.accent
     val checkColor = d2m.accentOn
-    Canvas(modifier = modifier.size(size)) {
-        drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
-        val w = this.size.width
-        val h = this.size.height
-        val path = Path().apply {
-            moveTo(w * 0.292f, h * 0.5125f)
-            lineTo(w * 0.425f, h * 0.6458f)
-            lineTo(w * 0.708f, h * 0.3583f)
+    val tooltipText = LocalStrings.current.sharedComponents.verifiedTooltip
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltipText) } },
+        state = rememberTooltipState(),
+        modifier = modifier,
+    ) {
+        Canvas(modifier = Modifier.size(size)) {
+            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+            val w = this.size.width
+            val h = this.size.height
+            val path = Path().apply {
+                moveTo(w * 0.292f, h * 0.5125f)
+                lineTo(w * 0.425f, h * 0.6458f)
+                lineTo(w * 0.708f, h * 0.3583f)
+            }
+            drawPath(
+                path = path,
+                color = checkColor,
+                style = Stroke(width = this.size.minDimension * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
         }
-        drawPath(
-            path = path,
-            color = checkColor,
-            style = Stroke(width = this.size.minDimension * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-        )
     }
 }
 

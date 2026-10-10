@@ -14,6 +14,7 @@ package com.d2m.app.ui.strings
 interface SharedComponentsStrings {
     val featured: String
     val foundingMember: String
+    val verifiedTooltip: String
     val startTypingACity: String
     fun removeCity(city: String): String
     val compatLow: String
@@ -107,6 +108,7 @@ interface SharedComponentsStrings {
 object SharedComponentsStringsEn : SharedComponentsStrings {
     override val featured = "Featured"
     override val foundingMember = "Founding member"
+    override val verifiedTooltip = "This profile's identity has been verified with a government ID and a selfie."
     override val startTypingACity = "Start typing a city…"
     override fun removeCity(city: String) = "Remove $city"
     override val compatLow = "Low"
@@ -200,6 +202,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
 object SharedComponentsStringsHi : SharedComponentsStrings {
     override val featured = "फीचर्ड"
     override val foundingMember = "संस्थापक सदस्य"
+    override val verifiedTooltip = "इस प्रोफ़ाइल की पहचान सरकारी ID और सेल्फी से सत्यापित की गई है।"
     override val startTypingACity = "शहर टाइप करना शुरू करें…"
     override fun removeCity(city: String) = "$city हटाएं"
     override val compatLow = "कम"
@@ -293,6 +296,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
 object SharedComponentsStringsTa : SharedComponentsStrings {
     override val featured = "சிறப்பு"
     override val foundingMember = "நிறுவன உறுப்பினர்"
+    override val verifiedTooltip = "இந்த சுயவிவரத்தின் அடையாளம் அரசு ஆவணம் மற்றும் செல்ஃபி மூலம் சரிபார்க்கப்பட்டுள்ளது."
     override val startTypingACity = "ஒரு நகரத்தைத் தட்டச்சு செய்யத் தொடங்கவும்…"
     override fun removeCity(city: String) = "$city ஐ அகற்று"
     override val compatLow = "குறைவு"
