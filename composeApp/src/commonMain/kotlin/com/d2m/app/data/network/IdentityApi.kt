@@ -26,6 +26,9 @@ class IdentityApi(private val api: ApiClient) {
     suspend fun updatePrimaryBasicData(primaryId: String, body: PrimaryBasicDataIn): PrimaryBasicDataOut =
         api.put("/primaries/$primaryId/basic-data", body)
 
+    suspend fun setHideNameOverride(primaryId: String, body: HideNameIn): HideNameOut =
+        api.put("/primaries/$primaryId/hide-name", body)
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         api.get("/primaries/$primaryId/sponsor")
 

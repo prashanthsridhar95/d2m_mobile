@@ -115,7 +115,12 @@ fun MatchCard(
                         RefNoText(suggestion.candidateId, Modifier.weight(1f))
                         ScoreBadge(suggestion.compositeScore)
                     }
-                    SubHeading(suggestion.candidateName, Modifier.padding(top = 3.dp))
+                    Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SubHeading(suggestion.candidateName)
+                        if (suggestion.isFoundingMember) {
+                            FeaturedBadge(strings.foundingMember, Modifier.padding(start = 8.dp))
+                        }
+                    }
                     if (meta.isNotEmpty()) MetaText(meta, Modifier.padding(top = 2.dp))
                 }
 

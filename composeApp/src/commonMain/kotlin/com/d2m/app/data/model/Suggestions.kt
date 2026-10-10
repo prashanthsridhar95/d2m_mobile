@@ -56,6 +56,7 @@ data class SuggestionOut(
     val financialStatus: String? = null,
     val complexion: String? = null,
     val isShortlisted: Boolean = false,
+    val isFoundingMember: Boolean = false,
 ) {
     // Convenience flat accessors -- every UI call site (MatchCard,
     // DiscoveryScreen, ChildHomeScreen, ProfileDetailScreen, BrowseTable)
@@ -99,6 +100,7 @@ data class BrowseCandidateOut(
     val financialStatus: String? = null,
     val complexion: String? = null,
     val isShortlisted: Boolean = false,
+    val isFoundingMember: Boolean = false,
 )
 
 @Serializable

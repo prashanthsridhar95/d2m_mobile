@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -48,6 +49,7 @@ import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.FeaturedBadge
 import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
@@ -243,10 +245,12 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                      * for why a word beats a fraction here.
                      */
                     RefNoText(c.candidateId)
-                    PersonName(
-                        c.candidateName + (c.age?.let { ", $it" } ?: ""),
-                        Modifier.padding(top = 4.dp),
-                    )
+                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        PersonName(c.candidateName + (c.age?.let { ", $it" } ?: ""))
+                        if (c.isFoundingMember) {
+                            FeaturedBadge(LocalStrings.current.sharedComponents.foundingMember, Modifier.padding(start = 8.dp))
+                        }
+                    }
                     val meta = listOfNotNull(
                         c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") }
                             ?: c.gothram,

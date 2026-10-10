@@ -70,6 +70,7 @@ import org.koin.compose.koinInject
 fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTrust: () -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
+    val identityRepo: IdentityRepository = koinInject()
     val trustRepo: TrustRepository = koinInject()
     val localeStore: LocaleStore = koinInject()
     val identity by identityStore.identity.collectAsState()
@@ -78,6 +79,7 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
 
     var muted by remember { mutableStateOf(false) }
     var frequency by remember { mutableStateOf("immediate") }
+    var hideNameOverride by remember { mutableStateOf(false) }
 
     val accountId = identity.sponsorId ?: identity.primaryId
     // "Linking management of parent with child & vice versa" (reported
@@ -92,6 +94,12 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
         runCatching { notificationsRepo.getPreferences(accountId) }.onSuccess {
             muted = it.muted
             frequency = it.frequency
+        }
+    }
+    LaunchedEffect(linkedPrimaryId) {
+        if (linkedPrimaryId == null) return@LaunchedEffect
+        runCatching { identityRepo.getPrimaryProfile(linkedPrimaryId) }.onSuccess {
+            hideNameOverride = it.hideNameOverride
         }
     }
 
@@ -123,6 +131,27 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
                         }
                     },
                 )
+            }
+
+            // "Hide name" (reported directly) -- by default a name
+            // auto-masks to any viewer until a match exists, then auto-
+            // unmasks (no setting needed for that half, see suggestion_
+            // service._display_name on the backend). This switch is the
+            // manual override: keeps it masked even after a match.
+            if (linkedPrimaryId != null) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text(strings.hideNameTitle, fontWeight = FontWeight.Bold)
+                        Text(strings.hideNameSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
+                    }
+                    Switch(
+                        checked = hideNameOverride,
+                        onCheckedChange = { checked ->
+                            hideNameOverride = checked
+                            scope.launch { runCatching { identityRepo.setHideNameOverride(linkedPrimaryId, checked) } }
+                        },
+                    )
+                }
             }
 
             // Child role only -- the parent role reaches this via its own

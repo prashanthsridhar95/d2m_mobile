@@ -5,6 +5,8 @@ interface SettingsStrings {
     val pageTitle: String
     val muteNotificationsTitle: String
     val muteNotificationsSubtitle: String
+    val hideNameTitle: String
+    val hideNameSubtitle: String
     val shareMyProfile: String
     val trustAndVouches: String
     val logOut: String
@@ -29,6 +31,8 @@ object SettingsStringsEn : SettingsStrings {
     override val pageTitle = "Settings"
     override val muteNotificationsTitle = "Mute notifications"
     override val muteNotificationsSubtitle = "Turn off all push and in-app alerts"
+    override val hideNameTitle = "Hide my name"
+    override val hideNameSubtitle = "Keep my name masked, even after a match"
     override val shareMyProfile = "Share my profile"
     override val trustAndVouches = "Trust & vouches"
     override val logOut = "Log out"
@@ -53,6 +57,8 @@ object SettingsStringsHi : SettingsStrings {
     override val pageTitle = "सेटिंग्स"
     override val muteNotificationsTitle = "सूचनाएं म्यूट करें"
     override val muteNotificationsSubtitle = "सभी पुश और इन-ऐप अलर्ट बंद करें"
+    override val hideNameTitle = "मेरा नाम छिपाएं"
+    override val hideNameSubtitle = "मैच होने के बाद भी मेरा नाम छिपा रहने दें"
     override val shareMyProfile = "मेरी प्रोफ़ाइल शेयर करें"
     override val trustAndVouches = "विश्वास और वाउच"
     override val logOut = "लॉग आउट करें"
@@ -77,6 +83,8 @@ object SettingsStringsTa : SettingsStrings {
     override val pageTitle = "அமைப்புகள்"
     override val muteNotificationsTitle = "அறிவிப்புகளை முடக்கு"
     override val muteNotificationsSubtitle = "அனைத்து புஷ் மற்றும் இன்-ஆப் அலர்ட்களையும் அணைக்கவும்"
+    override val hideNameTitle = "என் பெயரை மறை"
+    override val hideNameSubtitle = "பொருத்தமான பிறகும் என் பெயரை மறைத்து வைக்கவும்"
     override val shareMyProfile = "என் சுயவிவரத்தைப் பகிரவும்"
     override val trustAndVouches = "நம்பிக்கை & வவுச்கள்"
     override val logOut = "வெளியேறு"

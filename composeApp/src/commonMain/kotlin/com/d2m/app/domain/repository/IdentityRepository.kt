@@ -50,6 +50,12 @@ class IdentityRepository(
         return result
     }
 
+    suspend fun setHideNameOverride(primaryId: String, hidden: Boolean): HideNameOut {
+        val result = api.setHideNameOverride(primaryId, HideNameIn(hidden))
+        cache.invalidateKey("primary-profile:$primaryId")
+        return result
+    }
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         cache.get("primary-sponsor:$primaryId") { api.getPrimarySponsor(primaryId) }.value
 

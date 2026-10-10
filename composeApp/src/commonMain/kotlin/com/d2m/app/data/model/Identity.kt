@@ -130,7 +130,19 @@ data class PrimaryProfileOut(
     // PrimaryBasicDataIn -- these two are deliberately absent from it).
     val dob: String? = null,
     val tob: String? = null,
+    // "Hide name" manual override + founding-member badge (reported
+    // directly) -- see app/models/identity.py's Primary.hide_name_override/
+    // founding_member on the backend. Defaulted so an older cached response
+    // shape still deserializes.
+    val hideNameOverride: Boolean = false,
+    val isFoundingMember: Boolean = false,
 )
+
+@Serializable
+data class HideNameIn(val hidden: Boolean)
+
+@Serializable
+data class HideNameOut(val primaryId: String, val hideNameOverride: Boolean)
 
 @Serializable
 data class PrimaryBasicDataIn(
