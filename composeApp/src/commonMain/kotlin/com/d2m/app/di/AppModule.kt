@@ -52,6 +52,9 @@ val appModule = module {
     single { PanchangamApi(get()) }
     single { GeocodingApi(httpEngine()) }
     single { ShareLinksApi(get()) }
+    // Public (unauthenticated) share-link viewer -- see PublicLinksApi.kt's
+    // own doc comment on how this differs from ShareLinksApi above.
+    single { PublicLinksApi(get()) }
     // WedLock trust subsystem (vouches/trusted connections/endorsements) --
     // Round 1 slice, see app/routers/trust.py + data/network/TrustApi.kt.
     single { TrustApi(get()) }
@@ -63,8 +66,10 @@ val appModule = module {
     single { NotificationsRepository(get(), get()) }
     single { DashboardRepository(get(), get()) }
     single { ShareLinksRepository(get(), get()) }
+    single { PublicLinksRepository(get()) }
     single { TrustRepository(get(), get()) }
     single { ShareLinkFieldsCache(createSettings()) }
+    single { LeadKeyCache(createSettings()) }
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }
     single { AdminRepository(get()) }

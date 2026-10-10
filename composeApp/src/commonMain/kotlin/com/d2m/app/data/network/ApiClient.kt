@@ -126,10 +126,16 @@ class ApiClient(
         return baseUrl.trimEnd('/') + path
     }
 
-    suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap()): T =
+    // extraHeaders defaults to empty, same additive shape as post/put/delete
+    // below -- added for the public share-link viewer (PublicLinksApi.kt),
+    // the one GET caller that needs a per-call X-D2M-User-Id/X-D2M-Lead-Key
+    // header pair rather than the Authorization bearer token
+    // applyAuthHeader() already attaches unconditionally.
+    suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap(), extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.get(url(path)) {
                 applyAuthHeader()
+                extraHeaders.forEach { (k, v) -> header(k, v) }
                 params.forEach { (k, v) -> if (v != null) parameter(k, v) }
             })
         }
@@ -151,6 +157,27 @@ class ApiClient(
                 extraHeaders.forEach { (k, v) -> header(k, v) }
                 if (body != null) setBody(body)
             })
+        }
+
+    // Like post() above, but hands back the raw HttpResponse instead of just
+    // the decoded body -- for the one caller (PublicLinksApi.identify) that
+    // needs a response HEADER (X-D2M-Lead-Key), not just the JSON body.
+    // Still throws ApiError on a non-2xx status, same as unwrap()'s own
+    // generic path -- callers only reach for this instead of post() when
+    // they specifically need something unwrap() would otherwise discard.
+    suspend fun postRaw(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): HttpResponse =
+        withRateLimitRetry {
+            val response = client.post(url(path)) {
+                applyAuthHeader()
+                contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
+                if (body != null) setBody(body)
+            }
+            if (!response.status.isSuccess()) {
+                val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
+                throw ApiError(status = response.status.value, detail = detail, message = detail ?: friendlyStatusMessage(response.status))
+            }
+            response
         }
 
     suspend inline fun <reified T> put(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =

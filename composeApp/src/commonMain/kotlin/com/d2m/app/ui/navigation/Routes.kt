@@ -48,4 +48,14 @@ object Routes {
     const val SUCCESS_GALLERY = "gallery"
     const val ADMIN_GALLERY_MODERATION = "admin/gallery"
     const val PANCHANGAM_CALENDAR = "panchangam"
+
+    // Public share-link viewer (Phase 6) -- mirrors d2m_web's
+    // ProfileLinkScreen.jsx. The real shared URL is a bare root-level code
+    // (https://d2m.app/{code}, see app/routers/links.py's share_preview
+    // docstring), unlike CLAIM's own /claim/{token} prefix.
+    const val PROFILE_LINK = "links/{code}"
+    fun profileLink(code: String) = "links/$code"
+    const val PROFILE_LINK_ARG_CODE = "code"
+    const val PROFILE_LINK_DEEPLINK_HTTPS = "https://d2m.app/{code}"
+    const val PROFILE_LINK_DEEPLINK_SCHEME = "d2m://link/{code}"
 }

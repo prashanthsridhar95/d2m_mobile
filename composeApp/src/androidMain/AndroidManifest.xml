@@ -81,6 +81,34 @@
                 <data android:host="d2m.app" />
                 <data android:pathPrefix="/claim" />
             </intent-filter>
+
+            <!-- Public share-link deep link: https://d2m.app/{code}, the
+                 bare root-level code actually pasted into WhatsApp/etc (see
+                 app/routers/links.py's share_preview docstring), not under
+                 any /links/ or /claim/ prefix. Broader than the claim
+                 filter above on purpose (any single root-level path
+                 segment on this already-verified domain); Compose
+                 Navigation's own deep-link resolution (D2MNavGraph.kt)
+                 disambiguates which registered pattern actually matches an
+                 incoming URI once it reaches this activity, since a
+                 two-segment /claim/xyz path never matches this filter's
+                 single-segment {code} route. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="d2m.app"
+                    tools:ignore="AppLinkUrlError" />
+                <data android:pathPrefix="/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="d2m" />
+                <data android:host="link" />
+            </intent-filter>
         </activity>
 
         <service

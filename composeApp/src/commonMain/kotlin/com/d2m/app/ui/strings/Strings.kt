@@ -34,6 +34,7 @@ interface AppStrings {
     val notifications: NotificationsStrings
     val trust: TrustStrings
     val shareLinks: ShareLinksStrings
+    val profileLink: ProfileLinkStrings
     val parity: ParityStrings
     val sharedComponents: SharedComponentsStrings
 }
@@ -54,6 +55,7 @@ object EnStrings : AppStrings {
     override val notifications = NotificationsStringsEn
     override val trust = TrustStringsEn
     override val shareLinks = ShareLinksStringsEn
+    override val profileLink = ProfileLinkStringsEn
     override val parity = ParityStringsEn
     override val sharedComponents = SharedComponentsStringsEn
 }
@@ -74,6 +76,7 @@ object HiStrings : AppStrings {
     override val notifications = NotificationsStringsHi
     override val trust = TrustStringsHi
     override val shareLinks = ShareLinksStringsHi
+    override val profileLink = ProfileLinkStringsHi
     override val parity = ParityStringsHi
     override val sharedComponents = SharedComponentsStringsHi
 }
@@ -94,6 +97,7 @@ object TaStrings : AppStrings {
     override val notifications = NotificationsStringsTa
     override val trust = TrustStringsTa
     override val shareLinks = ShareLinksStringsTa
+    override val profileLink = ProfileLinkStringsTa
     override val parity = ParityStringsTa
     override val sharedComponents = SharedComponentsStringsTa
 }

@@ -24,6 +24,7 @@ import com.d2m.app.ui.screens.parent.ProfileDetailScreen
 import com.d2m.app.ui.screens.parity.AdminGalleryModerationScreen
 import com.d2m.app.ui.screens.parity.PanchangamCalendarScreen
 import com.d2m.app.ui.screens.parity.SuccessGalleryScreen
+import com.d2m.app.ui.screens.public.ProfileLinkScreen
 import com.d2m.app.ui.screens.shared.NotificationsScreen
 import com.d2m.app.ui.screens.shared.SettingsScreen
 import com.d2m.app.ui.screens.shared.ShareLinksScreen
@@ -157,5 +158,20 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
         composable(Routes.SUCCESS_GALLERY) { SuccessGalleryScreen() }
         composable(Routes.ADMIN_GALLERY_MODERATION) { AdminGalleryModerationScreen() }
         composable(Routes.PANCHANGAM_CALENDAR) { PanchangamCalendarScreen() }
+
+        composable(
+            route = Routes.PROFILE_LINK,
+            arguments = listOf(navArgument(Routes.PROFILE_LINK_ARG_CODE) { type = NavType.StringType; defaultValue = "" }),
+            deepLinks = listOf(
+                androidx.navigation.navDeepLink { uriPattern = Routes.PROFILE_LINK_DEEPLINK_HTTPS },
+                androidx.navigation.navDeepLink { uriPattern = Routes.PROFILE_LINK_DEEPLINK_SCHEME },
+            ),
+        ) { backStackEntry ->
+            val code = backStackEntry.arguments?.read { getStringOrNull(Routes.PROFILE_LINK_ARG_CODE) }.orEmpty()
+            ProfileLinkScreen(
+                code = code,
+                onReachOut = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
+            )
+        }
     }
 }
