@@ -25,6 +25,8 @@ interface ParentBrowseStrings {
     val noProfilesYetTitle: String
     val noProfilesMatchingBody: String
     val noProfilesAllBody: String
+    val waitingOnChildTitle: String
+    val waitingOnChildBody: String
 }
 
 object ParentBrowseStringsEn : ParentBrowseStrings {
@@ -51,6 +53,8 @@ object ParentBrowseStringsEn : ParentBrowseStrings {
     override val noProfilesYetTitle = "No profiles yet"
     override val noProfilesMatchingBody = "Once the matching engine has scored some candidates for your child, they show up here."
     override val noProfilesAllBody = "There are no active profiles in the pool right now."
+    override val waitingOnChildTitle = "Waiting on your child"
+    override val waitingOnChildBody = "Once they claim your invite, you'll be able to browse matches for them here."
 }
 
 object ParentBrowseStringsHi : ParentBrowseStrings {
@@ -77,6 +81,8 @@ object ParentBrowseStringsHi : ParentBrowseStrings {
     override val noProfilesYetTitle = "अभी कोई प्रोफ़ाइल नहीं"
     override val noProfilesMatchingBody = "जब मैचिंग इंजन आपके बच्चे के लिए कुछ उम्मीदवारों का मूल्यांकन कर लेगा, तो वे यहां दिखेंगे।"
     override val noProfilesAllBody = "अभी पूल में कोई सक्रिय प्रोफ़ाइल नहीं है।"
+    override val waitingOnChildTitle = "आपके बच्चे की प्रतीक्षा है"
+    override val waitingOnChildBody = "एक बार वे आपका इनवाइट स्वीकार कर लें, तो आप यहां से उनके लिए मैच ब्राउज़ कर सकेंगे।"
 }
 
 object ParentBrowseStringsTa : ParentBrowseStrings {
@@ -103,4 +109,6 @@ object ParentBrowseStringsTa : ParentBrowseStrings {
     override val noProfilesYetTitle = "இன்னும் சுயவிவரங்கள் இல்லை"
     override val noProfilesMatchingBody = "பொருத்த இன்ஜின் உங்கள் குழந்தைக்காக சில வேட்பாளர்களை மதிப்பிட்டதும், அவை இங்கே தெரியும்."
     override val noProfilesAllBody = "இப்போது குளத்தில் செயலில் உள்ள சுயவிவரங்கள் இல்லை."
+    override val waitingOnChildTitle = "உங்கள் குழந்தைக்காக காத்திருக்கிறோம்"
+    override val waitingOnChildBody = "அவர்கள் உங்கள் அழைப்பை ஏற்றவுடன், இங்கிருந்து அவர்களுக்கான பொருத்தங்களை உலாவலாம்."
 }

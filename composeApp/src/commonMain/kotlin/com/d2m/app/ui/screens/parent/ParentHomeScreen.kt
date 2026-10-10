@@ -21,20 +21,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import com.d2m.app.data.model.ProspectCardOut
 import com.d2m.app.data.model.SponsorDashboardOut
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
+import com.d2m.app.data.network.ApiError
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.ConsentRepository
 import com.d2m.app.domain.repository.DashboardRepository
+import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.messaging.ChatUiState
+import com.d2m.app.messaging.ParentContactsStore
+import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.D2MButtonVariant
+import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.FieldSkeleton
 import com.d2m.app.ui.components.MatchCard
 import com.d2m.app.ui.components.MatchCardVariant
 import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.ProfileThumb
 import com.d2m.app.ui.components.SubHeading
 import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.PageTitle
@@ -79,6 +92,7 @@ fun ParentHomeScreen(
     var topSuggestions by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notClaimed by remember { mutableStateOf(false) }
 
     val sponsorId = identity.sponsorId
     val childPrimaryId = identity.childPrimaryId
@@ -124,16 +138,28 @@ fun ParentHomeScreen(
         }
     }
 
+    // A Sponsor whose invite hasn't been redeemed yet has no childPrimaryId
+    // -- the dashboard call itself still succeeds (SponsorDashboardOut.
+    // primary_id is nullable), so this used to just silently render with
+    // empty Suggested/Shortlisted sections and no explanation why. Same
+    // lookup web's ChildIdGate.jsx does (GET /sponsors/{id}/child),
+    // already correctly implemented once on mobile in ShareLinksScreen.kt
+    // -- ported here verbatim rather than inventing a second pattern.
     LaunchedEffect(sponsorId, childPrimaryId) {
         if (sponsorId == null) return@LaunchedEffect
+        if (childPrimaryId == null) {
+            runCatching { dashboardRepo.getSponsorChild(sponsorId) }
+                .onSuccess { identityStore.updateChildPrimaryId(it.primaryId) }
+                .onFailure { notClaimed = true; loading = false }
+            return@LaunchedEffect
+        }
+        notClaimed = false
         loading = true
         error = null
         try {
             dashboard = dashboardRepo.getSponsorDashboard(sponsorId)
-            if (childPrimaryId != null) {
-                shortlist = suggestionsRepo.getShortlist(childPrimaryId)
-                topSuggestions = suggestionsRepo.getSuggestions(childPrimaryId)
-            }
+            shortlist = suggestionsRepo.getShortlist(childPrimaryId)
+            topSuggestions = suggestionsRepo.getSuggestions(childPrimaryId)
         } catch (e: Exception) {
             error = friendlyError(e, strings.errLoadDashboard)
         } finally {
@@ -163,6 +189,8 @@ fun ParentHomeScreen(
             PageTitle(strings.pageTitle)
 
             when {
+                notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
+
                 loading -> Column { repeat(3) { FieldSkeleton(modifier = Modifier.padding(bottom = 12.dp)) } }
                 error != null -> D2MErrorBanner(error!!)
                 else -> {
@@ -172,10 +200,11 @@ fun ParentHomeScreen(
                         onClick = onOpenChildProfileDialog,
                     )
 
-                    dashboard?.childThreadStatus?.let { statusLabel ->
-                        ConsentStatusCard(
-                            statusLabel = statusLabel,
-                            pendingCount = dashboard?.unreadNotificationCount ?: 0,
+                    if (sponsorId != null) {
+                        ConsentProspectCard(
+                            sponsorId = sponsorId,
+                            apiClient = apiClient,
+                            onOpenProfile = onOpenProfile,
                             onOpenMessages = onOpenMessages,
                             strings = strings,
                         )
@@ -238,13 +267,176 @@ private fun ProfileSummaryCard(name: String, subtitle: String, onClick: () -> Un
     }
 }
 
+// "Request Access" consent card -- mirrors d2m_web's DiscoverScreen.jsx
+// ConsentCard: auto-discovers the Sponsor's child's current Serious Mode
+// prospect (GET /sponsors/{id}/prospect, 404 when there isn't one yet --
+// the common case, not a load failure), then renders one of: masked card
+// + Request Access button, a pending badge, or (once granted) the
+// unlocked card with View profile / Message their parent. "After consent
+// is given, a card is shown. But what is it is not known... the parent
+// should be able to check the profile, talk to her or her parents"
+// (reported directly, same wording web's own docstring quotes).
 @Composable
-private fun ConsentStatusCard(statusLabel: String, pendingCount: Int, onOpenMessages: () -> Unit, strings: ParentHomeStrings) {
-    D2MCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenMessages)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            SubHeading(strings.statusLabel(statusLabel))
-            if (pendingCount > 0) {
-                D2MBadge(strings.unreadCount(pendingCount), D2MBadgeTone.INFO)
+private fun ConsentProspectCard(
+    sponsorId: String,
+    apiClient: ApiClient,
+    onOpenProfile: (String) -> Unit,
+    onOpenMessages: () -> Unit,
+    strings: ParentHomeStrings,
+) {
+    val consentRepo: ConsentRepository = koinInject()
+    val identityRepo: IdentityRepository = koinInject()
+    val contactsStore: ParentContactsStore = koinInject()
+    val chatUiState: ChatUiState = koinInject()
+    val scope = rememberCoroutineScope()
+
+    var card by remember { mutableStateOf<ProspectCardOut?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var noProspect by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var requestBusy by remember { mutableStateOf(false) }
+    var requestError by remember { mutableStateOf<String?>(null) }
+    var messageParentBusy by remember { mutableStateOf(false) }
+    var messageParentError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(sponsorId) {
+        loading = true
+        noProspect = false
+        loadError = null
+        try {
+            card = consentRepo.getCurrentProspect(sponsorId)
+        } catch (e: ApiError) {
+            if (e.status == 404) noProspect = true else loadError = friendlyError(e, strings.consentCouldntLoad)
+        } catch (e: Exception) {
+            loadError = friendlyError(e, strings.consentCouldntLoad)
+        } finally {
+            loading = false
+        }
+    }
+
+    fun requestAccess() {
+        val prospectId = card?.prospectId ?: return
+        scope.launch {
+            requestBusy = true
+            requestError = null
+            try {
+                val res = consentRepo.requestAccess(sponsorId, prospectId)
+                card = card?.copy(consentStatus = res.status)
+            } catch (e: Exception) {
+                requestError = friendlyError(e, strings.consentCouldntSendRequest)
+            } finally {
+                requestBusy = false
+            }
+        }
+    }
+
+    // Open, no request/accept gate -- same as ProfileDetailScreen.kt's
+    // identical messageParent() (see that file's own doc comment). prospectId
+    // is the CHILD's own id; their Sponsor's id has to be resolved first.
+    fun messageParent() {
+        val prospectId = card?.prospectId ?: return
+        scope.launch {
+            messageParentBusy = true
+            messageParentError = null
+            try {
+                val sponsor = identityRepo.getPrimarySponsor(prospectId)
+                val sponsorProfile = identityRepo.getSponsorProfile(sponsor.sponsorId)
+                val myUsername = d2mIdToMessagingUsername(sponsorId)
+                val peerUsername = d2mIdToMessagingUsername(sponsor.sponsorId)
+                contactsStore.registerContact(
+                    myUsername = myUsername,
+                    peerUsername = peerUsername,
+                    peerD2mId = sponsor.sponsorId,
+                    name = sponsorProfile.name,
+                    kind = "parent",
+                    childId = prospectId,
+                    childName = sponsorProfile.childName,
+                )
+                chatUiState.requestOpenPeer(peerUsername)
+                onOpenMessages()
+            } catch (e: Exception) {
+                messageParentError = friendlyError(e, strings.consentErrStartConversation)
+            } finally {
+                messageParentBusy = false
+            }
+        }
+    }
+
+    when {
+        loading -> FieldSkeleton(modifier = Modifier.fillMaxWidth())
+        noProspect -> D2MCard(modifier = Modifier.fillMaxWidth()) {
+            D2MEmptyState(
+                title = strings.consentNoSeriousExplorationTitle,
+                subtitle = strings.consentNoSeriousExplorationDesc,
+            )
+        }
+        loadError != null -> D2MErrorBanner(loadError!!)
+        card != null -> {
+            val c = card!!
+            D2MCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (c.consentStatus != "granted") {
+                        SubHeading(strings.consentSeriousModeHeading)
+                        Text(
+                            strings.consentSeriousModeBody,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ProfileThumb(photoUrl = null, contentDescription = null, size = 56.dp)
+                            Column(modifier = Modifier.padding(start = 14.dp)) {
+                                Text(c.nameMasked ?: "", fontWeight = FontWeight.Bold)
+                                MetaText(c.ageBucket ?: "", Modifier.padding(top = 2.dp))
+                            }
+                        }
+                        MetaText(strings.consentHiddenUntilAccess, Modifier.padding(top = 14.dp))
+                        requestError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 10.dp)) }
+                        Column(modifier = Modifier.padding(top = 16.dp)) {
+                            if (c.consentStatus == "pending") {
+                                D2MBadge(strings.consentPendingBadge, D2MBadgeTone.WARNING)
+                                MetaText(strings.consentWaitingOnDecision, Modifier.padding(top = 6.dp))
+                            } else {
+                                D2MButton(
+                                    text = strings.consentRequestAccess,
+                                    enabled = !requestBusy,
+                                    onClick = { requestAccess() },
+                                )
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            D2MBadge(strings.consentSeriousWithPerson, D2MBadgeTone.SUCCESS)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 14.dp)) {
+                            ProfileThumb(
+                                photoUrl = c.photoUrl?.let(apiClient::resolveMediaUrl),
+                                contentDescription = null,
+                                size = 72.dp,
+                            )
+                            Column(modifier = Modifier.padding(start = 16.dp)) {
+                                SubHeading("${c.name ?: ""}, ${c.age ?: ""}")
+                                MetaText("${c.religion ?: ""} · ${c.community ?: ""}", Modifier.padding(top = 4.dp))
+                            }
+                        }
+                        MetaText(strings.consentFullAccessBody, Modifier.padding(top = 14.dp))
+                        messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 10.dp)) }
+                        Row(modifier = Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            D2MButton(
+                                text = strings.consentViewFullProfile,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onOpenProfile(c.prospectId) },
+                            )
+                            D2MButton(
+                                text = if (messageParentBusy) strings.consentOpening else strings.consentMessageTheirParent,
+                                variant = D2MButtonVariant.OUTLINE,
+                                enabled = !messageParentBusy,
+                                modifier = Modifier.weight(1f),
+                                onClick = { messageParent() },
+                            )
+                        }
+                    }
+                }
             }
         }
     }

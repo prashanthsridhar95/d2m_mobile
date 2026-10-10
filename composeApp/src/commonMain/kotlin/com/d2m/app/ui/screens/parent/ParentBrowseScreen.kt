@@ -30,6 +30,7 @@ import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonSize
@@ -84,6 +85,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
+    val dashboardRepo: DashboardRepository = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
@@ -103,6 +105,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     var all by remember { mutableStateOf<List<BrowseCandidateOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notClaimed by remember { mutableStateOf(false) }
 
     var sheetOpen by remember { mutableStateOf(false) }
     var cityFacet by remember { mutableStateOf(FacetState()) }
@@ -114,8 +117,23 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     val childPrimaryId = identity.childPrimaryId ?: identity.primaryId
     val strings = LocalStrings.current.parentBrowse
 
-    LaunchedEffect(childPrimaryId, mode) {
-        if (childPrimaryId == null) return@LaunchedEffect
+    // A Sponsor whose invite hasn't been redeemed yet has no childPrimaryId
+    // anywhere on `identity` -- previously this just silently rendered an
+    // empty "no profiles yet" list with no explanation why. Same lookup
+    // web's ChildIdGate.jsx does (GET /sponsors/{id}/child), already
+    // correctly implemented once on mobile in ShareLinksScreen.kt -- ported
+    // here verbatim rather than inventing a second pattern.
+    LaunchedEffect(identity.sponsorId, childPrimaryId, mode) {
+        if (childPrimaryId == null) {
+            val sponsorId = identity.sponsorId
+            if (sponsorId != null) {
+                runCatching { dashboardRepo.getSponsorChild(sponsorId) }
+                    .onSuccess { identityStore.updateChildPrimaryId(it.primaryId) }
+                    .onFailure { notClaimed = true; loading = false }
+            }
+            return@LaunchedEffect
+        }
+        notClaimed = false
         loading = true
         error = null
         try {
@@ -265,6 +283,8 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
             }
 
             when {
+                notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
+
                 loading -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // Previews the real card's shape (band, then text, then
                     // action) so the list doesn't visibly reflow the moment
