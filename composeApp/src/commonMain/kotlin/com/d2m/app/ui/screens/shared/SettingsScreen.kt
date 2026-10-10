@@ -172,11 +172,16 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
             D2MButton(text = strings.trustAndVouches, variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
 
             // "Verified" badge submission (Phase 3 of the backlog this
-            // session is working) -- parent-managed on behalf of their
-            // child, same posture web's own Verification tab uses, so
-            // shown for the parent role only (same linkedPrimaryId gate
-            // FamilyLinkSection below already needs).
-            if (identity.role == D2MRole.PARENT && linkedPrimaryId != null) {
+            // session is working) -- both roles. Not parent-only: unlike
+            // this app's existing parent-only settings (hide-name/
+            // visibility, explicitly scoped to "In parent login" when
+            // reported), verification is the CHILD's own ID + selfie, and
+            // the backend's require_owns_primary already allows either the
+            // Primary itself or its linked Sponsor to submit (app/auth.py)
+            // -- a parent can still do it on their child's behalf, the
+            // child just isn't blocked from doing it themselves. Same
+            // linkedPrimaryId gate FamilyLinkSection below already needs.
+            if (linkedPrimaryId != null) {
                 D2MButton(text = strings.verification, variant = D2MButtonVariant.OUTLINE, onClick = onOpenVerification)
             }
 
