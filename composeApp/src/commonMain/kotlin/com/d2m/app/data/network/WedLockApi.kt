@@ -42,8 +42,42 @@ private data class WedLockSendOtpRequestDto(val emailOrPhone: String)
 @Serializable
 private data class WedLockVerifyOtpRequestDto(val emailOrPhone: String, val code: String)
 
+// "Phone number login" (reported directly) -- email and phone are both
+// optional/mutually exclusive here, mirroring WedLockIAM's own
+// RegisterRequest (wedlock_iam/app/schemas/auth.py), which takes one or
+// the other. See isEmailLike/normalizeIdentifier below for how a call
+// site's single identifier string gets routed to the right field.
 @Serializable
-private data class WedLockRegisterRequestDto(val email: String, val password: String)
+private data class WedLockRegisterRequestDto(val email: String? = null, val phone: String? = null, val password: String)
+
+// Mirrors wedlock_iam/app/services/otp_service.py's own _is_email regex --
+// anything that doesn't match is treated as a phone number, same as
+// WedLock itself does server-side for otp/send and login (register is the
+// one endpoint that needs this told apart client-side, since its request
+// body has separate email/phone fields instead of one combined string).
+private val EMAIL_PATTERN = Regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
+
+private fun isEmailLike(identifier: String): Boolean = EMAIL_PATTERN.matches(identifier.trim())
+
+// WedLock stores whatever register/* sends verbatim and matches login by
+// exact string equality (wedlock_iam/app/services/auth_service.py) -- it
+// does NOT reconcile "9876543210" with "+919876543210" as the same number
+// the way its own OTP-gateway dispatch path does. Normalizing to a
+// consistent E.164-ish shape here, on every call that carries an
+// identifier, keeps a number typed slightly differently at register vs.
+// login resolving to the same stored value either way. "+91" matches
+// WedLock's own OTP-gateway default country code (wedlock_iam/app/core/
+// config.py's phone_default_country_code).
+private fun normalizeIdentifier(identifier: String): String {
+    val trimmed = identifier.trim()
+    if (isEmailLike(trimmed)) return trimmed
+    val digitsAndPlus = trimmed.replace(Regex("[\\s\\-()]"), "")
+    return when {
+        digitsAndPlus.startsWith("+") -> digitsAndPlus
+        digitsAndPlus.startsWith("00") -> "+" + digitsAndPlus.substring(2)
+        else -> "+91$digitsAndPlus"
+    }
+}
 
 @Serializable
 private data class WedLockLoginRequestDto(val emailOrPhone: String, val password: String)
@@ -134,24 +168,33 @@ class WedLockApi(
         return response.body()
     }
 
-    /** Sends a registration OTP to an email address. Console-mode delivery logs to wedlock_email_otp.log locally. */
-    suspend fun sendRegistrationOtp(email: String): WedLockSendOtpResponse =
-        post("/auth/otp/send", WedLockSendOtpRequestDto(emailOrPhone = email))
+    /** Sends a registration OTP to an email address or phone number. Console-mode delivery logs to wedlock_email_otp.log locally. */
+    suspend fun sendRegistrationOtp(emailOrPhone: String): WedLockSendOtpResponse =
+        post("/auth/otp/send", WedLockSendOtpRequestDto(emailOrPhone = normalizeIdentifier(emailOrPhone)))
 
-    suspend fun verifyRegistrationOtp(email: String, code: String): WedLockMessageResponse =
-        post("/auth/otp/verify", WedLockVerifyOtpRequestDto(emailOrPhone = email, code = code))
+    suspend fun verifyRegistrationOtp(emailOrPhone: String, code: String): WedLockMessageResponse =
+        post("/auth/otp/verify", WedLockVerifyOtpRequestDto(emailOrPhone = normalizeIdentifier(emailOrPhone), code = code))
 
-    /** Must immediately follow a verifyRegistrationOtp() for the same email -- see WedLock's register_parent(). */
-    suspend fun registerParent(email: String, password: String): WedLockMessageResponse =
-        post("/auth/register/parent", WedLockRegisterRequestDto(email = email, password = password))
+    /** Must immediately follow a verifyRegistrationOtp() for the same identifier -- see WedLock's register_parent(). */
+    suspend fun registerParent(emailOrPhone: String, password: String): WedLockMessageResponse =
+        post("/auth/register/parent", registerRequestFor(emailOrPhone, password))
 
-    /** Must immediately follow a verifyRegistrationOtp() for the same email -- see WedLock's register_self(). */
-    suspend fun registerSelf(email: String, password: String): WedLockMessageResponse =
-        post("/auth/register/self", WedLockRegisterRequestDto(email = email, password = password))
+    /** Must immediately follow a verifyRegistrationOtp() for the same identifier -- see WedLock's register_self(). */
+    suspend fun registerSelf(emailOrPhone: String, password: String): WedLockMessageResponse =
+        post("/auth/register/self", registerRequestFor(emailOrPhone, password))
+
+    private fun registerRequestFor(emailOrPhone: String, password: String): WedLockRegisterRequestDto {
+        val identifier = normalizeIdentifier(emailOrPhone)
+        return if (isEmailLike(identifier)) {
+            WedLockRegisterRequestDto(email = identifier, password = password)
+        } else {
+            WedLockRegisterRequestDto(phone = identifier, password = password)
+        }
+    }
 
     /** Registration doesn't return a token, so both the register-then-login and plain returning-user paths end here. */
     suspend fun login(emailOrPhone: String, password: String): WedLockTokenPair =
-        post("/auth/login", WedLockLoginRequestDto(emailOrPhone = emailOrPhone, password = password))
+        post("/auth/login", WedLockLoginRequestDto(emailOrPhone = normalizeIdentifier(emailOrPhone), password = password))
 
     /**
      * WedLock's POST /auth/social -- exchanges a Google-issued ID token

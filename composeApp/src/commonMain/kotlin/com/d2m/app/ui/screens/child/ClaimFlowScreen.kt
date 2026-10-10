@@ -104,7 +104,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                     SectionHeading(strings.createAccountHeading)
                     when (accountSubStep) {
                         0 -> {
-                            D2MTextField(label = strings.yourEmail, value = wedlockEmail, onValueChange = { wedlockEmail = it; accountError = null }, keyboardType = KeyboardType.Email)
+                            D2MTextField(label = strings.yourEmail, value = wedlockEmail, onValueChange = { wedlockEmail = it; accountError = null }, keyboardType = KeyboardType.Text)
                             accountError?.let { D2MErrorBanner(it) }
                             D2MButton(
                                 text = if (accountLoading) strings.sendCodeBusy else strings.sendCode,

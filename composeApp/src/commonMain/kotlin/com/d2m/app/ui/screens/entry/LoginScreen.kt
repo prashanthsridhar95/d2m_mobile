@@ -210,7 +210,7 @@ private fun LoginPane(
         } else if (!authenticated) {
             Text(strings.logInWithWedlock, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
-            D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Email)
+            D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Text)
             D2MTextField(label = strings.passwordLabel, value = password, onValueChange = { password = it; authError = null }, isPassword = true)
 
             authError?.let { D2MErrorBanner(it) }
@@ -335,7 +335,7 @@ private fun RegisterPane(
 
         when (step) {
             0 -> {
-                D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; error = null }, keyboardType = KeyboardType.Email)
+                D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; error = null }, keyboardType = KeyboardType.Text)
                 error?.let { D2MErrorBanner(it) }
                 D2MButton(
                     text = if (loading) strings.sendCodeBusy else strings.sendCode,
