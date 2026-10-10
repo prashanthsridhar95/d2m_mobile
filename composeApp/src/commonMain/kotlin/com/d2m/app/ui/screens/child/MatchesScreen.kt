@@ -341,6 +341,17 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
         }
     }
 
+    // "Serious mode/Union/We met request not getting updated in real time
+    // inside chat," reported directly -- messaging-framework pushes a
+    // thread.updated event the moment a Serious Mode milestone changes on
+    // either side (see d2m_core_engine's serious_mode_service.py). Just
+    // calls the same refresh() this screen already runs on load/manual
+    // pull -- no new fetch logic, just no longer waiting for one of those
+    // to happen on its own.
+    LaunchedEffect(Unit) {
+        messagingRepo.threadUpdatedEvents.collect { refresh() }
+    }
+
     LaunchedEffect(primaryId) {
         if (primaryId == null) return@LaunchedEffect
         loading = true

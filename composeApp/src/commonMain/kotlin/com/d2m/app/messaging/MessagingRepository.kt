@@ -195,6 +195,8 @@ class MessagingRepository(
     private val _inboxNotifications = MutableSharedFlow<InboxNotification>(replay = 1, extraBufferCapacity = 8)
     /** "when i'm in a chat & i receive messages in that chat, i want this tune to be played" -- web's useMessaging.js has an explicit else-branch for exactly this (playInChatTone(), see lib/sound.js) that mobile never had at all; this is that same signal. Emits the sender's username whenever a text/media message arrives for the peer whose thread is ALREADY open (the complementary case to inboxNotifications above, which only fires when it ISN'T) -- see markUnreadOrChime below. No replay: a stale "someone messaged the chat you have open" chime after a fresh subscribe would be actively wrong, unlike inboxNotifications' banner. */
     private val _inChatMessageEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** Emits the peer username whenever a `thread.updated` server event arrives -- Serious Mode/union/milestone state changed on that thread (see d2m_core_engine's serious_mode_service.py), landing here so MatchesScreen.kt can refetch its own thread list instead of waiting for a remount or manual refresh. "Serious mode/Union/We met request not getting updated in real time inside chat," reported directly. No replay, same reasoning as [_inChatMessageEvents]. */
+    private val _threadUpdatedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     /** Human-readable, transient failures for ChatPane to surface as a snackbar (Don Norman "visibility of system status" -- a send failure used to just vanish with no feedback at all). Not for call signaling failures, which have their own CallManager.errors -- see that class. */
     private val _sendErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val sendErrors: SharedFlow<String> = _sendErrors.asSharedFlow()
@@ -246,6 +248,7 @@ class MessagingRepository(
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
     val inboxNotifications: SharedFlow<InboxNotification> = _inboxNotifications.asSharedFlow()
     val inChatMessageEvents: SharedFlow<String> = _inChatMessageEvents.asSharedFlow()
+    val threadUpdatedEvents: SharedFlow<String> = _threadUpdatedEvents.asSharedFlow()
 
     /** True only while wsClient actually has a live session -- see MessagingWsClient.isConnected's own doc comment. Exposed here mainly for [ensureConnected] below, but also useful directly (e.g. a "reconnecting…" indicator). */
     val isConnected: StateFlow<Boolean> get() = wsClient.isConnected
@@ -410,6 +413,25 @@ class MessagingRepository(
             wsClient.onEvent = { event -> handleEvent(event) }
             wsClient.onOpen = {
                 for (peer in subscribedPeers) scope.launch { wsClient.send(ClientToServer.PresenceSubscribe(peer)) }
+                // "message sent on sender side but never reaches the
+                // recipient... should be verified once & ensured the
+                // message reaches the other party," reported directly.
+                // resendUndelivered() already existed but was only ever
+                // invoked from the SessionReset handler below -- a message
+                // whose own MessageAck simply never arrived (the socket
+                // dropped mid-flight, no session desync at all) sat in
+                // SENDING forever until the user noticed and manually
+                // retried. A fresh connection is exactly the moment to
+                // retry every peer with something still outstanding.
+                // web's equivalent fix (useMessaging.js) additionally
+                // guards this with ensureSessionWith(); not needed here --
+                // this platform's cryptoProvider.encrypt() has no
+                // comparable "session may not exist yet" state to rebuild.
+                for ((peer, messages) in _messagesByPeer.value) {
+                    if (messages.any { it.isMine && it.status == MessageStatus.SENDING }) {
+                        scope.launch { resendUndelivered(peer) }
+                    }
+                }
             }
             wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient)
             started = true
@@ -752,6 +774,7 @@ class MessagingRepository(
                 }
                 sessionResetHandler?.invoke(event.from)
             }
+            is ServerToClient.ThreadUpdated -> _threadUpdatedEvents.tryEmit(event.from)
             else -> Unit
         }
     }

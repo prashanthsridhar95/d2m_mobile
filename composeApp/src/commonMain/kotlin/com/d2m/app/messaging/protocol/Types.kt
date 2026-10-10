@@ -204,6 +204,17 @@ sealed class ServerToClient {
     @SerialName("session.reset")
     data class SessionReset(val from: String) : ServerToClient()
 
+    // Serious Mode/union/milestone state changed on the thread with `from`
+    // -- "Serious mode/Union/We met request not getting updated in real
+    // time inside chat," reported directly. Carries no state itself (this
+    // server has no concept of Serious Mode at all, see
+    // d2m_core_engine's serious_mode_service.py) -- just a "go refetch"
+    // nudge, same reasoning as messaging-framework/packages/protocol's
+    // matching addition.
+    @Serializable
+    @SerialName("thread.updated")
+    data class ThreadUpdated(val from: String) : ServerToClient()
+
     @Serializable
     @SerialName("error")
     data class Error(val message: String) : ServerToClient()
