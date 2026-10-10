@@ -128,9 +128,15 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                 completionHandler()
             }
         default:
-            // A plain tap (no specific action) -- nothing extra to do here,
-            // the app just opens normally; ChatPane/CallLayer already read
-            // MessagingRepository's own state once the UI composes.
+            // A plain tap (no specific action) -- `sender` (the peer
+            // username, already extracted above) previously went unused
+            // here, so the app just opened normally with no active peer/
+            // thread selected: composing and sending from wherever it
+            // landed went nowhere. Mirrors Android's MainActivity.kt
+            // consumeOpenPeerExtra -- see PendingOpenPeer.kt's doc comment
+            // for the full root cause and the shared commonMain mechanism
+            // App.kt observes to actually open the conversation.
+            PendingOpenPeer.shared.set(peerUsername: sender)
             completionHandler()
         }
     }

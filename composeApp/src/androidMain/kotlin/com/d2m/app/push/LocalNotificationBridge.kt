@@ -369,6 +369,12 @@ fun postMessageNotification(
 ) {
     val intent = Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // Reported directly: "From notifications, message is not getting
+        // sent" -- a plain tap on this notification previously carried no
+        // peer identity at all, unlike the Reply/Mark-as-read actions below,
+        // which already pass this same extra. See MainActivity.kt's
+        // consumeOpenPeerExtra and PendingOpenPeer.kt's doc comment.
+        putExtra(EXTRA_PEER_USERNAME, peerUsername)
     }
     val contentIntent = PendingIntent.getActivity(
         context,

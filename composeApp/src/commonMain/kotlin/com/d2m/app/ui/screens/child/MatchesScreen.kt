@@ -239,6 +239,24 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
     val primaryId = identity.primaryId
     val strings = LocalStrings.current.matches
 
+    // getReceivedRequests/getSentRequests can lag a beat behind an actual
+    // mutual match -- same staleness web's HomeScreen.jsx/MatchesScreen.jsx
+    // already work around via their own matchedIds/receivedFiltered.
+    // Cross-checked against threads (the authoritative "are we matched"
+    // source this screen already loads) so an already-matched candidate
+    // never lingers in Received/Sent with live Accept/Decline buttons.
+    // Reported directly: "After accepting a request, in message screen,
+    // request is being shown."
+    val matchedIds = remember(threads) {
+        threads.filter { it.status != "closed" }.map { it.otherParticipantId }.toSet()
+    }
+    val receivedFiltered = remember(receivedRequests, matchedIds) {
+        receivedRequests?.filter { it.candidateId !in matchedIds } ?: emptyList()
+    }
+    val sentFiltered = remember(sentRequests, matchedIds) {
+        sentRequests?.filter { it.candidateId !in matchedIds } ?: emptyList()
+    }
+
     // Union status only means anything once a thread is exclusive, and
     // getUnionStatus is a read-only peek (never creates a row) -- safe to
     // refetch every time the active exclusive thread changes.
@@ -462,9 +480,9 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                         requestsError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                         when {
                             receivedRequests == null -> MatchesListSkeleton()
-                            receivedRequests!!.isEmpty() -> D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
+                            receivedFiltered.isEmpty() -> D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
                             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                                items(receivedRequests!!, key = { it.candidateId }) { r ->
+                                items(receivedFiltered, key = { it.candidateId }) { r ->
                                     val busy = requestBusyId == r.candidateId
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                                         Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
@@ -481,6 +499,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                                                     try {
                                                         suggestionsRepo.act(pid, r.candidateId, "accept")
                                                         refreshReceived()
+                                                        refresh()
                                                     } catch (e: Exception) {
                                                         requestsError = friendlyError(e, strings.errAcceptRequest)
                                                     } finally {
@@ -513,9 +532,9 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                     }
                     else -> when {
                         sentRequests == null -> MatchesListSkeleton()
-                        sentRequests!!.isEmpty() -> D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
+                        sentFiltered.isEmpty() -> D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
                         else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                            items(sentRequests!!, key = { it.candidateId }) { r ->
+                            items(sentFiltered, key = { it.candidateId }) { r ->
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                                     Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
                                     Column {

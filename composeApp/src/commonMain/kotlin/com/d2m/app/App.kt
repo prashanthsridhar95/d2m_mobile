@@ -47,6 +47,7 @@ import com.d2m.app.domain.repository.SeriousModeRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.ParentContactsStore
+import com.d2m.app.messaging.PendingOpenPeer
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
@@ -355,6 +356,28 @@ fun App() {
                         }
                     },
                 )
+            }
+
+            // Tapping an OS-level chat notification (not the in-app banner
+            // above, which already worked) -- MainActivity.kt/iOSApp.swift
+            // write the tapped peer here once the Activity/App actually
+            // opens (see PendingOpenPeer.kt's doc comment for why that
+            // hand-off is necessary at all), and this is the exact same
+            // requestOpenPeer()+navigate() the in-app banner's own tap
+            // already does, just a different entry point into it. Reported
+            // directly: "From notifications, message is not getting sent."
+            val pendingPeerFromNotification by PendingOpenPeer.pendingPeerUsername.collectAsState()
+            LaunchedEffect(pendingPeerFromNotification, identity.role) {
+                val peerUsername = pendingPeerFromNotification ?: return@LaunchedEffect
+                if (identity.role == null) return@LaunchedEffect
+                chatUiState.requestOpenPeer(peerUsername)
+                val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
+                navController.navigate(target) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                PendingOpenPeer.clear()
             }
 
             // Standing banner (not a toast -- doesn't auto-dismiss) for when
