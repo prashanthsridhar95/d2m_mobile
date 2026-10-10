@@ -53,6 +53,7 @@ import com.d2m.app.ui.components.FeaturedBadge
 import com.d2m.app.ui.components.D2MProfileTabsPanel
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.ui.components.VerifiedBadge
 import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.LinkText
 import com.d2m.app.ui.components.MetaText
@@ -251,7 +252,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             FeaturedBadge(LocalStrings.current.sharedComponents.foundingMember, Modifier.padding(start = 8.dp))
                         }
                         if (c.isVerified) {
-                            D2MBadge(LocalStrings.current.sharedComponents.verified, D2MBadgeTone.ACCENT, Modifier.padding(start = 8.dp))
+                            VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
                         }
                     }
                     val meta = listOfNotNull(
