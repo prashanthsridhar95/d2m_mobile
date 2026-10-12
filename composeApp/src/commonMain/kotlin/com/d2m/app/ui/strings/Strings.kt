@@ -30,6 +30,7 @@ interface AppStrings {
     val parentBrowse: ParentBrowseStrings
     val profileDetail: ProfileDetailStrings
     val parentMessages: ParentMessagesStrings
+    val messaging: MessagingStrings
     val settings: SettingsStrings
     val notifications: NotificationsStrings
     val trust: TrustStrings
@@ -52,6 +53,7 @@ object EnStrings : AppStrings {
     override val parentBrowse = ParentBrowseStringsEn
     override val profileDetail = ProfileDetailStringsEn
     override val parentMessages = ParentMessagesStringsEn
+    override val messaging = MessagingStringsEn
     override val settings = SettingsStringsEn
     override val notifications = NotificationsStringsEn
     override val trust = TrustStringsEn
@@ -74,6 +76,7 @@ object HiStrings : AppStrings {
     override val parentBrowse = ParentBrowseStringsHi
     override val profileDetail = ProfileDetailStringsHi
     override val parentMessages = ParentMessagesStringsHi
+    override val messaging = MessagingStringsHi
     override val settings = SettingsStringsHi
     override val notifications = NotificationsStringsHi
     override val trust = TrustStringsHi
@@ -96,6 +99,7 @@ object TaStrings : AppStrings {
     override val parentBrowse = ParentBrowseStringsTa
     override val profileDetail = ProfileDetailStringsTa
     override val parentMessages = ParentMessagesStringsTa
+    override val messaging = MessagingStringsTa
     override val settings = SettingsStringsTa
     override val notifications = NotificationsStringsTa
     override val trust = TrustStringsTa

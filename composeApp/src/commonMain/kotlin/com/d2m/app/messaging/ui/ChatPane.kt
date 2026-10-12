@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reply
@@ -117,13 +118,16 @@ import coil3.request.ImageRequest
 import com.d2m.app.AppForegroundState
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatMessage
+import com.d2m.app.messaging.FlaggedLanguage
 import com.d2m.app.messaging.MessageStatus
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.components.BackHandlerCompat
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -234,9 +238,11 @@ fun ChatPane(
     modifier: Modifier = Modifier,
 ) {
     val identityStore: IdentityStore = koinInject()
+    val identity by identityStore.identity.collectAsState()
     val messagingRepo: MessagingRepository = koinInject()
     val apiClient = koinInject<com.d2m.app.data.network.ApiClient>()
     val scope = rememberCoroutineScope()
+    val messagingStrings = LocalStrings.current.messaging
 
     val peerUsername = remember(peerId) { d2mIdToMessagingUsername(peerId) }
     val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
@@ -255,6 +261,19 @@ fun ChatPane(
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var menuForMessageId by remember { mutableStateOf<String?>(null) }
+    // "Profanity filter - may be provide report or flag..." (reported
+    // directly) -- client-side-only pre-send screening, see
+    // FlaggedLanguage.kt's own doc comment for why this can't be
+    // server-side given E2E encryption. true once the user has confirmed
+    // past a flagged-language warning for the CURRENT draft -- cleared on
+    // any further edit, see the composer's onValueChange below. Direct
+    // port of d2m_web's MessageComposer.jsx (flaggedConfirm).
+    var flaggedConfirm by remember { mutableStateOf(false) }
+    // The message/media item currently targeted by the Report dialog, or
+    // null -- matches d2m_web's MessageList.jsx (reportTarget). Holds the
+    // whole message, not just an id, so the dialog can read its
+    // text/media without a second lookup.
+    var reportTarget by remember { mutableStateOf<ChatMessage?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var emojiOpen by remember { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
@@ -304,6 +323,34 @@ fun ChatPane(
     }
 
     fun replyContext() = replyingTo?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) }
+
+    // Shared by the send/save button below AND the flagged-language
+    // warning strip's "Send anyway" link -- direct port of d2m_web's
+    // MessageComposer.jsx submit(): screens the draft once (skipped
+    // entirely while editing, same as web), and re-running it after
+    // flaggedConfirm is already true just falls through to the real send,
+    // so "Send anyway" needs no separate bypass path of its own.
+    fun attemptSend() {
+        val text = draft.text
+        if (text.isBlank()) return
+        if (editingId == null && !flaggedConfirm && FlaggedLanguage.containsFlaggedLanguage(text)) {
+            flaggedConfirm = true
+            return
+        }
+        flaggedConfirm = false
+        draft = TextFieldValue("")
+        val editing = editingId
+        val reply = replyingTo
+        editingId = null
+        replyingTo = null
+        scope.launch {
+            messagingRepo.sendTyping(peerId, false)
+            when {
+                editing != null -> messagingRepo.editMessage(peerId, editing, text)
+                else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+            }
+        }
+    }
 
     // Attach (paperclip button below) -- any file type, matches web's plain
     // <input type="file"> with no `accept` restriction. Reported directly:
@@ -418,6 +465,28 @@ fun ChatPane(
 
     Box(modifier = modifier) {
         MediaViewerDialog(target = viewerTarget, onDismiss = { viewerTarget = null })
+        // "Report" a specific message/media item -- see
+        // ReportMessageDialog.kt's own doc comment. primaryId is MY OWN
+        // D2M primary id (the require_owns_primary path param), resolved
+        // the same way every other /primaries/{id}/... caller in this app
+        // resolves "my own profile id" regardless of child/parent role
+        // (see e.g. ProfileDetailScreen.kt's viewerPrimaryId) -- NOT
+        // d2m_web's own ReportMessageModal caller's `messaging.myUsername`
+        // prop, see ReportMessageDialog.kt's doc comment for why that
+        // wouldn't actually resolve against the real backend.
+        reportTarget?.let { target ->
+            val myPrimaryId = identity.primaryId ?: identity.childPrimaryId
+            if (myPrimaryId != null) {
+                ReportMessageDialog(
+                    primaryId = myPrimaryId,
+                    reportedPrimaryId = peerId,
+                    reportedName = peerName,
+                    contentType = if (target.media != null) "media" else "text",
+                    contentSnippet = if (target.media != null) target.media.name else target.text,
+                    onDismiss = { reportTarget = null },
+                )
+            }
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 if (messages.isEmpty() && !peerTyping) {
@@ -510,6 +579,7 @@ fun ChatPane(
                                     onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
                                     onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
                                     onOpenMedia = { viewerTarget = it },
+                                    onReport = { reportTarget = m; menuForMessageId = null },
                                 )
                             }
                         }
@@ -522,6 +592,44 @@ fun ChatPane(
                 }
                 SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { data ->
                     Snackbar(snackbarData = data, containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+
+            // Flagged-language warning strip -- direct port of d2m_web's
+            // MessageComposer.jsx (flaggedConfirm && <div>...). Shown above
+            // the reply/edit strip, same stacking order as web.
+            AnimatedVisibility(
+                visible = flaggedConfirm,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit = shrinkVertically(tween(150)) + fadeOut(tween(120)),
+            ) {
+                val warningColors = LocalD2MStatusPalette.current.warning
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        .background(warningColors.bg, RoundedCornerShape(D2MRadius.sm)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        messagingStrings.flaggedLanguageWarning,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = warningColors.fg,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        LocalStrings.current.common.edit,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = mutedText(0.55f),
+                        modifier = Modifier.clickable { flaggedConfirm = false },
+                    )
+                    Text(
+                        messagingStrings.sendAnyway,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = warningColors.fg,
+                        modifier = Modifier.clickable { attemptSend() },
+                    )
                 }
             }
 
@@ -613,6 +721,12 @@ fun ChatPane(
                     onValueChange = { new ->
                         val wasEmpty = draft.text.isEmpty()
                         draft = new
+                        // Editing the draft after a flagged-language warning
+                        // re-screens it on the next send attempt, rather than
+                        // letting one earlier confirmation silently cover
+                        // whatever gets typed next -- matches d2m_web's
+                        // MessageComposer.jsx handleChange exactly.
+                        if (flaggedConfirm) flaggedConfirm = false
                         if (editingId == null) {
                             if (new.text.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
                             typingJob?.cancel()
@@ -663,21 +777,7 @@ fun ChatPane(
                     modifier = Modifier.size(44.dp)
                         .clip(CircleShape)
                         .background(sendBg)
-                        .combinedClickable(enabled = canSend, onClick = {
-                            val text = draft.text
-                            draft = TextFieldValue("")
-                            val editing = editingId
-                            val reply = replyingTo
-                            editingId = null
-                            replyingTo = null
-                            scope.launch {
-                                messagingRepo.sendTyping(peerId, false)
-                                when {
-                                    editing != null -> messagingRepo.editMessage(peerId, editing, text)
-                                    else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
-                                }
-                            }
-                        }, onLongClick = {}),
+                        .combinedClickable(enabled = canSend, onClick = { attemptSend() }, onLongClick = {}),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -918,7 +1018,9 @@ private fun MessageRow(
     onDeleteForEveryone: () -> Unit,
     onRetry: () -> Unit,
     onOpenMedia: (MediaViewerTarget) -> Unit,
+    onReport: () -> Unit,
 ) {
+    val messagingStrings = LocalStrings.current.messaging
     Column(modifier = modifier.fillMaxWidth()) {
         // BoxWithConstraints (not a fixed dp cap) to match d2m_web's
         // MessageBubble.jsx exactly -- web caps a bubble at `max-width: 72%`
@@ -1305,6 +1407,17 @@ private fun MessageRow(
                     DropdownMenuItem(text = { Text("Delete for me") }, onClick = onDeleteForMe)
                     if (message.isMine) {
                         DropdownMenuItem(text = { Text("Delete for everyone") }, onClick = onDeleteForEveryone)
+                    }
+                    // Reporting your own message makes no sense -- only
+                    // shown for the PEER's own messages, same `isMine` gate
+                    // "Edit"/"Delete for everyone" already use (inverted).
+                    // Matches d2m_web's MessageList.jsx exactly.
+                    if (!message.isMine) {
+                        DropdownMenuItem(
+                            text = { Text(messagingStrings.reportMenuItem, color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Filled.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = onReport,
+                        )
                     }
                 }
             }

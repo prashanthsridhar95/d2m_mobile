@@ -58,6 +58,9 @@ val appModule = module {
     // WedLock trust subsystem (vouches/trusted connections/endorsements) --
     // Round 1 slice, see app/routers/trust.py + data/network/TrustApi.kt.
     single { TrustApi(get()) }
+    // Chat message/media "Report" -- app/routers/blocking.py's
+    // message-reports route, see data/network/BlockingApi.kt.
+    single { BlockingApi(get()) }
 
     single { IdentityRepository(get(), get()) }
     single { SuggestionsRepository(get(), get(), get()) }
