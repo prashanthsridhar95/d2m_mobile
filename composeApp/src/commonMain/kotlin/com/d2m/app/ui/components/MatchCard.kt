@@ -1,6 +1,7 @@
 package com.d2m.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -118,7 +119,7 @@ fun MatchCard(
                     Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                         SubHeading(suggestion.candidateName)
                         if (suggestion.isFoundingMember) {
-                            FeaturedBadge(strings.foundingMember, Modifier.padding(start = 8.dp))
+                            FeaturedBadge(modifier = Modifier.padding(start = 8.dp))
                         }
                         if (suggestion.isVerified) {
                             VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
@@ -268,22 +269,28 @@ fun ShortlistStar(
 ) {
     val strings = LocalStrings.current.sharedComponents
     val shape = if (onPhoto) RoundedCornerShape(percent = 50) else RoundedCornerShape(D2MRadius.sm)
+    // "Shortlist button to be shown clearly for parent view" (reported
+    // directly) -- always gold-bordered and gold-tinted now, not a plain
+    // muted-label-colored star when unselected. A bigger icon in the same
+    // low-contrast color was still easy to miss; this makes it read as a
+    // shortlist control at a glance regardless of its current on/off state.
     Box(
         modifier
-            .size(32.dp)
+            .size(40.dp)
             .clip(shape)
             // On a photograph the control needs its own ground to stay
             // legible over an arbitrary image; in a text row it can sit on
             // the card.
-            .background(if (onPhoto) d2m.surfaceSunken.copy(alpha = 0.92f) else MaterialTheme.colorScheme.surface, shape),
+            .background(if (onPhoto) d2m.surfaceSunken.copy(alpha = 0.92f) else if (shortlisted) d2m.gold.copy(alpha = 0.13f) else MaterialTheme.colorScheme.surface, shape)
+            .border(1.5.dp, d2m.gold, shape),
         contentAlignment = Alignment.Center,
     ) {
-        IconButton(onClick = onToggle, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
             Icon(
                 imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarOutline,
                 contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
-                tint = if (shortlisted) d2m.goldStrong else d2m.label,
-                modifier = Modifier.size(18.dp),
+                tint = if (shortlisted) d2m.goldStrong else d2m.gold,
+                modifier = Modifier.size(22.dp),
             )
         }
     }

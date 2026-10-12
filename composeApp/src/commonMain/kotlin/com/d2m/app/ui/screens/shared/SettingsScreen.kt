@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -67,7 +70,14 @@ import org.koin.compose.koinInject
  * logout page (no equivalent basic-data/filters concept for sponsors).
  */
 @Composable
-fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTrust: () -> Unit, onOpenVerification: () -> Unit) {
+fun SettingsScreen(
+    onLogout: () -> Unit,
+    onOpenShareLinks: () -> Unit,
+    onOpenTrust: () -> Unit,
+    onOpenVerification: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenProfilePreview: (String) -> Unit,
+) {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
@@ -108,7 +118,10 @@ fun SettingsScreen(onLogout: () -> Unit, onOpenShareLinks: () -> Unit, onOpenTru
         Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             PageTitle(strings.pageTitle)
 
-            AccountHeader(identity = identity, accountId = accountId)
+            AccountHeader(identity = identity, accountId = accountId, onOpenProfile = onOpenProfile)
+            if (linkedPrimaryId != null) {
+                D2MButton(text = strings.previewProfile, variant = D2MButtonVariant.OUTLINE, onClick = { onOpenProfilePreview(linkedPrimaryId) })
+            }
             HorizontalDivider()
 
             Column {
@@ -301,7 +314,7 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
 // the child role fetches its first photo (if any) the same way
 // ChildHomeScreen's own profile row does.
 @Composable
-private fun AccountHeader(identity: Identity, accountId: String?) {
+private fun AccountHeader(identity: Identity, accountId: String?, onOpenProfile: () -> Unit) {
     val strings = LocalStrings.current.settings
     val identityRepo: IdentityRepository = koinInject()
     var name by remember { mutableStateOf<String?>(null) }
@@ -330,9 +343,17 @@ private fun AccountHeader(identity: Identity, accountId: String?) {
     var copied by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    // "Show an arrow in the name/email card for going into profile"
+    // (reported directly) -- the whole row is now a tap target leading to
+    // the profile edit screen, with a trailing chevron same as any other
+    // navigation row in this app.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth().clickable { onOpenProfile() },
+    ) {
         ProfileThumb(photoUrl = photoUrl, contentDescription = name, size = 52.dp, shape = CircleShape)
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(name ?: "…", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             val contact = contactInfo
             if (!contact.isNullOrBlank()) {
@@ -354,5 +375,6 @@ private fun AccountHeader(identity: Identity, accountId: String?) {
                 )
             }
         }
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
     }
 }

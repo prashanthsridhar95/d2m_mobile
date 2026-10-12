@@ -14,7 +14,10 @@ package com.d2m.app.ui.strings
 interface SharedComponentsStrings {
     val featured: String
     val foundingMember: String
+    val foundingMemberTooltip: String
     val verifiedTooltip: String
+    fun matchTooltipYesShared(label: String): String
+    fun matchTooltipNoShared(label: String): String
     val startTypingACity: String
     fun removeCity(city: String): String
     val compatLow: String
@@ -58,6 +61,11 @@ interface SharedComponentsStrings {
     val errConfirmPassword: String
     val tabAboutMe: String
     val tabBioData: String
+    // "Too many tabs in profile ... make it concise" (reported directly) --
+    // About Me and Bio data merged into one "About" tab (same merge as
+    // ChildProfileDialogScreen.kt's self-editing dialog). See
+    // D2MProfileTabsPanel's call site for the merge logic.
+    val tabAbout: String
     val tabChart: String
     val loading: String
     val noBioDataYet: String
@@ -72,6 +80,7 @@ interface SharedComponentsStrings {
     val rowComplexion: String
     val rowMotherTongue: String
     val rowOtherLanguages: String
+    val rowChildrenPreference: String
     val rowReligion: String
     val rowCasteCommunity: String
     val rowSect: String
@@ -83,6 +92,7 @@ interface SharedComponentsStrings {
     val rowEmployer: String
     val rowEmployedIn: String
     val rowMonthlyIncome: String
+    val rowIncomeBand: String
     val rowFather: String
     val rowMother: String
     val rowSiblings: String
@@ -108,7 +118,10 @@ interface SharedComponentsStrings {
 object SharedComponentsStringsEn : SharedComponentsStrings {
     override val featured = "Featured"
     override val foundingMember = "Founding member"
+    override val foundingMemberTooltip = "One of the first members to join D2M."
     override val verifiedTooltip = "This profile's identity has been verified with a government ID and a selfie."
+    override fun matchTooltipYesShared(label: String) = "$label: you both picked the same answer"
+    override fun matchTooltipNoShared(label: String) = "$label: you picked different answers"
     override val startTypingACity = "Start typing a city…"
     override fun removeCity(city: String) = "Remove $city"
     override val compatLow = "Low"
@@ -152,6 +165,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val errConfirmPassword = "Couldn't confirm your password."
     override val tabAboutMe = "About Me"
     override val tabBioData = "Bio data"
+    override val tabAbout = "About"
     override val tabChart = "Chart"
     override val loading = "Loading…"
     override val noBioDataYet = "No bio data on file for this profile yet."
@@ -166,6 +180,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val rowComplexion = "Complexion"
     override val rowMotherTongue = "Mother tongue"
     override val rowOtherLanguages = "Other languages"
+    override val rowChildrenPreference = "Children preference"
     override val rowReligion = "Religion"
     override val rowCasteCommunity = "Caste / community"
     override val rowSect = "Sect"
@@ -177,6 +192,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val rowEmployer = "Employer"
     override val rowEmployedIn = "Employed in"
     override val rowMonthlyIncome = "Monthly income"
+    override val rowIncomeBand = "Salary range"
     override val rowFather = "Father"
     override val rowMother = "Mother"
     override val rowSiblings = "Siblings"
@@ -202,7 +218,10 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
 object SharedComponentsStringsHi : SharedComponentsStrings {
     override val featured = "फीचर्ड"
     override val foundingMember = "संस्थापक सदस्य"
+    override val foundingMemberTooltip = "D2M में शामिल होने वाले शुरुआती सदस्यों में से एक।"
     override val verifiedTooltip = "इस प्रोफ़ाइल की पहचान सरकारी ID और सेल्फी से सत्यापित की गई है।"
+    override fun matchTooltipYesShared(label: String) = "$label: आप दोनों ने एक ही जवाब चुना"
+    override fun matchTooltipNoShared(label: String) = "$label: आप दोनों के जवाब अलग-अलग हैं"
     override val startTypingACity = "शहर टाइप करना शुरू करें…"
     override fun removeCity(city: String) = "$city हटाएं"
     override val compatLow = "कम"
@@ -246,6 +265,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val errConfirmPassword = "आपके पासवर्ड की पुष्टि नहीं हो सकी।"
     override val tabAboutMe = "मेरे बारे में"
     override val tabBioData = "बायो डेटा"
+    override val tabAbout = "परिचय"
     override val tabChart = "कुंडली"
     override val loading = "लोड हो रहा है…"
     override val noBioDataYet = "इस प्रोफ़ाइल के लिए अभी तक कोई बायो डेटा नहीं है।"
@@ -260,6 +280,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val rowComplexion = "रंग"
     override val rowMotherTongue = "मातृभाषा"
     override val rowOtherLanguages = "अन्य भाषाएं"
+    override val rowChildrenPreference = "बच्चों से संबंधित प्राथमिकता"
     override val rowReligion = "धर्म"
     override val rowCasteCommunity = "जाति / समुदाय"
     override val rowSect = "संप्रदाय"
@@ -271,6 +292,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val rowEmployer = "नियोक्ता"
     override val rowEmployedIn = "कार्यरत क्षेत्र"
     override val rowMonthlyIncome = "मासिक आय"
+    override val rowIncomeBand = "वेतन सीमा"
     override val rowFather = "पिता"
     override val rowMother = "माता"
     override val rowSiblings = "भाई-बहन"
@@ -296,7 +318,10 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
 object SharedComponentsStringsTa : SharedComponentsStrings {
     override val featured = "சிறப்பு"
     override val foundingMember = "நிறுவன உறுப்பினர்"
+    override val foundingMemberTooltip = "D2M இல் இணைந்த முதல் உறுப்பினர்களில் ஒருவர்."
     override val verifiedTooltip = "இந்த சுயவிவரத்தின் அடையாளம் அரசு ஆவணம் மற்றும் செல்ஃபி மூலம் சரிபார்க்கப்பட்டுள்ளது."
+    override fun matchTooltipYesShared(label: String) = "$label: நீங்கள் இருவரும் ஒரே பதிலைத் தேர்ந்தெடுத்துள்ளீர்கள்"
+    override fun matchTooltipNoShared(label: String) = "$label: நீங்கள் இருவரும் வெவ்வேறு பதில்களைத் தேர்ந்தெடுத்துள்ளீர்கள்"
     override val startTypingACity = "ஒரு நகரத்தைத் தட்டச்சு செய்யத் தொடங்கவும்…"
     override fun removeCity(city: String) = "$city ஐ அகற்று"
     override val compatLow = "குறைவு"
@@ -340,6 +365,7 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val errConfirmPassword = "உங்கள் கடவுச்சொல்லை உறுதிப்படுத்த முடியவில்லை."
     override val tabAboutMe = "என்னைப் பற்றி"
     override val tabBioData = "தனிப்பட்ட தகவல்"
+    override val tabAbout = "விவரம்"
     override val tabChart = "ஜாதகம்"
     override val loading = "ஏற்றப்படுகிறது…"
     override val noBioDataYet = "இந்த சுயவிவரத்திற்கு இன்னும் தனிப்பட்ட தகவல் இல்லை."
@@ -354,6 +380,7 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val rowComplexion = "நிறம்"
     override val rowMotherTongue = "தாய்மொழி"
     override val rowOtherLanguages = "மற்ற மொழிகள்"
+    override val rowChildrenPreference = "குழந்தைகள் மீதான விருப்பம்"
     override val rowReligion = "மதம்"
     override val rowCasteCommunity = "சாதி / சமூகம்"
     override val rowSect = "பிரிவு"
@@ -365,6 +392,7 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val rowEmployer = "பணியாளர்"
     override val rowEmployedIn = "பணிபுரியும் துறை"
     override val rowMonthlyIncome = "மாத வருமானம்"
+    override val rowIncomeBand = "சம்பள வரம்பு"
     override val rowFather = "தந்தை"
     override val rowMother = "தாய்"
     override val rowSiblings = "உடன்பிறப்புகள்"

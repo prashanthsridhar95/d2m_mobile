@@ -8,6 +8,8 @@ interface SettingsStrings {
     val hideNameTitle: String
     val hideNameSubtitle: String
     val shareMyProfile: String
+    val previewProfile: String
+    val previewProfileHint: String
     val trustAndVouches: String
     val verification: String
     val logOut: String
@@ -35,6 +37,8 @@ object SettingsStringsEn : SettingsStrings {
     override val hideNameTitle = "Hide my name"
     override val hideNameSubtitle = "Keep my name masked, even after a match"
     override val shareMyProfile = "Share my profile"
+    override val previewProfile = "Preview profile"
+    override val previewProfileHint = "This is what another member sees when they view your profile."
     override val trustAndVouches = "Trust & vouches"
     override val verification = "Verification"
     override val logOut = "Log out"
@@ -62,6 +66,8 @@ object SettingsStringsHi : SettingsStrings {
     override val hideNameTitle = "मेरा नाम छिपाएं"
     override val hideNameSubtitle = "मैच होने के बाद भी मेरा नाम छिपा रहने दें"
     override val shareMyProfile = "मेरी प्रोफ़ाइल शेयर करें"
+    override val previewProfile = "प्रोफ़ाइल का पूर्वावलोकन"
+    override val previewProfileHint = "जब कोई अन्य सदस्य आपकी प्रोफ़ाइल देखता है, तो उसे यह दिखता है।"
     override val trustAndVouches = "विश्वास और वाउच"
     override val verification = "सत्यापन"
     override val logOut = "लॉग आउट करें"
@@ -89,6 +95,8 @@ object SettingsStringsTa : SettingsStrings {
     override val hideNameTitle = "என் பெயரை மறை"
     override val hideNameSubtitle = "பொருத்தமான பிறகும் என் பெயரை மறைத்து வைக்கவும்"
     override val shareMyProfile = "என் சுயவிவரத்தைப் பகிரவும்"
+    override val previewProfile = "சுயவிவரத்தை முன்னோட்டமிடு"
+    override val previewProfileHint = "மற்றொரு உறுப்பினர் உங்கள் சுயவிவரத்தைப் பார்க்கும்போது இதைத்தான் காண்பார்."
     override val trustAndVouches = "நம்பிக்கை & வவுச்கள்"
     override val verification = "சரிபார்ப்பு"
     override val logOut = "வெளியேறு"

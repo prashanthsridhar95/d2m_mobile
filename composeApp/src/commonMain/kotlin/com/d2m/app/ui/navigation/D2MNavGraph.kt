@@ -152,6 +152,17 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
                 onOpenShareLinks = { navController.navigate(Routes.SHARE_LINKS) },
                 onOpenTrust = { navController.navigate(Routes.TRUST) },
                 onOpenVerification = { navController.navigate(Routes.IDENTITY_VERIFICATION) },
+                onOpenProfile = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
+                // "I want it to be exactly the same" as viewing any other
+                // profile (reported directly, correcting an earlier
+                // from-scratch PreviewProfileScreen that only approximated
+                // it) -- this is literally ProfileDetailScreen itself, not
+                // a lookalike, same route every other "open this
+                // candidate" call site uses, just pointed at your own id.
+                // ProfileDetailScreen hides the handful of actions that
+                // don't make sense pointed at yourself once it detects
+                // viewerPrimaryId == candidateId -- see its own `isSelf`.
+                onOpenProfilePreview = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
             )
         }
 

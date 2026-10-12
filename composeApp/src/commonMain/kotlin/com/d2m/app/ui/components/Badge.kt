@@ -15,6 +15,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -82,14 +83,65 @@ fun D2MBadge(
 }
 
 /**
- * The comps' FEATURED tag, named so call sites read as intent ("this
- * profile is featured") rather than as styling ("D2MBadge(..., tone =
- * D2MBadgeTone.GOLD_OUTLINE)"). Sits inline next to a name for "Founding
- * member".
+ * "Founding member can be an icon. on hover we shall say what the badge
+ * means" (reported directly) -- was the comps' FEATURED text tag
+ * (D2MBadge, GOLD_OUTLINE tone); now a small rocket-in-a-circle seal ("we
+ * can use something like this", reported directly with a rocket reference
+ * image -- early/launch reads better for "founding" than a generic star),
+ * same solid-circle + icon + tap/hover-tooltip treatment as VerifiedBadge
+ * below (same TooltipBox/PlainTooltip, same Canvas-drawn approach so the
+ * shape matches d2m_web's identical SVG path exactly -- see that
+ * component's own doc comment) so the two read as a matched pair of seals
+ * rather than two different icon styles. Named so call sites still read
+ * as intent ("this profile is featured"), not styling.
  */
 @Composable
-fun FeaturedBadge(text: String = LocalStrings.current.sharedComponents.featured, modifier: Modifier = Modifier) {
-    D2MBadge(text, D2MBadgeTone.GOLD_OUTLINE, modifier)
+@OptIn(ExperimentalMaterial3Api::class)
+fun FeaturedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
+    val circleColor = d2m.gold
+    val rocketColor = Color(0xFFFFFDF8)
+    val label = LocalStrings.current.sharedComponents.foundingMember
+    val tooltipText = LocalStrings.current.sharedComponents.foundingMemberTooltip
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltipText) } },
+        state = rememberTooltipState(),
+        modifier = modifier,
+    ) {
+        Canvas(modifier = Modifier.size(size)) {
+            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+            val w = this.size.width
+            val h = this.size.height
+            val body = Path().apply {
+                moveTo(w * 0.5f, h * 0.1667f)
+                cubicTo(w * 0.5625f, h * 0.1667f, w * 0.6458f, h * 0.3333f, w * 0.6458f, h * 0.5208f)
+                lineTo(w * 0.6042f, h * 0.7083f)
+                lineTo(w * 0.3958f, h * 0.7083f)
+                lineTo(w * 0.3542f, h * 0.5208f)
+                cubicTo(w * 0.3542f, h * 0.3333f, w * 0.4375f, h * 0.1667f, w * 0.5f, h * 0.1667f)
+                close()
+            }
+            val leftFin = Path().apply {
+                moveTo(w * 0.375f, h * 0.5833f)
+                lineTo(w * 0.2292f, h * 0.75f)
+                lineTo(w * 0.375f, h * 0.75f)
+                close()
+            }
+            val rightFin = Path().apply {
+                moveTo(w * 0.625f, h * 0.5833f)
+                lineTo(w * 0.7708f, h * 0.75f)
+                lineTo(w * 0.625f, h * 0.75f)
+                close()
+            }
+            drawPath(body, color = rocketColor)
+            drawPath(leftFin, color = rocketColor)
+            drawPath(rightFin, color = rocketColor)
+            // Window -- drawn in the circle's own fill so it reads as a
+            // hole without needing a path-subtraction/mask, same simple
+            // layering the checkmark-over-circle in VerifiedBadge uses.
+            drawCircle(color = circleColor, radius = w * 0.0667f, center = Offset(w * 0.5f, h * 0.4167f))
+        }
+    }
 }
 
 /**

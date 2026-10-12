@@ -168,6 +168,17 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     }
 
     val viewerPrimaryId = identity.primaryId ?: identity.childPrimaryId
+    // "Preview profile" (reported directly: "I want it to be exactly the
+    // same" as viewing any other profile) reuses this exact screen rather
+    // than a lookalike -- Settings' "Preview profile" row navigates here
+    // with candidateId == the viewer's own id, same route every other
+    // "open this candidate" call site uses. A handful of actions below
+    // (Accept/Snooze/Pass, Suggest to child, Message, a real compatibility
+    // score) don't mean anything pointed at your own profile and are
+    // hidden when this is true; everything else (photo, name/badges, bio
+    // tabs, chart, vouches you've RECEIVED) renders exactly as it would
+    // for anyone else.
+    val isSelf = viewerPrimaryId != null && candidateId == viewerPrimaryId
 
     LaunchedEffect(candidateId, viewerPrimaryId) {
         if (viewerPrimaryId == null) return@LaunchedEffect
@@ -249,7 +260,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         PersonName(c.candidateName + (c.age?.let { ", $it" } ?: ""))
                         if (c.isFoundingMember) {
-                            FeaturedBadge(LocalStrings.current.sharedComponents.foundingMember, Modifier.padding(start = 8.dp))
+                            FeaturedBadge(modifier = Modifier.padding(start = 8.dp))
                         }
                         if (c.isVerified) {
                             VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
@@ -274,12 +285,19 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         modifier = Modifier.padding(top = 16.dp),
                     )
 
+                    // A self-pair still gets a real, non-null `scores`
+                    // object back from the backend (no MatchScore row ever
+                    // exists for it, so every field defaults to 0 rather
+                    // than being omitted) -- `!isSelf` keeps this on the
+                    // same "not yet compared" fallback a genuinely
+                    // unscored pair already shows, instead of a real-
+                    // looking "Low compatibility" badge against yourself.
                     CompatibilityCard(
-                        level = c.compositeScore?.let { overallRating(it) },
-                        breakdown = listOf(
+                        level = if (!isSelf) c.compositeScore?.let { overallRating(it) } else null,
+                        breakdown = if (!isSelf) listOf(
                             strings.astrology to astrologicalCompatibility(c.scores),
                             strings.preferences to preferenceCompatibility(c.scores),
-                        ),
+                        ) else emptyList(),
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                     )
 
@@ -323,8 +341,16 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         candidateId = candidateId,
                         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                         showAboutMe = identity.role == D2MRole.CHILD,
+                        viewerPrimaryId = viewerPrimaryId,
                     )
 
+                    // Suggest to child/Message their parent/Share, or
+                    // Accept/Snooze/Pass -- none of these mean anything
+                    // pointed at your own profile, hidden entirely for a
+                    // self-preview (same "Share this profile" is still
+                    // reachable the normal way, via Settings' own "Share
+                    // my profile" row).
+                    if (!isSelf) {
                     messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
                     shareError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
 
@@ -381,6 +407,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
