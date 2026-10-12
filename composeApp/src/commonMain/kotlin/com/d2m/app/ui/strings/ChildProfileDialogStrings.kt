@@ -22,6 +22,7 @@ interface ChildProfileDialogStrings {
     val motherTongue: String
     val otherLanguagesKnown: String
     val bodyType: String
+    val childrenPreference: String
     val religion: String
     val casteCommunity: String
     val sect: String
@@ -34,6 +35,7 @@ interface ChildProfileDialogStrings {
     val employer: String
     val monthlyIncome: String
     val currency: String
+    val incomeBand: String
     val fathersName: String
     val fathersOccupation: String
     val mothersName: String
@@ -52,6 +54,8 @@ interface ChildProfileDialogStrings {
     val saving: String
     val saveBioData: String
     val errSaveBioData: String
+    val saveChanges: String
+    val errSaveChanges: String
 
     // About Me tab
     fun aboutMeFieldsProgress(filled: Int, total: Int): String
@@ -79,6 +83,7 @@ interface ChildProfileDialogStrings {
     val dreamDestination: String
     val searchAnyCity: String
     val loveLanguage: String
+    val loveLanguageOther: String
     val saveAboutMe: String
     val errSaveAboutMe: String
 
@@ -91,7 +96,7 @@ interface ChildProfileDialogStrings {
 
 object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val myProfile = "My profile"
-    override val tabAbout = "About Me"
+    override val tabAbout = "About"
     override val tabProfile = "Profile"
     override val tabBio = "Bio data"
     override val tabPreferences = "Preferences"
@@ -108,6 +113,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val motherTongue = "Mother tongue"
     override val otherLanguagesKnown = "Other languages known"
     override val bodyType = "Body type"
+    override val childrenPreference = "Children preference"
     override val religion = "Religion"
     override val casteCommunity = "Caste / community"
     override val sect = "Sect"
@@ -120,6 +126,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val employer = "Employer"
     override val monthlyIncome = "Monthly income"
     override val currency = "Currency"
+    override val incomeBand = "Salary range"
     override val fathersName = "Father's name"
     override val fathersOccupation = "Father's occupation"
     override val mothersName = "Mother's name"
@@ -138,6 +145,8 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val saving = "Saving…"
     override val saveBioData = "Save bio data"
     override val errSaveBioData = "Couldn't save bio data."
+    override val saveChanges = "Save changes"
+    override val errSaveChanges = "Couldn't save changes."
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$filled of $total filled in"
     override val aboutPromptsTitle = "About me prompts"
@@ -164,6 +173,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val dreamDestination = "Dream destination"
     override val searchAnyCity = "Search any city or country…"
     override val loveLanguage = "Love language"
+    override val loveLanguageOther = "In your own words"
     override val saveAboutMe = "Save About Me"
     override val errSaveAboutMe = "Couldn't save About Me."
 
@@ -175,7 +185,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
 
 object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
     override val myProfile = "मेरी प्रोफ़ाइल"
-    override val tabAbout = "मेरे बारे में"
+    override val tabAbout = "परिचय"
     override val tabProfile = "प्रोफ़ाइल"
     override val tabBio = "बायो डेटा"
     override val tabPreferences = "प्राथमिकताएं"
@@ -192,6 +202,7 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
     override val motherTongue = "मातृभाषा"
     override val otherLanguagesKnown = "अन्य ज्ञात भाषाएं"
     override val bodyType = "शारीरिक बनावट"
+    override val childrenPreference = "बच्चों से संबंधित प्राथमिकता"
     override val religion = "धर्म"
     override val casteCommunity = "जाति / समुदाय"
     override val sect = "संप्रदाय"
@@ -204,6 +215,7 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
     override val employer = "नियोक्ता"
     override val monthlyIncome = "मासिक आय"
     override val currency = "मुद्रा"
+    override val incomeBand = "वेतन सीमा"
     override val fathersName = "पिता का नाम"
     override val fathersOccupation = "पिता का व्यवसाय"
     override val mothersName = "माता का नाम"
@@ -222,6 +234,8 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
     override val saving = "सेव हो रहा है…"
     override val saveBioData = "बायो डेटा सेव करें"
     override val errSaveBioData = "बायो डेटा सेव नहीं हो सका।"
+    override val saveChanges = "बदलाव सेव करें"
+    override val errSaveChanges = "बदलाव सेव नहीं हो सके।"
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$total में से $filled भरे गए"
     override val aboutPromptsTitle = "मेरे बारे में प्रश्न"
@@ -248,6 +262,7 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
     override val dreamDestination = "सपनों की जगह"
     override val searchAnyCity = "कोई भी शहर या देश खोजें…"
     override val loveLanguage = "प्रेम की भाषा"
+    override val loveLanguageOther = "अपने शब्दों में"
     override val saveAboutMe = "About Me सेव करें"
     override val errSaveAboutMe = "About Me सेव नहीं हो सका।"
 
@@ -259,7 +274,7 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
 
 object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
     override val myProfile = "எனது சுயவிவரம்"
-    override val tabAbout = "என்னைப் பற்றி"
+    override val tabAbout = "விவரம்"
     override val tabProfile = "சுயவிவரம்"
     override val tabBio = "தனிப்பட்ட தகவல்"
     override val tabPreferences = "விருப்பத்தேர்வுகள்"
@@ -276,6 +291,7 @@ object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
     override val motherTongue = "தாய்மொழி"
     override val otherLanguagesKnown = "தெரிந்த மற்ற மொழிகள்"
     override val bodyType = "உடல்வாகு"
+    override val childrenPreference = "குழந்தைகள் மீதான விருப்பம்"
     override val religion = "மதம்"
     override val casteCommunity = "சாதி / சமூகம்"
     override val sect = "பிரிவு"
@@ -288,6 +304,7 @@ object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
     override val employer = "பணியாளர்"
     override val monthlyIncome = "மாத வருமானம்"
     override val currency = "நாணயம்"
+    override val incomeBand = "சம்பள வரம்பு"
     override val fathersName = "தந்தையின் பெயர்"
     override val fathersOccupation = "தந்தையின் தொழில்"
     override val mothersName = "தாயின் பெயர்"
@@ -306,6 +323,8 @@ object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
     override val saving = "சேமிக்கப்படுகிறது…"
     override val saveBioData = "தனிப்பட்ட தகவலைச் சேமி"
     override val errSaveBioData = "தனிப்பட்ட தகவலைச் சேமிக்க முடியவில்லை."
+    override val saveChanges = "மாற்றங்களைச் சேமி"
+    override val errSaveChanges = "மாற்றங்களைச் சேமிக்க முடியவில்லை."
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$total இல் $filled நிரப்பப்பட்டது"
     override val aboutPromptsTitle = "என்னைப் பற்றிய கேள்விகள்"
@@ -332,6 +351,7 @@ object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
     override val dreamDestination = "கனவு இடம்"
     override val searchAnyCity = "எந்த நகரம் அல்லது நாட்டையும் தேடவும்…"
     override val loveLanguage = "அன்பு மொழி"
+    override val loveLanguageOther = "உங்கள் சொற்களில்"
     override val saveAboutMe = "About Me-ஐ சேமி"
     override val errSaveAboutMe = "About Me-ஐ சேமிக்க முடியவில்லை."
 

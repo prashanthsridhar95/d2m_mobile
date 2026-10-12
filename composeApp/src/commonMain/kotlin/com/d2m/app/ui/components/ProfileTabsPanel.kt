@@ -1,5 +1,6 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,13 +12,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,9 +33,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.data.model.AboutMeDataOut
 import com.d2m.app.data.model.ChartOut
 import com.d2m.app.data.model.ExtendedBioDataOut
@@ -100,7 +114,7 @@ import org.koin.compose.koinInject
 // with no ambiguity, while ProfileDetailScreen serves both roles and
 // needs the real check.
 @Composable
-fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false) {
+fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null) {
     val strings = LocalStrings.current.sharedComponents
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
@@ -114,6 +128,17 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
     var chartNotComputed by remember(candidateId) { mutableStateOf(false) }
     var chartLoaded by remember(candidateId) { mutableStateOf(false) }
 
+    // The viewer's own About Me/Bio data -- About Me's Lifestyle/Life &
+    // future plans/Quick facts bubbles have no saved preference to check
+    // against (no one states a "preferred sleep schedule" for a partner),
+    // so the only comparison that exists is the viewer's own value for
+    // that same field against the candidate's -- see traitMatch below.
+    // Only ever read when showAboutMe (the About Me tab exists), but
+    // fetched the same unconditional way as candidateId's own bio/aboutMe
+    // above when a viewerPrimaryId is actually known.
+    var ownBio by remember(viewerPrimaryId) { mutableStateOf<ExtendedBioDataOut?>(null) }
+    var ownAboutMe by remember(viewerPrimaryId) { mutableStateOf<AboutMeDataOut?>(null) }
+
     LaunchedEffect(candidateId) {
         bio = runCatching { identityRepo.getExtendedBio(candidateId) }.getOrNull()
         bioLoaded = true
@@ -123,6 +148,12 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
         if (!showAboutMe) return@LaunchedEffect
         aboutMe = runCatching { identityRepo.getAboutMe(candidateId) }.getOrNull()
         aboutMeLoaded = true
+    }
+
+    LaunchedEffect(viewerPrimaryId, showAboutMe) {
+        if (!showAboutMe || viewerPrimaryId == null) return@LaunchedEffect
+        ownBio = runCatching { identityRepo.getExtendedBio(viewerPrimaryId) }.getOrNull()
+        ownAboutMe = runCatching { identityRepo.getAboutMe(viewerPrimaryId) }.getOrNull()
     }
 
     LaunchedEffect(candidateId) {
@@ -138,6 +169,14 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
         chartLoaded = true
     }
 
+    // NOTE: an earlier pass merged About Me + Bio data into one "About"
+    // tab here -- reverted ("the earlier flow of having biodata, about
+    // me, chart was just fine. The change was asked of only in the
+    // settings", reported directly). This panel (Discover/
+    // ProfileDetailScreen/PreviewProfileScreen -- viewing a candidate,
+    // including yourself in preview) keeps the original 3 tabs; the
+    // Settings self-editing dialog is the only place that tab layout
+    // actually changed -- see ChildProfileDialogScreen.kt.
     val tabLabels = if (showAboutMe) listOf(strings.tabAboutMe, strings.tabBioData, strings.tabChart) else listOf(strings.tabBioData, strings.tabChart)
 
     D2MCard(modifier = modifier) {
@@ -146,7 +185,7 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 if (showAboutMe) {
                     when (tab) {
-                        0 -> AboutMeTab(aboutMe, aboutMeLoaded)
+                        0 -> AboutMeTab(aboutMe, aboutMeLoaded, bio, ownAboutMe, ownBio?.childrenPreference)
                         1 -> BioDataTab(bio, bioLoaded)
                         else -> ChartTab(chart, chartNotComputed, chartLoaded)
                     }
@@ -191,14 +230,22 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
             }
             BioSection(
                 strings.sectionEducationCareer,
-                listOf(bio.highestEducation, bio.institution, bio.occupationTitle, bio.employer, bio.employmentSector, bio.monthlyIncomeAmount),
+                listOf(bio.highestEducation, bio.institution, bio.occupationTitle, bio.employer, bio.monthlyIncomeAmount, bio.incomeBand),
             ) {
                 BioRow(strings.rowHighestEducation, bio.highestEducation?.let { Taxonomy.toLabel(it, locale) })
                 BioRow(strings.rowInstitution, bio.institution)
                 BioRow(strings.rowOccupation, bio.occupationTitle)
                 BioRow(strings.rowEmployer, bio.employer)
-                BioRow(strings.rowEmployedIn, bio.employmentSector?.let { Taxonomy.toLabel(it, locale) })
+                // "What is 'Employed in'? remove that" (reported directly)
+                // -- employmentSector dropped from this display; still an
+                // editable field in the Bio data form (and still stored on
+                // the backend), just no longer shown here.
                 BioRow(strings.rowMonthlyIncome, bio.monthlyIncomeAmount?.let { "$it ${bio.monthlyIncomeCurrency.orEmpty()}".trim() })
+                // "Instead of salary field - provide salary range"
+                // (reported directly) -- income_band is the replacement
+                // display field; monthlyIncomeAmount above stays (no
+                // annual_income row ever existed here to remove).
+                BioRow(strings.rowIncomeBand, bio.incomeBand?.let { Taxonomy.toLabel(it, locale) })
             }
             BioSection(
                 strings.sectionFamilyBackground,
@@ -219,9 +266,27 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
     }
 }
 
+// Own value vs candidate value -- see D2MProfileTabsPanel's ownBio/
+// ownAboutMe doc comment for why this is the only comparison these
+// fields support (no saved preference exists for any of them). `null`
+// (own value unset, candidate value unset, or either input missing)
+// means "nothing to compare," same undefined-means-no-indicator contract
+// MatchIndicator already relies on below.
+private fun traitMatch(ownValue: String?, candidateValue: String?): Boolean? {
+    if (ownValue.isNullOrEmpty() || candidateValue.isNullOrEmpty()) return null
+    return ownValue == candidateValue
+}
+
 @Composable
-private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
+private fun AboutMeTab(
+    aboutMe: AboutMeDataOut?,
+    loaded: Boolean,
+    bio: ExtendedBioDataOut? = null,
+    ownAboutMe: AboutMeDataOut? = null,
+    ownChildrenPreference: String? = null,
+) {
     val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
     when {
         !loaded -> Text(strings.loading, color = mutedText(0.45f))
         aboutMe == null -> Text(strings.noAboutMeYet, color = mutedText(0.45f))
@@ -232,10 +297,10 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
                 CasualCard {
                     Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("🏃", aboutMe.fitnessRoutine)
-                        IconBubble("🌙", aboutMe.sleepSchedule)
-                        IconBubble("🐾", aboutMe.pets)
-                        IconBubble("🔋", aboutMe.socialEnergy)
+                        IconBubble("🏃", aboutMe.fitnessRoutine, traitMatch(ownAboutMe?.fitnessRoutine, aboutMe.fitnessRoutine))
+                        IconBubble("🌙", aboutMe.sleepSchedule, traitMatch(ownAboutMe?.sleepSchedule, aboutMe.sleepSchedule))
+                        IconBubble("🐾", aboutMe.pets, traitMatch(ownAboutMe?.pets, aboutMe.pets))
+                        IconBubble("🔋", aboutMe.socialEnergy, traitMatch(ownAboutMe?.socialEnergy, aboutMe.socialEnergy))
                     }
                 }
             }
@@ -253,13 +318,20 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
                 PromptCard(strings.whatMattersMostToMe, aboutMe.whatMattersMost)
             }
 
-            if (aboutMe.careerAfterMarriage != null || aboutMe.livingArrangement != null || aboutMe.openToRelocation != null) {
+            // "In future plans, children related question is not seen"
+            // (reported directly) -- childrenPreference lives on
+            // ExtendedBioData (it's the actual edited/scored field, see
+            // the Bio data tab), but reads thematically as a life/future-
+            // plans fact, so it's surfaced here too from the same bio
+            // param this tab now takes, alongside career/living/relocation.
+            if (aboutMe.careerAfterMarriage != null || aboutMe.livingArrangement != null || aboutMe.openToRelocation != null || bio?.childrenPreference != null) {
                 CasualCard {
                     Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("💼", aboutMe.careerAfterMarriage)
-                        IconBubble("🏠", aboutMe.livingArrangement)
-                        IconBubble("🧳", aboutMe.openToRelocation)
+                        IconBubble("💼", aboutMe.careerAfterMarriage, traitMatch(ownAboutMe?.careerAfterMarriage, aboutMe.careerAfterMarriage))
+                        IconBubble("🏠", aboutMe.livingArrangement, traitMatch(ownAboutMe?.livingArrangement, aboutMe.livingArrangement))
+                        IconBubble("🧳", aboutMe.openToRelocation, traitMatch(ownAboutMe?.openToRelocation, aboutMe.openToRelocation))
+                        IconBubble("👶", bio?.childrenPreference?.let { Taxonomy.toLabel(it, locale) }, traitMatch(ownChildrenPreference, bio?.childrenPreference))
                     }
                 }
             }
@@ -268,9 +340,9 @@ private fun AboutMeTab(aboutMe: AboutMeDataOut?, loaded: Boolean) {
                 CasualCard {
                     Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("🍽️", aboutMe.favoriteCuisine)
-                        IconBubble("✈️", aboutMe.dreamDestination)
-                        IconBubble("💌", aboutMe.loveLanguage)
+                        IconBubble("🍽️", aboutMe.favoriteCuisine, traitMatch(ownAboutMe?.favoriteCuisine, aboutMe.favoriteCuisine))
+                        IconBubble("✈️", aboutMe.dreamDestination, traitMatch(ownAboutMe?.dreamDestination, aboutMe.dreamDestination))
+                        IconBubble("💌", aboutMe.loveLanguage, traitMatch(ownAboutMe?.loveLanguage, aboutMe.loveLanguage))
                     }
                 }
             }
@@ -315,7 +387,7 @@ private fun CasualCard(content: @Composable ColumnScope.() -> Unit) {
 // category marker, not as the "childish" full-size emoji sticker the
 // very first cut of this tab used).
 @Composable
-private fun IconBubble(icon: String, value: String?) {
+private fun IconBubble(icon: String, value: String?, match: Boolean? = null) {
     if (value == null) return
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -326,6 +398,47 @@ private fun IconBubble(icon: String, value: String?) {
     ) {
         Text(icon, fontSize = 13.sp)
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
+        MatchIndicator(match, value)
+    }
+}
+
+// Small green-check/red-X circle, tap/hover-tooltip explaining the
+// verdict -- same TooltipBox/PlainTooltip, soft tinted bg + colored icon
+// treatment as FeaturedBadge/VerifiedBadge above, mirrors d2m_web's
+// MatchIndicator.jsx (variant="shared": there's no saved preference for
+// any About Me field, so the copy is "you both picked the same answer,"
+// not "matches your saved preference").
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun MatchIndicator(match: Boolean?, label: String, size: Dp = 13.dp) {
+    if (match == null) return
+    val palette = LocalD2MStatusPalette.current
+    val circleColor = if (match) palette.success.bg else palette.danger.bg
+    val strokeColor = if (match) palette.success.fg else palette.danger.fg
+    val strings = LocalStrings.current.sharedComponents
+    val tooltipText = if (match) strings.matchTooltipYesShared(label) else strings.matchTooltipNoShared(label)
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(tooltipText) } },
+        state = rememberTooltipState(),
+    ) {
+        Canvas(modifier = Modifier.size(size)) {
+            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+            val w = this.size.width
+            val h = this.size.height
+            val strokeWidth = this.size.minDimension * 0.11f
+            if (match) {
+                val path = Path().apply {
+                    moveTo(w * 0.292f, h * 0.5125f)
+                    lineTo(w * 0.425f, h * 0.6458f)
+                    lineTo(w * 0.708f, h * 0.3583f)
+                }
+                drawPath(path, color = strokeColor, style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            } else {
+                drawLine(strokeColor, Offset(w * 0.3f, h * 0.3f), Offset(w * 0.7f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(strokeColor, Offset(w * 0.7f, h * 0.3f), Offset(w * 0.3f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            }
+        }
     }
 }
 

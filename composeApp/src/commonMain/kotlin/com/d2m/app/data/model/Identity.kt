@@ -224,6 +224,11 @@ data class ExtendedBioDataIn(
     val motherTongue: String? = null,
     val otherLanguages: List<String>? = null,
     val bodyType: String? = null,
+    // "Children preference in biodata" (reported directly) -- its own
+    // labeled field here instead of buried in the Preferences tab's
+    // generic lifestyle-tags picker (see Taxonomy.kt's LIFESTYLE_TAGS,
+    // which still lists these 3 values too, and CHILDREN_PREFERENCES).
+    val childrenPreference: String? = null,
     // Religious & astrological
     val religion: String? = null,
     val casteCommunity: String? = null,
@@ -238,6 +243,12 @@ data class ExtendedBioDataIn(
     val employmentSector: String? = null,
     val monthlyIncomeAmount: Int? = null,
     val monthlyIncomeCurrency: String? = null,
+    // "Instead of salary field - provide salary range" (reported
+    // directly) -- income_band replaces monthlyIncomeAmount/Currency in
+    // the edit/display UI; those two stay in the schema (no destructive
+    // drop, the backend still has them) but are no longer surfaced as an
+    // editable input.
+    val incomeBand: String? = null,
     // Family background
     val fatherName: String? = null,
     val fatherOccupation: String? = null,
@@ -263,6 +274,7 @@ data class ExtendedBioDataOut(
     val motherTongue: String? = null,
     val otherLanguages: List<String>? = null,
     val bodyType: String? = null,
+    val childrenPreference: String? = null,
     val religion: String? = null,
     val casteCommunity: String? = null,
     val sect: String? = null,
@@ -275,6 +287,7 @@ data class ExtendedBioDataOut(
     val employmentSector: String? = null,
     val monthlyIncomeAmount: Int? = null,
     val monthlyIncomeCurrency: String? = null,
+    val incomeBand: String? = null,
     val fatherName: String? = null,
     val fatherOccupation: String? = null,
     val motherName: String? = null,

@@ -64,11 +64,13 @@ import org.koin.compose.koinInject
 private data class BioForm(
     val heightCm: String = "", val complexion: String = "", val motherTongue: String = "",
     val otherLanguages: List<String> = emptyList(), val bodyType: String = "",
+    val childrenPreference: String = "",
     val religion: String = "", val casteCommunity: String = "", val sect: String = "", val gothram: String = "",
     val horoscopeMatchPreference: String = "",
     val highestEducation: String = "", val institution: String = "", val occupationTitle: String = "",
     val employer: String = "", val employmentSector: String = "",
     val monthlyIncomeAmount: String = "", val monthlyIncomeCurrency: String = Taxonomy.CURRENCIES.first(),
+    val incomeBand: String = "",
     val fatherName: String = "", val fatherOccupation: String = "", val motherName: String = "", val motherOccupation: String = "",
     val elderBrothers: String = "", val youngerBrothers: String = "", val elderSisters: String = "", val youngerSisters: String = "",
     val nativity: String = "", val familyType: String = "", val familyValues: String = "", val financialStatus: String = "",
@@ -113,18 +115,29 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
     val isChildViewer = identity.role == D2MRole.CHILD
     val strings = LocalStrings.current.childProfileDialog
     val locale = LocalAppLocale.current
-    val tabKeys = if (isChildViewer) listOf("about", "profile", "bio", "preferences") else listOf("profile", "bio", "preferences")
+    // "About me has both my about me & bio data... remove that block from
+    // about me" (reported directly, correcting an earlier pass that
+    // merged them instead) -- About Me is its own tab again, child-only /
+    // parent-invisible. "profile" stays a separate pre-existing stub (see
+    // basicDataNote) -- not something this correction touches.
+    val tabKeys = if (isChildViewer) listOf("about", "bio", "profile", "preferences") else listOf("bio", "profile", "preferences")
     val tabLabels = tabKeys.map { key ->
         when (key) {
             "about" -> strings.tabAbout
-            "profile" -> strings.tabProfile
             "bio" -> strings.tabBio
+            "profile" -> strings.tabProfile
             else -> strings.tabPreferences
         }
     }
     var tab by remember(isChildViewer) { mutableStateOf(0) }
     var bio by remember { mutableStateOf(BioForm()) }
     var aboutMe by remember { mutableStateOf(AboutMeForm()) }
+    // "Love language - provide an option for user input other than
+    // choosing from existing" (reported directly) -- tracked separately
+    // from aboutMe.loveLanguage itself so switching into custom mode with
+    // a blank value doesn't look like "nothing selected" (see the
+    // D2MOptionGroup call below). Mirrors d2m_web's loveLanguageCustom.
+    var loveLanguageCustom by remember { mutableStateOf(false) }
     // Picking a prompt used to mean "select from all 8 up top, then find
     // the matching card below" -- two lists showing the same 8 prompts in
     // different states, no visual link between a chip and its card ("not
@@ -160,11 +173,13 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
             bio = BioForm(
                 heightCm = b.heightCm?.toString() ?: "", complexion = b.complexion ?: "", motherTongue = b.motherTongue ?: "",
                 otherLanguages = b.otherLanguages ?: emptyList(), bodyType = b.bodyType ?: "",
+                childrenPreference = b.childrenPreference ?: "",
                 religion = b.religion ?: "", casteCommunity = b.casteCommunity ?: "", sect = b.sect ?: "", gothram = b.gothram ?: "",
                 horoscopeMatchPreference = b.horoscopeMatchPreference ?: "",
                 highestEducation = b.highestEducation ?: "", institution = b.institution ?: "", occupationTitle = b.occupationTitle ?: "",
                 employer = b.employer ?: "", employmentSector = b.employmentSector ?: "",
                 monthlyIncomeAmount = b.monthlyIncomeAmount?.toString() ?: "", monthlyIncomeCurrency = b.monthlyIncomeCurrency ?: Taxonomy.CURRENCIES.first(),
+                incomeBand = b.incomeBand ?: "",
                 fatherName = b.fatherName ?: "", fatherOccupation = b.fatherOccupation ?: "", motherName = b.motherName ?: "", motherOccupation = b.motherOccupation ?: "",
                 elderBrothers = b.elderBrothersCount?.toString() ?: "", youngerBrothers = b.youngerBrothersCount?.toString() ?: "",
                 elderSisters = b.elderSistersCount?.toString() ?: "", youngerSisters = b.youngerSistersCount?.toString() ?: "",
@@ -174,6 +189,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
         }
         runCatching { identityRepo.getAboutMe(primaryId) }.onSuccess { a ->
             promptPickerOpen = a.aboutPrompts.isEmpty()
+            loveLanguageCustom = !a.loveLanguage.isNullOrBlank() && a.loveLanguage !in Taxonomy.LOVE_LANGUAGES
             aboutMe = AboutMeForm(
                 fitnessRoutine = a.fitnessRoutine ?: "", sleepSchedule = a.sleepSchedule ?: "",
                 pets = a.pets ?: "", socialEnergy = a.socialEnergy ?: "",
@@ -212,262 +228,203 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                 when (tabKeys[tab]) {
                     "profile" -> Text(strings.basicDataNote, color = mutedText(0.55f))
 
-                    "bio" -> {
-                        BioSectionHeader(strings.sectionBasicPersonal)
-                        D2MTextField(strings.heightCm, bio.heightCm, { update { copy(heightCm = it) } })
-                        D2MSelectField(strings.complexion, bio.complexion, Taxonomy.COMPLEXIONS, { update { copy(complexion = it) } })
-                        D2MSelectField(strings.motherTongue, bio.motherTongue, Taxonomy.LANGUAGES, { update { copy(motherTongue = it) } })
-                        D2MChipGroup(strings.otherLanguagesKnown, Taxonomy.LANGUAGES, bio.otherLanguages, { update { copy(otherLanguages = it) } })
-                        D2MSelectField(strings.bodyType, bio.bodyType, Taxonomy.BODY_TYPES, { update { copy(bodyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-
-                        BioSectionHeader(strings.sectionReligiousAstrological)
-                        D2MSelectField(strings.religion, bio.religion, Taxonomy.RELIGIONS, { update { copy(religion = it) } })
-                        D2MSelectField(strings.casteCommunity, bio.casteCommunity, Taxonomy.COMMUNITIES, { update { copy(casteCommunity = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-                        D2MSelectField(strings.sect, bio.sect, Taxonomy.SECTS, { update { copy(sect = it) } })
-                        D2MSelectField(strings.gothram, bio.gothram, Taxonomy.GOTHRAMS, { update { copy(gothram = it) } })
-                        D2MSelectField(strings.horoscopeMatchPreference, bio.horoscopeMatchPreference, Taxonomy.HOROSCOPE_MATCH_PREFERENCES, { update { copy(horoscopeMatchPreference = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-
-                        BioSectionHeader(strings.sectionEducationCareer)
-                        D2MSelectField(strings.highestEducation, bio.highestEducation, Taxonomy.EDUCATION_LEVELS, { update { copy(highestEducation = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-                        D2MTextField(strings.institution, bio.institution, { update { copy(institution = it) } })
-                        D2MSelectField(strings.employedIn, bio.employmentSector, Taxonomy.EMPLOYMENT_SECTORS, { update { copy(employmentSector = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-                        D2MTextField(strings.occupationDesignation, bio.occupationTitle, { update { copy(occupationTitle = it) } })
-                        D2MTextField(strings.employer, bio.employer, { update { copy(employer = it) } })
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            D2MTextField(strings.monthlyIncome, bio.monthlyIncomeAmount, { update { copy(monthlyIncomeAmount = it) } }, modifier = Modifier.weight(1f))
-                            D2MSelectField(strings.currency, bio.monthlyIncomeCurrency, Taxonomy.CURRENCIES, { update { copy(monthlyIncomeCurrency = it) } }, modifier = Modifier.weight(1f))
-                        }
-
-                        BioSectionHeader(strings.sectionFamilyBackground)
-                        D2MTextField(strings.fathersName, bio.fatherName, { update { copy(fatherName = it) } })
-                        D2MTextField(strings.fathersOccupation, bio.fatherOccupation, { update { copy(fatherOccupation = it) } })
-                        D2MTextField(strings.mothersName, bio.motherName, { update { copy(motherName = it) } })
-                        D2MTextField(strings.mothersOccupation, bio.motherOccupation, { update { copy(motherOccupation = it) } })
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            D2MTextField(strings.elderBrothers, bio.elderBrothers, { update { copy(elderBrothers = it) } }, modifier = Modifier.weight(1f))
-                            D2MTextField(strings.youngerBrothers, bio.youngerBrothers, { update { copy(youngerBrothers = it) } }, modifier = Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            D2MTextField(strings.elderSisters, bio.elderSisters, { update { copy(elderSisters = it) } }, modifier = Modifier.weight(1f))
-                            D2MTextField(strings.youngerSisters, bio.youngerSisters, { update { copy(youngerSisters = it) } }, modifier = Modifier.weight(1f))
-                        }
-                        D2MSelectField(strings.familyType, bio.familyType, Taxonomy.FAMILY_TYPES, { update { copy(familyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-                        D2MSelectField(strings.familyValues, bio.familyValues, Taxonomy.FAMILY_VALUES, { update { copy(familyValues = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-                        D2MTextField(strings.nativePlace, bio.nativity, { update { copy(nativity = it) } })
-                        D2MTextField(strings.financialStatus, bio.financialStatus, { update { copy(financialStatus = it) } })
-
-                        BioSectionHeader(strings.sectionLocationContact)
-                        D2MSelectField(strings.citizenshipStatus, bio.citizenshipStatus, Taxonomy.CITIZENSHIP_STATUSES, { update { copy(citizenshipStatus = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
-
-                        error?.let { D2MErrorBanner(it) }
-                        if (saved) Text(strings.saved, color = MaterialTheme.colorScheme.primary)
-                        D2MButton(
-                            text = if (saving) strings.saving else strings.saveBioData,
-                            enabled = !saving,
-                            onClick = {
-                                val pid = primaryId ?: return@D2MButton
-                                scope.launch {
-                                    saving = true
-                                    error = null
-                                    try {
-                                        identityRepo.updateExtendedBio(
-                                            pid,
-                                            ExtendedBioDataIn(
-                                                heightCm = bio.heightCm.toIntOrNull(),
-                                                complexion = bio.complexion.ifBlank { null },
-                                                motherTongue = bio.motherTongue.ifBlank { null },
-                                                otherLanguages = bio.otherLanguages,
-                                                bodyType = bio.bodyType.ifBlank { null },
-                                                religion = bio.religion.ifBlank { null },
-                                                casteCommunity = bio.casteCommunity.ifBlank { null },
-                                                sect = bio.sect.ifBlank { null },
-                                                gothram = bio.gothram.ifBlank { null },
-                                                horoscopeMatchPreference = bio.horoscopeMatchPreference.ifBlank { null },
-                                                highestEducation = bio.highestEducation.ifBlank { null },
-                                                institution = bio.institution.ifBlank { null },
-                                                occupationTitle = bio.occupationTitle.ifBlank { null },
-                                                employer = bio.employer.ifBlank { null },
-                                                employmentSector = bio.employmentSector.ifBlank { null },
-                                                monthlyIncomeAmount = bio.monthlyIncomeAmount.toIntOrNull(),
-                                                monthlyIncomeCurrency = bio.monthlyIncomeCurrency.ifBlank { null },
-                                                fatherName = bio.fatherName.ifBlank { null },
-                                                fatherOccupation = bio.fatherOccupation.ifBlank { null },
-                                                motherName = bio.motherName.ifBlank { null },
-                                                motherOccupation = bio.motherOccupation.ifBlank { null },
-                                                elderBrothersCount = bio.elderBrothers.toIntOrNull(),
-                                                youngerBrothersCount = bio.youngerBrothers.toIntOrNull(),
-                                                elderSistersCount = bio.elderSisters.toIntOrNull(),
-                                                youngerSistersCount = bio.youngerSisters.toIntOrNull(),
-                                                nativity = bio.nativity.ifBlank { null },
-                                                familyType = bio.familyType.ifBlank { null },
-                                                familyValues = bio.familyValues.ifBlank { null },
-                                                financialStatus = bio.financialStatus.ifBlank { null },
-                                                citizenshipStatus = bio.citizenshipStatus.ifBlank { null },
-                                            ),
-                                        )
-                                        saved = true
-                                    } catch (e: Exception) {
-                                        error = friendlyError(e, strings.errSaveBioData)
-                                    } finally {
-                                        saving = false
-                                    }
-                                }
-                            },
-                        )
-                    }
-
+                    // NOTE: an earlier pass merged this with Bio data into
+                    // one "about" tab -- reverted ("About me has both my
+                    // about me & bio data... remove that block from about
+                    // me", reported directly). "about" never appears in
+                    // tabKeys for role == parent (see above), so the old
+                    // isChildViewer guard that used to wrap this whole
+                    // branch is gone -- unreachable any other way.
                     "about" -> {
-                        // Visibility of system status (Norman) -- a long form
-                        // with no sense of "how much is left" reads as a
-                        // chore. Text only, no progress bar: this codebase
-                        // already tried a bar+caption for onboarding and
-                        // dropped it for a named Stepper because a filling
-                        // bar reads as "something is loading" (see Stepper.kt's
-                        // own doc comment) -- same reasoning applies here.
-                        val aboutMeFieldsFilled = listOf(
-                            aboutMe.selectedPrompts.isNotEmpty(),
-                            aboutMe.fitnessRoutine.isNotBlank(), aboutMe.sleepSchedule.isNotBlank(),
-                            aboutMe.pets.isNotBlank(), aboutMe.socialEnergy.isNotBlank(),
-                            aboutMe.partnerQualities.isNotEmpty(), aboutMe.whatMattersMost.isNotBlank(),
-                            aboutMe.careerAfterMarriage.isNotBlank(), aboutMe.livingArrangement.isNotBlank(), aboutMe.openToRelocation.isNotBlank(),
-                            aboutMe.favoriteCuisine.isNotBlank(), aboutMe.dreamDestination.isNotBlank(), aboutMe.loveLanguage.isNotBlank(),
-                        ).count { it }
-                        FieldHint(strings.aboutMeFieldsProgress(aboutMeFieldsFilled, 13))
+                        run {
+                            // Visibility of system status (Norman) -- a long form
+                            // with no sense of "how much is left" reads as a
+                            // chore. Text only, no progress bar: this codebase
+                            // already tried a bar+caption for onboarding and
+                            // dropped it for a named Stepper because a filling
+                            // bar reads as "something is loading" (see Stepper.kt's
+                            // own doc comment) -- same reasoning applies here.
+                            val aboutMeFieldsFilled = listOf(
+                                aboutMe.selectedPrompts.isNotEmpty(),
+                                aboutMe.fitnessRoutine.isNotBlank(), aboutMe.sleepSchedule.isNotBlank(),
+                                aboutMe.pets.isNotBlank(), aboutMe.socialEnergy.isNotBlank(),
+                                aboutMe.partnerQualities.isNotEmpty(), aboutMe.whatMattersMost.isNotBlank(),
+                                aboutMe.careerAfterMarriage.isNotBlank(), aboutMe.livingArrangement.isNotBlank(), aboutMe.openToRelocation.isNotBlank(),
+                                aboutMe.favoriteCuisine.isNotBlank(), aboutMe.dreamDestination.isNotBlank(), aboutMe.loveLanguage.isNotBlank(),
+                            ).count { it }
+                            FieldHint(strings.aboutMeFieldsProgress(aboutMeFieldsFilled, 13))
 
-                        SectionCard(title = strings.aboutPromptsTitle, padding = 16.dp) {
-                            FieldHint(strings.aboutPromptsHint(MAX_ABOUT_PROMPTS))
+                            SectionCard(title = strings.aboutPromptsTitle, padding = 16.dp) {
+                                FieldHint(strings.aboutPromptsHint(MAX_ABOUT_PROMPTS))
 
-                            if (aboutMe.selectedPrompts.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
-                                    aboutMe.selectedPrompts.forEach { prompt ->
-                                        // Plain SectionCard title, not a pill
-                                        // -- a pill here read as "just
-                                        // another bubble" next to the
-                                        // closed-set fields' answer bubbles
-                                        // elsewhere in this form, the
-                                        // opposite of distinct ("I don't
-                                        // even understand what they are" /
-                                        // "for custom answers, I don't want
-                                        // bubbles for questions", reported
-                                        // directly). The bordered textarea
-                                        // right below already signals "this
-                                        // is where you type".
-                                        SectionCard(
-                                            title = prompt,
-                                            padding = 14.dp,
-                                            trailing = { LinkText(strings.removePrompt, onClick = { removePrompt(prompt) }) },
-                                        ) {
-                                            D2MTextArea(
-                                                label = "",
-                                                value = aboutMe.promptAnswers[prompt] ?: "",
-                                                onValueChange = { ans -> updateAboutMe { copy(promptAnswers = promptAnswers + (prompt to ans)) } },
-                                                minLines = 2,
-                                                hint = "${(aboutMe.promptAnswers[prompt] ?: "").length}/300",
+                                if (aboutMe.selectedPrompts.isNotEmpty()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
+                                        aboutMe.selectedPrompts.forEach { prompt ->
+                                            // Plain SectionCard title, not a pill
+                                            // -- a pill here read as "just
+                                            // another bubble" next to the
+                                            // closed-set fields' answer bubbles
+                                            // elsewhere in this form, the
+                                            // opposite of distinct ("I don't
+                                            // even understand what they are" /
+                                            // "for custom answers, I don't want
+                                            // bubbles for questions", reported
+                                            // directly). The bordered textarea
+                                            // right below already signals "this
+                                            // is where you type".
+                                            SectionCard(
+                                                title = prompt,
+                                                padding = 14.dp,
+                                                trailing = { LinkText(strings.removePrompt, onClick = { removePrompt(prompt) }) },
+                                            ) {
+                                                D2MTextArea(
+                                                    label = "",
+                                                    value = aboutMe.promptAnswers[prompt] ?: "",
+                                                    onValueChange = { ans -> updateAboutMe { copy(promptAnswers = promptAnswers + (prompt to ans)) } },
+                                                    minLines = 2,
+                                                    hint = "${(aboutMe.promptAnswers[prompt] ?: "").length}/300",
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (aboutMe.selectedPrompts.size < MAX_ABOUT_PROMPTS) {
+                                    if (promptPickerOpen) {
+                                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                                            // Reused as a tap-one-to-pick list, not a
+                                            // multi-select -- `value` stays empty (no
+                                            // chip should ever look "selected" here,
+                                            // since picking one removes it from this
+                                            // list immediately) and `onChange` always
+                                            // hands back a single-item add-diff, which
+                                            // is exactly the prompt that was tapped.
+                                            D2MChipGroup(
+                                                label = null,
+                                                options = Taxonomy.ABOUT_ME_PROMPTS.filter { it !in aboutMe.selectedPrompts },
+                                                value = emptyList(),
+                                                onChange = { next -> next.firstOrNull()?.let(::addPrompt) },
                                             )
+                                            if (aboutMe.selectedPrompts.isNotEmpty()) {
+                                                LinkText(strings.cancel, onClick = { promptPickerOpen = false }, modifier = Modifier.padding(top = 8.dp))
+                                            }
                                         }
-                                    }
-                                }
-                            }
-
-                            if (aboutMe.selectedPrompts.size < MAX_ABOUT_PROMPTS) {
-                                if (promptPickerOpen) {
-                                    Column(modifier = Modifier.padding(top = 12.dp)) {
-                                        // Reused as a tap-one-to-pick list, not a
-                                        // multi-select -- `value` stays empty (no
-                                        // chip should ever look "selected" here,
-                                        // since picking one removes it from this
-                                        // list immediately) and `onChange` always
-                                        // hands back a single-item add-diff, which
-                                        // is exactly the prompt that was tapped.
-                                        D2MChipGroup(
-                                            label = null,
-                                            options = Taxonomy.ABOUT_ME_PROMPTS.filter { it !in aboutMe.selectedPrompts },
-                                            value = emptyList(),
-                                            onChange = { next -> next.firstOrNull()?.let(::addPrompt) },
+                                    } else {
+                                        D2MButton(
+                                            text = strings.addAPrompt(aboutMe.selectedPrompts.size, MAX_ABOUT_PROMPTS),
+                                            variant = D2MButtonVariant.OUTLINE,
+                                            onClick = { promptPickerOpen = true },
+                                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                                         )
-                                        if (aboutMe.selectedPrompts.isNotEmpty()) {
-                                            LinkText(strings.cancel, onClick = { promptPickerOpen = false }, modifier = Modifier.padding(top = 8.dp))
-                                        }
                                     }
-                                } else {
-                                    D2MButton(
-                                        text = strings.addAPrompt(aboutMe.selectedPrompts.size, MAX_ABOUT_PROMPTS),
-                                        variant = D2MButtonVariant.OUTLINE,
-                                        onClick = { promptPickerOpen = true },
-                                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                }
+                            }
+
+                            SectionCard(title = strings.lifestyleTitle, padding = 16.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    D2MOptionGroup(strings.fitnessRoutine, Taxonomy.FITNESS_ROUTINES, aboutMe.fitnessRoutine, { v -> updateAboutMe { copy(fitnessRoutine = if (v == fitnessRoutine) "" else v) } }, shape = D2MChipShape.PILL)
+                                    D2MOptionGroup(strings.sleepSchedule, Taxonomy.SLEEP_SCHEDULES, aboutMe.sleepSchedule, { v -> updateAboutMe { copy(sleepSchedule = if (v == sleepSchedule) "" else v) } }, shape = D2MChipShape.PILL)
+                                    D2MOptionGroup(strings.pets, Taxonomy.PET_PREFERENCES, aboutMe.pets, { v -> updateAboutMe { copy(pets = if (v == pets) "" else v) } }, shape = D2MChipShape.PILL)
+                                    D2MOptionGroup(strings.socialEnergy, Taxonomy.SOCIAL_ENERGIES, aboutMe.socialEnergy, { v -> updateAboutMe { copy(socialEnergy = if (v == socialEnergy) "" else v) } }, shape = D2MChipShape.PILL)
+                                }
+                            }
+
+                            SectionCard(title = strings.lookingForTitle, padding = 16.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                                    D2MChipGroup(
+                                        strings.whatIValueInPartner,
+                                        Taxonomy.PARTNER_QUALITIES,
+                                        aboutMe.partnerQualities,
+                                        { updateAboutMe { copy(partnerQualities = it) } },
                                     )
+                                    Column {
+                                        FieldLabel(strings.whatMattersMostToMe)
+                                        D2MTextArea("", aboutMe.whatMattersMost, { updateAboutMe { copy(whatMattersMost = it) } }, minLines = 3)
+                                        SuggestionChipGroup(Taxonomy.WHAT_MATTERS_MOST_SUGGESTIONS, aboutMe.whatMattersMost) { updateAboutMe { copy(whatMattersMost = it) } }
+                                    }
                                 }
                             }
-                        }
 
-                        SectionCard(title = strings.lifestyleTitle, padding = 16.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                D2MOptionGroup(strings.fitnessRoutine, Taxonomy.FITNESS_ROUTINES, aboutMe.fitnessRoutine, { v -> updateAboutMe { copy(fitnessRoutine = if (v == fitnessRoutine) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup(strings.sleepSchedule, Taxonomy.SLEEP_SCHEDULES, aboutMe.sleepSchedule, { v -> updateAboutMe { copy(sleepSchedule = if (v == sleepSchedule) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup(strings.pets, Taxonomy.PET_PREFERENCES, aboutMe.pets, { v -> updateAboutMe { copy(pets = if (v == pets) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup(strings.socialEnergy, Taxonomy.SOCIAL_ENERGIES, aboutMe.socialEnergy, { v -> updateAboutMe { copy(socialEnergy = if (v == socialEnergy) "" else v) } }, shape = D2MChipShape.PILL)
-                            }
-                        }
-
-                        SectionCard(title = strings.lookingForTitle, padding = 16.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                                D2MChipGroup(
-                                    strings.whatIValueInPartner,
-                                    Taxonomy.PARTNER_QUALITIES,
-                                    aboutMe.partnerQualities,
-                                    { updateAboutMe { copy(partnerQualities = it) } },
-                                )
-                                Column {
-                                    FieldLabel(strings.whatMattersMostToMe)
-                                    D2MTextArea("", aboutMe.whatMattersMost, { updateAboutMe { copy(whatMattersMost = it) } }, minLines = 3)
-                                    SuggestionChipGroup(Taxonomy.WHAT_MATTERS_MOST_SUGGESTIONS, aboutMe.whatMattersMost) { updateAboutMe { copy(whatMattersMost = it) } }
+                            SectionCard(title = strings.lifeAndFuturePlansTitle, padding = 16.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    D2MOptionGroup(strings.careerAfterMarriage, Taxonomy.CAREER_AFTER_MARRIAGE_OPTIONS, aboutMe.careerAfterMarriage, { v -> updateAboutMe { copy(careerAfterMarriage = if (v == careerAfterMarriage) "" else v) } }, shape = D2MChipShape.PILL)
+                                    D2MOptionGroup(strings.livingArrangement, Taxonomy.LIVING_ARRANGEMENTS, aboutMe.livingArrangement, { v -> updateAboutMe { copy(livingArrangement = if (v == livingArrangement) "" else v) } }, shape = D2MChipShape.PILL)
+                                    D2MOptionGroup(strings.openToRelocation, Taxonomy.RELOCATION_PREFERENCES, aboutMe.openToRelocation, { v -> updateAboutMe { copy(openToRelocation = if (v == openToRelocation) "" else v) } }, shape = D2MChipShape.PILL)
+                                    // "Children preference... should be in
+                                    // about me, not in bio data" (reported
+                                    // directly, correcting an earlier pass
+                                    // that put this in the Bio data tab).
+                                    // Still backed by the shared `bio` state
+                                    // (ExtendedBioData owns this column, see
+                                    // Save button below) -- only the control
+                                    // moved tabs.
+                                    D2MOptionGroup(strings.childrenPreference, Taxonomy.CHILDREN_PREFERENCES, bio.childrenPreference, { v -> update { copy(childrenPreference = if (v == childrenPreference) "" else v) } }, shape = D2MChipShape.PILL, optionLabel = { Taxonomy.toLabel(it, locale) })
                                 }
                             }
-                        }
 
-                        SectionCard(title = strings.lifeAndFuturePlansTitle, padding = 16.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                D2MOptionGroup(strings.careerAfterMarriage, Taxonomy.CAREER_AFTER_MARRIAGE_OPTIONS, aboutMe.careerAfterMarriage, { v -> updateAboutMe { copy(careerAfterMarriage = if (v == careerAfterMarriage) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup(strings.livingArrangement, Taxonomy.LIVING_ARRANGEMENTS, aboutMe.livingArrangement, { v -> updateAboutMe { copy(livingArrangement = if (v == livingArrangement) "" else v) } }, shape = D2MChipShape.PILL)
-                                D2MOptionGroup(strings.openToRelocation, Taxonomy.RELOCATION_PREFERENCES, aboutMe.openToRelocation, { v -> updateAboutMe { copy(openToRelocation = if (v == openToRelocation) "" else v) } }, shape = D2MChipShape.PILL)
-                            }
-                        }
-
-                        SectionCard(title = strings.quickFactsTitle, padding = 16.dp) {
-                            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                                // Dropdown-filtered as you type, not a row of
-                                // chips below the field ("show it as autofill
-                                // suggestion rather than suggestion bubbles
-                                // below", reported directly).
-                                TextAutocomplete(
-                                    label = strings.favoriteCuisine,
-                                    value = aboutMe.favoriteCuisine,
-                                    onValueChange = { updateAboutMe { copy(favoriteCuisine = it) } },
-                                    options = Taxonomy.CUISINE_SUGGESTIONS,
-                                )
-                                // Same live Open-Meteo search as "Locations
-                                // you'd accept a match from" below -- a real
-                                // geocode lookup is both a better and a more
-                                // literally exhaustive suggestion source than
-                                // a hand-picked destination list could ever be
-                                // ("provide the same suggestion option as
-                                // locations", reported directly).
-                                CityAutocomplete(
-                                    label = strings.dreamDestination,
-                                    value = aboutMe.dreamDestination,
-                                    geocodingApi = geocodingApi,
-                                    onSelect = { r -> updateAboutMe { copy(dreamDestination = r.label) } },
-                                    onRawTextChange = { text -> updateAboutMe { copy(dreamDestination = text) } },
-                                    placeholder = strings.searchAnyCity,
-                                )
-                                D2MOptionGroup(strings.loveLanguage, Taxonomy.LOVE_LANGUAGES, aboutMe.loveLanguage, { v -> updateAboutMe { copy(loveLanguage = if (v == loveLanguage) "" else v) } }, shape = D2MChipShape.PILL)
+                            SectionCard(title = strings.quickFactsTitle, padding = 16.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                                    // Dropdown-filtered as you type, not a row of
+                                    // chips below the field ("show it as autofill
+                                    // suggestion rather than suggestion bubbles
+                                    // below", reported directly).
+                                    TextAutocomplete(
+                                        label = strings.favoriteCuisine,
+                                        value = aboutMe.favoriteCuisine,
+                                        onValueChange = { updateAboutMe { copy(favoriteCuisine = it) } },
+                                        options = Taxonomy.CUISINE_SUGGESTIONS,
+                                    )
+                                    // Same live Open-Meteo search as "Locations
+                                    // you'd accept a match from" below -- a real
+                                    // geocode lookup is both a better and a more
+                                    // literally exhaustive suggestion source than
+                                    // a hand-picked destination list could ever be
+                                    // ("provide the same suggestion option as
+                                    // locations", reported directly).
+                                    CityAutocomplete(
+                                        label = strings.dreamDestination,
+                                        value = aboutMe.dreamDestination,
+                                        geocodingApi = geocodingApi,
+                                        onSelect = { r -> updateAboutMe { copy(dreamDestination = r.label) } },
+                                        onRawTextChange = { text -> updateAboutMe { copy(dreamDestination = text) } },
+                                        placeholder = strings.searchAnyCity,
+                                    )
+                                    // "Love language - provide an option for
+                                    // user input other than choosing from
+                                    // existing" (reported directly) -- an
+                                    // "Other" chip reveals a free-text field
+                                    // when selected, mirroring d2m_web's
+                                    // loveLanguageCustom pattern: tracked
+                                    // separately from aboutMe.loveLanguage
+                                    // itself so switching into custom mode
+                                    // with a blank value doesn't look like
+                                    // "nothing selected".
+                                    D2MOptionGroup(
+                                        strings.loveLanguage,
+                                        Taxonomy.LOVE_LANGUAGES + "Other",
+                                        if (loveLanguageCustom) "Other" else aboutMe.loveLanguage,
+                                        { v ->
+                                            if (v == "Other") {
+                                                loveLanguageCustom = !loveLanguageCustom
+                                                updateAboutMe { copy(loveLanguage = "") }
+                                            } else {
+                                                loveLanguageCustom = false
+                                                updateAboutMe { copy(loveLanguage = if (v == loveLanguage) "" else v) }
+                                            }
+                                        },
+                                        shape = D2MChipShape.PILL,
+                                    )
+                                    if (loveLanguageCustom) {
+                                        D2MTextField(strings.loveLanguageOther, aboutMe.loveLanguage, { updateAboutMe { copy(loveLanguage = it) } })
+                                    }
+                                }
                             }
                         }
 
                         error?.let { D2MErrorBanner(it) }
                         if (saved) Text(strings.saved, color = MaterialTheme.colorScheme.primary)
                         D2MButton(
-                            text = if (saving) strings.saving else strings.saveAboutMe,
+                            text = if (saving) strings.saving else strings.saveChanges,
                             enabled = !saving,
                             onClick = {
                                 val pid = primaryId ?: return@D2MButton
@@ -496,9 +453,176 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
                                                 loveLanguage = aboutMe.loveLanguage.ifBlank { null },
                                             ),
                                         )
+                                        // "Children preference... should be
+                                        // in about me, not in bio data"
+                                        // (reported directly) -- its own
+                                        // control now lives in this tab (see
+                                        // the Life & future plans SectionCard
+                                        // above), but the field itself is
+                                        // still an ExtendedBioData column, so
+                                        // saving this tab also replays the
+                                        // rest of the shared `bio` state back
+                                        // exactly as loaded -- same `bio`
+                                        // object the "bio" tab's own save
+                                        // below uses, so this can't clobber
+                                        // height/religion/etc edited there.
+                                        identityRepo.updateExtendedBio(
+                                            pid,
+                                            ExtendedBioDataIn(
+                                                heightCm = bio.heightCm.toIntOrNull(),
+                                                complexion = bio.complexion.ifBlank { null },
+                                                motherTongue = bio.motherTongue.ifBlank { null },
+                                                otherLanguages = bio.otherLanguages,
+                                                bodyType = bio.bodyType.ifBlank { null },
+                                                childrenPreference = bio.childrenPreference.ifBlank { null },
+                                                religion = bio.religion.ifBlank { null },
+                                                casteCommunity = bio.casteCommunity.ifBlank { null },
+                                                sect = bio.sect.ifBlank { null },
+                                                gothram = bio.gothram.ifBlank { null },
+                                                horoscopeMatchPreference = bio.horoscopeMatchPreference.ifBlank { null },
+                                                highestEducation = bio.highestEducation.ifBlank { null },
+                                                institution = bio.institution.ifBlank { null },
+                                                occupationTitle = bio.occupationTitle.ifBlank { null },
+                                                employer = bio.employer.ifBlank { null },
+                                                employmentSector = bio.employmentSector.ifBlank { null },
+                                                monthlyIncomeAmount = bio.monthlyIncomeAmount.toIntOrNull(),
+                                                monthlyIncomeCurrency = bio.monthlyIncomeCurrency.ifBlank { null },
+                                                incomeBand = bio.incomeBand.ifBlank { null },
+                                                fatherName = bio.fatherName.ifBlank { null },
+                                                fatherOccupation = bio.fatherOccupation.ifBlank { null },
+                                                motherName = bio.motherName.ifBlank { null },
+                                                motherOccupation = bio.motherOccupation.ifBlank { null },
+                                                elderBrothersCount = bio.elderBrothers.toIntOrNull(),
+                                                youngerBrothersCount = bio.youngerBrothers.toIntOrNull(),
+                                                elderSistersCount = bio.elderSisters.toIntOrNull(),
+                                                youngerSistersCount = bio.youngerSisters.toIntOrNull(),
+                                                nativity = bio.nativity.ifBlank { null },
+                                                familyType = bio.familyType.ifBlank { null },
+                                                familyValues = bio.familyValues.ifBlank { null },
+                                                financialStatus = bio.financialStatus.ifBlank { null },
+                                                citizenshipStatus = bio.citizenshipStatus.ifBlank { null },
+                                            ),
+                                        )
                                         saved = true
                                     } catch (e: Exception) {
-                                        error = friendlyError(e, strings.errSaveAboutMe)
+                                        error = friendlyError(e, strings.errSaveChanges)
+                                    } finally {
+                                        saving = false
+                                    }
+                                }
+                            },
+                        )
+                    }
+
+                    // "Bio data & basic data are the same. Make the basic
+                    // data as bio data only" (reported directly) -- this
+                    // tab is unchanged content-wise from before the About
+                    // Me merge (the "profile"/Basic Info stub tab above is
+                    // a separate, pre-existing, out-of-scope gap -- see
+                    // basicDataNote -- not something this correction
+                    // touches), just split back out of "about" into its
+                    // own tab with its own save button.
+                    "bio" -> {
+                        BioSectionHeader(strings.sectionBasicPersonal)
+                        D2MTextField(strings.heightCm, bio.heightCm, { update { copy(heightCm = it) } })
+                        D2MSelectField(strings.complexion, bio.complexion, Taxonomy.COMPLEXIONS, { update { copy(complexion = it) } })
+                        D2MSelectField(strings.motherTongue, bio.motherTongue, Taxonomy.LANGUAGES, { update { copy(motherTongue = it) } })
+                        D2MChipGroup(strings.otherLanguagesKnown, Taxonomy.LANGUAGES, bio.otherLanguages, { update { copy(otherLanguages = it) } })
+                        D2MSelectField(strings.bodyType, bio.bodyType, Taxonomy.BODY_TYPES, { update { copy(bodyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+
+                        BioSectionHeader(strings.sectionReligiousAstrological)
+                        D2MSelectField(strings.religion, bio.religion, Taxonomy.RELIGIONS, { update { copy(religion = it) } })
+                        D2MSelectField(strings.casteCommunity, bio.casteCommunity, Taxonomy.COMMUNITIES, { update { copy(casteCommunity = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MSelectField(strings.sect, bio.sect, Taxonomy.SECTS, { update { copy(sect = it) } })
+                        D2MSelectField(strings.gothram, bio.gothram, Taxonomy.GOTHRAMS, { update { copy(gothram = it) } })
+                        D2MSelectField(strings.horoscopeMatchPreference, bio.horoscopeMatchPreference, Taxonomy.HOROSCOPE_MATCH_PREFERENCES, { update { copy(horoscopeMatchPreference = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+
+                        BioSectionHeader(strings.sectionEducationCareer)
+                        D2MSelectField(strings.highestEducation, bio.highestEducation, Taxonomy.EDUCATION_LEVELS, { update { copy(highestEducation = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.institution, bio.institution, { update { copy(institution = it) } })
+                        D2MSelectField(strings.employedIn, bio.employmentSector, Taxonomy.EMPLOYMENT_SECTORS, { update { copy(employmentSector = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.occupationDesignation, bio.occupationTitle, { update { copy(occupationTitle = it) } })
+                        D2MTextField(strings.employer, bio.employer, { update { copy(employer = it) } })
+                        // "Instead of salary field - provide salary range"
+                        // (reported directly) -- a band picker replaces the
+                        // exact monthly amount + currency inputs here.
+                        // monthlyIncomeAmount/monthlyIncomeCurrency stay in
+                        // BioForm/ExtendedBioDataIn (no destructive drop)
+                        // but are no longer surfaced as an editable input.
+                        D2MSelectField(strings.incomeBand, bio.incomeBand, Taxonomy.MONTHLY_INCOME_BANDS, { update { copy(incomeBand = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+
+                        BioSectionHeader(strings.sectionFamilyBackground)
+                        D2MTextField(strings.fathersName, bio.fatherName, { update { copy(fatherName = it) } })
+                        D2MTextField(strings.fathersOccupation, bio.fatherOccupation, { update { copy(fatherOccupation = it) } })
+                        D2MTextField(strings.mothersName, bio.motherName, { update { copy(motherName = it) } })
+                        D2MTextField(strings.mothersOccupation, bio.motherOccupation, { update { copy(motherOccupation = it) } })
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            D2MTextField(strings.elderBrothers, bio.elderBrothers, { update { copy(elderBrothers = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.youngerBrothers, bio.youngerBrothers, { update { copy(youngerBrothers = it) } }, modifier = Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            D2MTextField(strings.elderSisters, bio.elderSisters, { update { copy(elderSisters = it) } }, modifier = Modifier.weight(1f))
+                            D2MTextField(strings.youngerSisters, bio.youngerSisters, { update { copy(youngerSisters = it) } }, modifier = Modifier.weight(1f))
+                        }
+                        D2MSelectField(strings.familyType, bio.familyType, Taxonomy.FAMILY_TYPES, { update { copy(familyType = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MSelectField(strings.familyValues, bio.familyValues, Taxonomy.FAMILY_VALUES, { update { copy(familyValues = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+                        D2MTextField(strings.nativePlace, bio.nativity, { update { copy(nativity = it) } })
+                        D2MTextField(strings.financialStatus, bio.financialStatus, { update { copy(financialStatus = it) } })
+
+                        BioSectionHeader(strings.sectionLocationContact)
+                        D2MSelectField(strings.citizenshipStatus, bio.citizenshipStatus, Taxonomy.CITIZENSHIP_STATUSES, { update { copy(citizenshipStatus = it) } }, optionLabel = { Taxonomy.toLabel(it, locale) })
+
+                        error?.let { D2MErrorBanner(it) }
+                        if (saved) Text(strings.saved, color = MaterialTheme.colorScheme.primary)
+                        D2MButton(
+                            text = if (saving) strings.saving else strings.saveChanges,
+                            enabled = !saving,
+                            onClick = {
+                                val pid = primaryId ?: return@D2MButton
+                                scope.launch {
+                                    saving = true
+                                    error = null
+                                    try {
+                                        identityRepo.updateExtendedBio(
+                                            pid,
+                                            ExtendedBioDataIn(
+                                                heightCm = bio.heightCm.toIntOrNull(),
+                                                complexion = bio.complexion.ifBlank { null },
+                                                motherTongue = bio.motherTongue.ifBlank { null },
+                                                otherLanguages = bio.otherLanguages,
+                                                bodyType = bio.bodyType.ifBlank { null },
+                                                childrenPreference = bio.childrenPreference.ifBlank { null },
+                                                religion = bio.religion.ifBlank { null },
+                                                casteCommunity = bio.casteCommunity.ifBlank { null },
+                                                sect = bio.sect.ifBlank { null },
+                                                gothram = bio.gothram.ifBlank { null },
+                                                horoscopeMatchPreference = bio.horoscopeMatchPreference.ifBlank { null },
+                                                highestEducation = bio.highestEducation.ifBlank { null },
+                                                institution = bio.institution.ifBlank { null },
+                                                occupationTitle = bio.occupationTitle.ifBlank { null },
+                                                employer = bio.employer.ifBlank { null },
+                                                employmentSector = bio.employmentSector.ifBlank { null },
+                                                monthlyIncomeAmount = bio.monthlyIncomeAmount.toIntOrNull(),
+                                                monthlyIncomeCurrency = bio.monthlyIncomeCurrency.ifBlank { null },
+                                                incomeBand = bio.incomeBand.ifBlank { null },
+                                                fatherName = bio.fatherName.ifBlank { null },
+                                                fatherOccupation = bio.fatherOccupation.ifBlank { null },
+                                                motherName = bio.motherName.ifBlank { null },
+                                                motherOccupation = bio.motherOccupation.ifBlank { null },
+                                                elderBrothersCount = bio.elderBrothers.toIntOrNull(),
+                                                youngerBrothersCount = bio.youngerBrothers.toIntOrNull(),
+                                                elderSistersCount = bio.elderSisters.toIntOrNull(),
+                                                youngerSistersCount = bio.youngerSisters.toIntOrNull(),
+                                                nativity = bio.nativity.ifBlank { null },
+                                                familyType = bio.familyType.ifBlank { null },
+                                                familyValues = bio.familyValues.ifBlank { null },
+                                                financialStatus = bio.financialStatus.ifBlank { null },
+                                                citizenshipStatus = bio.citizenshipStatus.ifBlank { null },
+                                            ),
+                                        )
+                                        saved = true
+                                    } catch (e: Exception) {
+                                        error = friendlyError(e, strings.errSaveChanges)
                                     } finally {
                                         saving = false
                                     }

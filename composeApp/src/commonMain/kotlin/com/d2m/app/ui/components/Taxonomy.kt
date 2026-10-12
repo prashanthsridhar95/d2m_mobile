@@ -24,7 +24,11 @@ object Taxonomy {
     val GENDERS = listOf("male", "female", "non_binary")
     val EDUCATION_LEVELS = listOf("high_school", "bachelors", "masters", "doctorate", "professional_degree")
     val PROFESSION_TIERS = listOf("student", "early_career", "mid_career", "senior", "business_owner", "not_working")
-    val INCOME_BANDS = listOf("under_5l", "5l_10l", "10l_25l", "25l_50l", "50l_plus")
+    val INCOME_BANDS = listOf("under_5l", "5l_10l", "10l_25l", "25l_50l", "50l_plus") // annual, unused -- see MONTHLY_INCOME_BANDS
+    // ExtendedBioData.income_band -- "instead of salary field - provide
+    // salary range" (reported directly), sized for the live monthly
+    // monthly_income_amount field it replaces in the edit/display UI.
+    val MONTHLY_INCOME_BANDS = listOf("below_50k", "50k_1l", "1l_2l", "2l_5l", "above_5l")
 
     val HOBBIES = listOf(
         "reading", "travel", "cooking", "fitness", "music", "movies", "hiking",
@@ -34,6 +38,13 @@ object Taxonomy {
         "non_smoker", "smoker", "non_drinker", "social_drinker", "vegetarian",
         "non_vegetarian", "vegan", "wants_children", "open_on_children", "no_children_wanted",
     )
+    // ExtendedBioData.children_preference -- same 3 values as above, now
+    // also its own labeled Bio data field ("Children preference in
+    // biodata" -- reported directly) instead of buried in the generic
+    // lifestyle-tags picker (see LIFESTYLE_TAGS's call site in
+    // PreferencesSection, ChildProfileDialogScreen.kt, which excludes
+    // these 3 values now).
+    val CHILDREN_PREFERENCES = listOf("wants_children", "open_on_children", "no_children_wanted")
     val RELATIONSHIP_GOALS = listOf("marriage_ready", "marriage_within_a_year", "open_to_long_courtship")
 
     val BODY_TYPES = listOf("slim", "athletic", "average", "heavy")
@@ -89,6 +100,13 @@ object Taxonomy {
         "My simple pleasures are…",
         "The way to my heart is…",
         "I'm currently obsessed with…",
+        // Scenario/values-style prompts -- see app/taxonomy.py's
+        // ABOUT_ME_PROMPTS for why these are a different kind of question
+        // ("ask things like [a moral-dilemma scenario]", reported directly).
+        "You spot a stray animal that looks hurt by the road and you're already running late. What do you do?",
+        "A close friend is clearly in the wrong in an argument with their partner. Do you say so, and how?",
+        "You find a wallet with cash and no ID inside. What's your first move?",
+        "Your weekend plans get cancelled last-minute. How do you spend the freed-up time?",
     )
 
     // Tap-to-fill suggestions for the About Me tab's free-text fields --
@@ -147,14 +165,24 @@ object Taxonomy {
         val dict = when (locale) {
             AppLocale.HI -> HI_LABELS
             AppLocale.TA -> TA_LABELS
-            AppLocale.EN -> null
+            AppLocale.EN -> EN_LABELS
         }
-        dict?.get(value)?.let { return it }
+        dict[value]?.let { return it }
         return value.split("_").joinToString(" ") { part ->
             ACRONYMS[part] ?: part.replaceFirstChar { it.uppercase() }
         }
     }
 }
+// English fallback above just title-cases each underscore-joined part --
+// fine for a real word ("not_working" -> "Not Working"), useless for a
+// number+letter code like "1l_2l" (capitalizing "1" is a no-op, so it
+// comes out "1l 2l" verbatim -- "Would you understand this shit?" reported
+// directly, same bug web had). MONTHLY_INCOME_BANDS values get real
+// English labels here instead, same HI_LABELS/TA_LABELS mechanism.
+private val EN_LABELS = mapOf(
+    "below_50k" to "Below ₹50K", "50k_1l" to "₹50K – ₹1L", "1l_2l" to "₹1L – ₹2L",
+    "2l_5l" to "₹2L – ₹5L", "above_5l" to "Above ₹5L",
+)
 private val HI_LABELS = mapOf(
     "Hindu" to "हिंदू",
     "Muslim" to "मुस्लिम",

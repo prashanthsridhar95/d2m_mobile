@@ -264,7 +264,7 @@ fun DiscoveryScreen() {
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 20.dp, bottom = 10.dp),
                         )
-                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth(), showAboutMe = true)
+                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth(), showAboutMe = true, viewerPrimaryId = primaryId)
 
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
