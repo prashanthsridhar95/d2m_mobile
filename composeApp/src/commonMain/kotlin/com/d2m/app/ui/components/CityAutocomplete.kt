@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,8 +69,10 @@ fun CityAutocomplete(
         )
         if (expanded) {
             Card(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                LazyColumn {
-                    items(results) { r ->
+                // A plain Column, not LazyColumn: these screens scroll vertically themselves, and a LazyColumn nested
+                // in them is measured with infinite height and crashes the app as soon as suggestions load.
+                Column {
+                    results.forEach { r ->
                         DropdownMenuItem(
                             text = { Text(r.label) },
                             onClick = {

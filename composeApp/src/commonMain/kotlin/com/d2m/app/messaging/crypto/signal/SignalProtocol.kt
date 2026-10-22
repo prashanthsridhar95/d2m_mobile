@@ -160,10 +160,20 @@ internal object SignalProtocol {
         myIdentity: IdentityRecord,
         store: SignalSessionStore,
         wireBytes: ByteArray,
+        existingSession: SessionRecord? = null,
     ): ResponderResult {
         val fields = WhisperProto.decodePreKeyWhisperMessage(wireBytes.copyOfRange(1, wireBytes.size)) // strip leading version byte
         val theirIdentityRaw = strip05(fields.identityKey)
         val eKaRaw = strip05(fields.baseKey)
+
+        // A sender keeps wrapping its messages in PreKey messages until it has heard back from us, and each one repeats the
+        // same base key. The reference implementation recognises a session it already built from that base key and just
+        // decrypts with it -- rebuilding would (a) fail, because the one-time prekey was consumed by the first message, and
+        // (b) throw away the ratchet state. Only the first PreKey message for a base key establishes a session.
+        if (existingSession != null && existingSession.remoteBaseKey == eKaRaw.toB64()) {
+            val plaintext = decryptWhisperMessage(primitives, existingSession, myIdentity.publicKey.fromB64(), fields.message)
+            return ResponderResult(existingSession, plaintext)
+        }
 
         // Look up which local signed prekey / one-time prekey THIS message actually references -- only knowable now that the message is decoded, not before.
         val signedPreKey = store.findSignedPreKey(fields.signedPreKeyId)
@@ -183,6 +193,7 @@ internal object SignalProtocol {
         val session = SessionRecord(
             remoteIdentityKey = theirIdentityRaw.toB64(),
             remoteRegistrationId = fields.registrationId,
+            remoteBaseKey = eKaRaw.toB64(),
             ratchet = RatchetRecord(
                 rootKey = rootKey0.toB64(),
                 // Placeholder until maybeStepRatchet below generates our real sending ephemeral -- mirrors the reference implementation, which reuses the signed-prekey keypair as a transient stand-in here.

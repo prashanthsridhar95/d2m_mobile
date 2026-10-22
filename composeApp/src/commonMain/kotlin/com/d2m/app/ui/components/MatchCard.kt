@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -113,7 +114,8 @@ fun MatchCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RefNoText(suggestion.candidateId, Modifier.weight(1f))
+                        // the registration number, never the internal id
+                        if (suggestion.shortId != null) RefNoText(suggestion.shortId, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
                         ScoreBadge(suggestion.compositeScore)
                     }
                     Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {

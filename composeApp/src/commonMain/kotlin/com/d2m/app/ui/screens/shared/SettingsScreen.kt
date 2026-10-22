@@ -1,6 +1,8 @@
 package com.d2m.app.ui.screens.shared
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -115,7 +117,8 @@ fun SettingsScreen(
 
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // verticalScroll: the content is taller than a phone screen, and without it Log out sat below the bottom bar, unreachable
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             PageTitle(strings.pageTitle)
 
             AccountHeader(identity = identity, accountId = accountId, onOpenProfile = onOpenProfile)
@@ -130,21 +133,17 @@ fun SettingsScreen(
             }
             HorizontalDivider()
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text(strings.muteNotificationsTitle, fontWeight = FontWeight.Bold)
-                    Text(strings.muteNotificationsSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
-                }
-                Switch(
-                    checked = muted,
-                    onCheckedChange = { checked ->
-                        muted = checked
-                        if (accountId != null) {
-                            scope.launch { runCatching { notificationsRepo.setPreferences(accountId, NotificationPreferenceIn(muted = checked)) } }
-                        }
-                    },
-                )
-            }
+            SettingSwitchRow(
+                title = strings.muteNotificationsTitle,
+                subtitle = strings.muteNotificationsSubtitle,
+                checked = muted,
+                onCheckedChange = { checked ->
+                    muted = checked
+                    if (accountId != null) {
+                        scope.launch { runCatching { notificationsRepo.setPreferences(accountId, NotificationPreferenceIn(muted = checked)) } }
+                    }
+                },
+            )
 
             // "Hide name" (reported directly) -- by default a name
             // auto-masks to any viewer until a match exists, then auto-
@@ -152,19 +151,15 @@ fun SettingsScreen(
             // service._display_name on the backend). This switch is the
             // manual override: keeps it masked even after a match.
             if (linkedPrimaryId != null) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text(strings.hideNameTitle, fontWeight = FontWeight.Bold)
-                        Text(strings.hideNameSubtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
-                    }
-                    Switch(
-                        checked = hideNameOverride,
-                        onCheckedChange = { checked ->
-                            hideNameOverride = checked
-                            scope.launch { runCatching { identityRepo.setHideNameOverride(linkedPrimaryId, checked) } }
-                        },
-                    )
-                }
+                SettingSwitchRow(
+                    title = strings.hideNameTitle,
+                    subtitle = strings.hideNameSubtitle,
+                    checked = hideNameOverride,
+                    onCheckedChange = { checked ->
+                        hideNameOverride = checked
+                        scope.launch { runCatching { identityRepo.setHideNameOverride(linkedPrimaryId, checked) } }
+                    },
+                )
             }
 
             // Child role only -- the parent role reaches this via its own
@@ -376,5 +371,24 @@ private fun AccountHeader(identity: Identity, accountId: String?, onOpenProfile:
             }
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
+    }
+}
+
+
+/**
+ * A labelled on/off setting as ONE control: the whole row toggles and is exposed to accessibility services as a single
+ * switch named by its title (previously the Switch stood alone, so a screen reader announced just "switch").
+ */
+@Composable
+private fun SettingSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

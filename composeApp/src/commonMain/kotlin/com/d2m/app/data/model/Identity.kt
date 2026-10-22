@@ -33,7 +33,8 @@ data class SponsorCreateRequest(
     val ownReligion: String,
     val ownCasteCommunity: String,
     val acceptReligions: List<String>,
-    val hardCasteCommunity: Boolean,
+    // the community code parents insist on (null = no hard community filter); the backend field is Optional[str], not a flag
+    val hardCasteCommunity: String? = null,
     val minAge: Int,
     val maxAge: Int,
     val acceptLocations: List<String> = emptyList(),
@@ -106,6 +107,12 @@ data class ChildPreferencesRequest(
     val hobbiesPref: List<String> = emptyList(),
     val lifestyleTags: List<String> = emptyList(),
     val relationshipGoal: String,
+    // Required by the backend (empty list = no preference). Omitting them made every claim flow end in a 422.
+    val bodyTypePref: List<String> = emptyList(),
+    val complexionPref: List<String> = emptyList(),
+    val sectPref: List<String> = emptyList(),
+    val gothramPref: List<String> = emptyList(),
+    val citizenshipPref: List<String> = emptyList(),
 )
 
 @Serializable
@@ -200,7 +207,7 @@ data class LocationPreferenceOut(
 
 @Serializable
 data class PhotoOut(
-    val photoId: String,
+    val id: String, // backend field is "id" (the DTO used to declare photo_id, so decoding any photo list threw)
     val url: String,
     val sortOrder: Int,
 )

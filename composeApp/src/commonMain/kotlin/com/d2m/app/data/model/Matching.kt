@@ -75,7 +75,7 @@ data class SponsorPreferencesOut(
     val ownReligion: String? = null,
     val ownCasteCommunity: String? = null,
     val acceptReligions: List<String> = emptyList(),
-    val hardCasteCommunity: Boolean = false,
+    val hardCasteCommunity: String? = null,
     val minAge: Int? = null,
     val maxAge: Int? = null,
     val acceptLocations: List<String> = emptyList(),

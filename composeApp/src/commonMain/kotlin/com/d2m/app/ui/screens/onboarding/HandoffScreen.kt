@@ -19,6 +19,8 @@ import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
+import com.d2m.app.platform.claimLink
+import com.d2m.app.platform.shareText
 import org.koin.compose.koinInject
 
 /**
@@ -31,8 +33,7 @@ import org.koin.compose.koinInject
  * The native share sheet replaces web's copy-link/WhatsApp-button pair --
  * see plan §4: a strictly better mobile-native choice, since the OS share
  * sheet already includes WhatsApp, Messages, email, etc. Wiring the actual
- * platform share intent is a small expect/actual (see platform/ShareSheet.kt)
- * left as a follow-up alongside the other platform actuals in this build.
+ * platform share intent is the expect/actual in platform/ShareSheet.kt.
  */
 @Composable
 fun HandoffScreen(onBrowseProfiles: () -> Unit) {
@@ -53,7 +54,7 @@ fun HandoffScreen(onBrowseProfiles: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
                 )
-                D2MButton(text = strings.shareInvite, onClick = { /* platform share sheet -- see doc comment */ })
+                D2MButton(text = strings.shareInvite, onClick = { shareText(claimLink(h.inviteToken)) })
                 D2MButton(text = strings.browseProfiles, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = onBrowseProfiles, modifier = Modifier.padding(top = 8.dp))
             }
         }

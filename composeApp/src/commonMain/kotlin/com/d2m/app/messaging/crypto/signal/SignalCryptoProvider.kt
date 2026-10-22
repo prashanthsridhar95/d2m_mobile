@@ -103,7 +103,7 @@ class SignalCryptoProvider(
         val store = store()
         val wireBytes = body.fromB64()
         if (ciphertextType == "prekey") {
-            val result = SignalProtocol.handleIncomingPreKeyMessage(primitives, myIdentity, store, wireBytes)
+            val result = SignalProtocol.handleIncomingPreKeyMessage(primitives, myIdentity, store, wireBytes, store.getSession(fromUsername))
             store.saveSession(fromUsername, result.session)
             return@withLock result.plaintext.decodeToString()
         }

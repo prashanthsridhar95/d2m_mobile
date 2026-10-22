@@ -3,6 +3,7 @@ package com.d2m.app
 import android.app.Application
 import com.d2m.app.data.session.AndroidSettingsContextHolder
 import com.d2m.app.di.appModule
+import com.d2m.app.messaging.MessagingConfig
 import com.d2m.app.messaging.call.AndroidWebRtcContextHolder
 import com.d2m.app.push.installLocalNotificationBridge
 import org.koin.core.context.startKoin
@@ -33,6 +34,8 @@ class D2MApplication : Application() {
         super.onCreate()
         AndroidSettingsContextHolder.appContext = applicationContext
         AndroidWebRtcContextHolder.appContext = applicationContext
+        MessagingConfig.httpBaseUrl = BuildConfig.MESSAGING_HTTP_URL
+        MessagingConfig.wsBaseUrl = BuildConfig.MESSAGING_WS_URL
         startKoin {
             modules(appModule)
         }

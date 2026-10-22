@@ -256,7 +256,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                      * the photo -- see that composable's own doc comment
                      * for why a word beats a fraction here.
                      */
-                    RefNoText(c.candidateId)
+                    c.shortId?.let { RefNoText(it) }      // registration number, never the internal id
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         PersonName(c.candidateName + (c.age?.let { ", $it" } ?: ""))
                         if (c.isFoundingMember) {

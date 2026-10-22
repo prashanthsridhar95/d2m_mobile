@@ -192,7 +192,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                                         ownReligion = form.ownReligion,
                                         ownCasteCommunity = form.ownCasteCommunity,
                                         acceptReligions = form.acceptReligions,
-                                        hardCasteCommunity = form.hardCasteCommunity,
+                                        hardCasteCommunity = if (form.hardCasteCommunity) form.ownCasteCommunity else null,
                                         minAge = form.minAge.toIntOrNull() ?: 25,
                                         maxAge = form.maxAge.toIntOrNull() ?: 32,
                                         acceptLocations = form.acceptLocations,

@@ -54,6 +54,9 @@ class SuggestionsRepository(
         cache.invalidate("suggestions:$primaryId")
         cache.invalidate("requests-received:$primaryId")
         cache.invalidate("requests-sent:$primaryId")
+        // an accept that completes a mutual match creates a thread: without this Matches kept showing the cached
+        // "No matches yet" (15s TTL) right after the match happened
+        cache.invalidate("threads:$primaryId")
         cache.invalidate("dashboard:")
         return result
     }

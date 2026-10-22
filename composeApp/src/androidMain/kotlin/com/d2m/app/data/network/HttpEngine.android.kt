@@ -1,5 +1,6 @@
 package com.d2m.app.data.network
 
+import com.d2m.app.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 
@@ -24,7 +25,8 @@ actual fun httpEngine(): HttpClient = HttpClient(OkHttp)
 // For local-only dev against a laptop-hosted backend instead, swap this for
 // "http://10.0.2.2:8000" (Android emulator's alias for the host's
 // 127.0.0.1:8000) or your host's real LAN IP for a physical device.
-actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
+// Overridable at build time (-Pd2m.localBackend=true, see composeApp/build.gradle.kts).
+actual fun resolveDefaultBaseUrl(): String = BuildConfig.API_BASE_URL
 
 // WedLock IAM now has its own Cloudflare Tunnel (auth.prashanthsridhar.com),
 // same deployment pattern as d2m_core_engine above -- the web app's own
@@ -34,4 +36,4 @@ actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
 // For local-only dev against a laptop-hosted wedlock_iam instead, swap
 // this for "http://10.0.2.2:8010/api/v1" (the same emulator loopback
 // alias noted above for resolveDefaultBaseUrl()).
-actual fun resolveWedlockBaseUrl(): String = "https://auth.prashanthsridhar.com/api/v1"
+actual fun resolveWedlockBaseUrl(): String = BuildConfig.WEDLOCK_BASE_URL

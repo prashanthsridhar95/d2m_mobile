@@ -349,6 +349,17 @@ val localProperties = Properties().apply {
 }
 val giphyApiKey: String = (localProperties.getProperty("GIPHY_API_KEY") ?: "dc6zaTOxFJmzC")
 
+// Backend endpoints. Default: the deployed Cloudflare-tunnel backends. Pass -Pd2m.localBackend=true (or set
+// D2M_LOCAL_BACKEND=true in local.properties / the environment) to build an APK that talks to a backend running
+// on the host laptop instead -- 10.0.2.2 is the Android emulator's alias for the host's loopback. Used by the
+// d2m_testsuite device journeys; never set for a release build.
+val useLocalBackend: Boolean =
+    (project.findProperty("d2m.localBackend") as String? ?: localProperties.getProperty("D2M_LOCAL_BACKEND") ?: System.getenv("D2M_LOCAL_BACKEND")) == "true"
+val apiBaseUrl = if (useLocalBackend) "http://10.0.2.2:8000" else "https://api.prashanthsridhar.com"
+val wedlockBaseUrl = if (useLocalBackend) "http://10.0.2.2:8010/api/v1" else "https://auth.prashanthsridhar.com/api/v1"
+val messagingHttpUrl = if (useLocalBackend) "http://10.0.2.2:4000" else "https://chat.prashanthsridhar.com"
+val messagingWsUrl = if (useLocalBackend) "ws://10.0.2.2:4000" else "wss://chat.prashanthsridhar.com"
+
 // Release signing. Before this block, `buildTypes { getByName("release") {
 // isMinifyEnabled = false } }` had no `signingConfig` at all, which means
 // AGP silently fell back to the debug keystore (a fixed, publicly-known
@@ -407,6 +418,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "GIPHY_API_KEY", "\"$giphyApiKey\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "WEDLOCK_BASE_URL", "\"$wedlockBaseUrl\"")
+        buildConfigField("String", "MESSAGING_HTTP_URL", "\"$messagingHttpUrl\"")
+        buildConfigField("String", "MESSAGING_WS_URL", "\"$messagingWsUrl\"")
     }
 
     buildFeatures {

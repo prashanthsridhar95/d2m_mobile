@@ -38,6 +38,8 @@ data class SubScoreBreakdown(
 data class SuggestionOut(
     val candidateId: String,
     val candidateName: String,
+    // Registration number (e.g. 2026-00011) -- what cards show instead of the internal id.
+    val shortId: String? = null,
     val rank: Int = 0,
     val scores: SubScoreBreakdown = SubScoreBreakdown(),
     val doshaFlags: List<String> = emptyList(),
@@ -84,6 +86,7 @@ data class SuggestionOut(
 data class BrowseCandidateOut(
     val candidateId: String,
     val candidateName: String,
+    val shortId: String? = null,
     val photoUrl: String? = null,
     val isMatching: Boolean = false,
     val scores: SubScoreBreakdown? = null,

@@ -1,5 +1,6 @@
 package com.d2m.app.messaging
 
+import com.d2m.app.AppForegroundState
 import com.d2m.app.data.local.ChatLocalStore
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.crypto.CryptoProvider
@@ -562,6 +563,9 @@ class MessagingRepository(
         )
         try {
             val response = client.post("${MessagingConfig.httpBaseUrl}/media") {
+                // the server gates uploads on the bride-controlled media permission, so it must know both participants
+                parameter("from", me)
+                parameter("to", peerUsername)
                 contentType(ContentType.Application.OctetStream)
                 setBody(bytes)
             }
@@ -916,6 +920,13 @@ class MessagingRepository(
     }
 
     private fun markUnreadOrChime(fromUsername: String, preview: String, messageId: String) {
+        // The open conversation only counts as "open" while the app is actually on screen: with the chat still the
+        // active peer but the app sent to the background, an incoming message used to just chime (silently, nobody
+        // there to hear it) and never raised an OS notification.
+        if (activePeer == fromUsername && !AppForegroundState.isForeground.value) {
+            _inboxNotifications.tryEmit(InboxNotification(fromUsername, preview, messageId))
+            return
+        }
         if (activePeer != fromUsername) {
             _unreadByPeer.update { it + (fromUsername to ((it[fromUsername] ?: 0) + 1)) }
             _inboxNotifications.tryEmit(InboxNotification(fromUsername, preview, messageId))
