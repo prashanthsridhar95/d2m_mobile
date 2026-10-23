@@ -22,6 +22,7 @@ import com.d2m.app.messaging.crypto.archive.createArchivePrimitives
 import com.d2m.app.messaging.transport.MessagingWsClient
 import com.d2m.app.messaging.ui.createGifImageLoader
 import com.d2m.app.push.PushTokenRegistrar
+import com.russhwolf.settings.Settings
 import org.koin.dsl.module
 
 val appModule = module {
@@ -50,7 +51,8 @@ val appModule = module {
     single { OffboardingRepository(get(), get()) }
     single { AdminRepository(get()) }
 
-    single { IdentityStore(createSettings()) }
+    single<Settings> { createSettings() }
+    single { IdentityStore(get()) }
     single { com.d2m.app.ui.screens.onboarding.OnboardingResultHolder() }
 
     single { PushTokenRegistrar(get(), get()) }
