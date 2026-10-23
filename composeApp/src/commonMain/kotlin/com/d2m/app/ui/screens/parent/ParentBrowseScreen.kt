@@ -37,6 +37,7 @@ import com.d2m.app.ui.screens.parity.BrowseTable
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import org.koin.compose.koinInject
+import com.russhwolf.settings.Settings
 
 /**
  * Mirrors screens/parent/BrowseScreen.jsx: "Matching profiles" (ranked
@@ -52,6 +53,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     val identityStore: IdentityStore = koinInject()
     val suggestionsRepo: SuggestionsRepository = koinInject()
     val apiClient: ApiClient = koinInject()
+    val settings: Settings = koinInject()
     val identity by identityStore.identity.collectAsState()
 
     var mode by remember { mutableStateOf(0) } // 0 = matching, 1 = all
@@ -102,7 +104,12 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                         MatchCard(suggestion = s, resolvePhotoUrl = apiClient::resolveMediaUrl, onClick = { onOpenProfile(s.candidateId) })
                     }
                 }
-                mode == 1 && tableView -> BrowseTable(rows = all, onOpenProfile = onOpenProfile)
+                mode == 1 && tableView -> BrowseTable(
+                    rows = all,
+                    onOpenProfile = onOpenProfile,
+                    settings = settings,
+                    preferenceScope = "${identity.sponsorId ?: identity.primaryId}:${childPrimaryId}",
+                )
                 else -> LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(all) { c ->
                         MatchCard(
