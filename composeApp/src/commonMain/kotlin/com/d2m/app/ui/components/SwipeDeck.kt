@@ -91,6 +91,8 @@ fun <T : Any> SwipeDeck(
     stampPass: String,
     stampSnooze: String,
     modifier: Modifier = Modifier,
+    /** When set, a right swipe does not commit: the card springs back and this is called instead (the like sheet). */
+    onAcceptGesture: (() -> Unit)? = null,
     card: @Composable (item: T, isTop: Boolean) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -195,7 +197,9 @@ fun <T : Any> SwipeDeck(
                                             else -> null
                                         }
                                         crossed = false
-                                        if (dir != null) flyOff(dir, velocity) else scope.launch {
+                                        val intercepted = dir == SwipeDirection.Accept && onAcceptGesture != null
+                                        if (intercepted) onAcceptGesture?.invoke()
+                                        if (dir != null && !intercepted) flyOff(dir, velocity) else scope.launch {
                                             // Natural spring back, carrying the release velocity so it feels flicked, not snapped.
                                             val spring = spring<Float>(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)
                                             launch(start = CoroutineStart.UNDISPATCHED) { state.offsetX.animateTo(0f, spring, initialVelocity = velocity) }

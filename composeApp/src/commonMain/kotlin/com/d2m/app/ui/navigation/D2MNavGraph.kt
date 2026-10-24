@@ -168,7 +168,7 @@ fun D2MNavGraph(
         }
 
         d2mComposable(Routes.DISCOVERY) {
-            DiscoveryScreen()
+            DiscoveryScreen(onOpenMatches = { navController.navigateToTab(Routes.MATCHES) })
         }
 
         d2mComposable(Routes.MATCHES) {

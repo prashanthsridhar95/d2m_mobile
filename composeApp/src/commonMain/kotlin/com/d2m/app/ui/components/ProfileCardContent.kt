@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +50,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.d2m.app.data.model.AboutMePromptEntry
+import com.d2m.app.data.model.PhotoOut
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.domain.repository.IdentityRepository
@@ -79,6 +82,7 @@ fun ProfileCardContent(
     viewerPrimaryId: String?,
     topInset: Dp,
     bottomClearance: Dp,
+    onLike: (LikeTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalStrings.current.discovery
@@ -87,13 +91,18 @@ fun ProfileCardContent(
     val rating = overallRating(card.scores.compositeScore)
     val firstName = card.candidateName.substringBefore(" ")
 
-    var extraPhotos by remember(card.candidateId) { mutableStateOf<List<String>>(emptyList()) }
+    // Seeded from the repository cache (the deck prefetches these) so a promoted card shows its feed on frame one.
+    var photos by remember(card.candidateId) { mutableStateOf<List<PhotoOut>>(emptyList()) }
+    var prompts by remember(card.candidateId) {
+        mutableStateOf(identityRepo.peekAboutMe(card.candidateId)?.aboutPrompts.orEmpty())
+    }
     LaunchedEffect(card.candidateId, isTop) {
         if (!isTop) return@LaunchedEffect
-        // Cached by the repository (the deck prefetches this for the next cards), so usually instant.
-        val photos = runCatching { identityRepo.getPhotos(card.candidateId) }.getOrDefault(emptyList())
-        extraPhotos = photos.sortedBy { it.sortOrder }.drop(1).map { apiClient.resolveMediaUrl(it.url) }
+        photos = runCatching { identityRepo.getPhotos(card.candidateId) }.getOrDefault(emptyList()).sortedBy { it.sortOrder }
+        prompts = runCatching { identityRepo.getAboutMe(card.candidateId) }.getOrNull()?.aboutPrompts ?: prompts
     }
+    val heroPhotoId = photos.firstOrNull()?.id
+    val feed = remember(photos, prompts) { buildFeed(photos.drop(1), prompts) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().clip(CardShape).background(MaterialTheme.colorScheme.surface)) {
         val heroHeight = maxHeight
@@ -112,7 +121,7 @@ fun ProfileCardContent(
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PersonGlyph(64.dp) }
                 }
-                // Top scrim keeps the status bar + progress segments legible over bright photos.
+                // Top scrim keeps the status bar legible over bright photos.
                 Box(
                     Modifier.fillMaxWidth().height(topInset + 72.dp).align(Alignment.TopCenter)
                         .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.40f), Color.Transparent))),
@@ -132,13 +141,20 @@ fun ProfileCardContent(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val subline = listOfNotNull(card.city, card.occupationTitle).joinToString(" · ")
+                    val subline = listOfNotNull(card.city, card.occupationTitle).joinToString(" \u00B7 ")
                     if (subline.isNotEmpty()) {
                         Text(subline, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                         D2MLevelPill(rating)
                     }
+                }
+                if (isTop) {
+                    LikeHeart(
+                        label = strings.likeThisPhoto,
+                        onClick = { onLike(LikeTarget("photo", heroPhotoId, card.photoUrl)) },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 24.dp),
+                    )
                 }
             }
 
@@ -147,6 +163,7 @@ fun ProfileCardContent(
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    LikeProfilePill(strings.likeProfile) { onLike(LikeTarget("profile")) }
                     CompatibilityCard(
                         level = rating,
                         breakdown = listOf(
@@ -161,25 +178,38 @@ fun ProfileCardContent(
                             card.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
                         }
                     }
+
+                    // Photos and prompt answers interleaved, each with its own heart (web: discover/ProfileFeed.jsx).
+                    feed.forEach { item ->
+                        when (item) {
+                            is FeedItem.Photo -> FeedPhotoBlock(
+                                url = apiClient.resolveMediaUrl(item.photo.url),
+                                name = card.candidateName,
+                                likeLabel = strings.likeThisPhoto,
+                                onLike = { onLike(LikeTarget("photo", item.photo.id, item.photo.url)) },
+                            )
+                            is FeedItem.Prompt -> FeedPromptBlock(
+                                prompt = item.entry.prompt,
+                                answer = item.entry.answer,
+                                likeLabel = strings.likeThisAnswer,
+                                onLike = { onLike(LikeTarget("prompt", item.entry.prompt, prompt = item.entry.prompt, answer = item.entry.answer)) },
+                            )
+                        }
+                    }
+
                     Text(
                         strings.moreAbout(firstName),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 6.dp),
                     )
-                    D2MProfileTabsPanel(candidateId = card.candidateId, modifier = Modifier.fillMaxWidth(), showAboutMe = true, viewerPrimaryId = viewerPrimaryId)
-                    if (extraPhotos.isNotEmpty()) {
-                        Text(strings.morePhotos, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
-                        extraPhotos.forEach { url ->
-                            AsyncImage(
-                                model = url,
-                                imageLoader = rememberPhotoImageLoader(),
-                                contentDescription = card.candidateName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().aspectRatio(4f / 5f).clip(RoundedCornerShape(14.dp)).background(d2m.surfaceSunken),
-                            )
-                        }
-                    }
+                    D2MProfileTabsPanel(
+                        candidateId = card.candidateId,
+                        modifier = Modifier.fillMaxWidth(),
+                        showAboutMe = true,
+                        viewerPrimaryId = viewerPrimaryId,
+                        hideAboutPrompts = true,
+                    )
                     Spacer(Modifier.height(bottomClearance))
                 }
             }
@@ -191,13 +221,124 @@ fun ProfileCardContent(
                     .graphicsLayer { alpha = (scroll.value / (heroPx * 0.6f)).coerceIn(0f, 1f) }
                     .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f), Color.Transparent))),
             )
-            // Keeps the floating action buttons legible once profile text scrolls underneath them; invisible over the hero.
+            // Keeps the floating pass button legible once profile text scrolls underneath it; invisible over the hero.
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomClearance + 28.dp)
                     .graphicsLayer { alpha = (scroll.value / (heroPx * 0.6f)).coerceIn(0f, 1f) }
                     .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)))),
             )
         }
+    }
+}
+
+private sealed interface FeedItem {
+    data class Photo(val photo: PhotoOut) : FeedItem
+    data class Prompt(val entry: AboutMePromptEntry) : FeedItem
+}
+
+/** Prompt, photo, prompt, photo ... with whatever is left of either kind appended (the hero is photo #1). */
+private fun buildFeed(photos: List<PhotoOut>, prompts: List<AboutMePromptEntry>): List<FeedItem> {
+    val out = ArrayList<FeedItem>(photos.size + prompts.size)
+    val ph = photos.iterator()
+    val pr = prompts.iterator()
+    while (ph.hasNext() || pr.hasNext()) {
+        if (pr.hasNext()) out += FeedItem.Prompt(pr.next())
+        if (ph.hasNext()) out += FeedItem.Photo(ph.next())
+    }
+    return out
+}
+
+@Composable
+private fun FeedPhotoBlock(url: String, name: String, likeLabel: String, onLike: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(4f / 5f).clip(RoundedCornerShape(16.dp)).background(d2m.surfaceSunken),
+    ) {
+        AsyncImage(
+            model = url,
+            imageLoader = rememberPhotoImageLoader(),
+            contentDescription = name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        LikeHeart(likeLabel, onLike, Modifier.align(Alignment.BottomEnd).padding(14.dp))
+    }
+}
+
+@Composable
+private fun FeedPromptBlock(prompt: String, answer: String, likeLabel: String, onLike: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(d2m.surfaceSunken),
+    ) {
+        Column(Modifier.padding(start = 20.dp, top = 22.dp, bottom = 26.dp, end = 78.dp)) {
+            Text(prompt, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+            Text(answer, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
+        }
+        LikeHeart(likeLabel, onLike, Modifier.align(Alignment.TopEnd).padding(14.dp))
+    }
+}
+
+/** Per-item like control (photo / prompt), Hinge style: a round white button with an accent heart. */
+@Composable
+fun LikeHeart(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberHaptics()
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .pressScale(interaction)
+            .shadow(8.dp, CircleShape)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.light(); onClick() }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Filled.Favorite,
+            contentDescription = null,
+            tint = d2m.accent,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun LikeProfilePill(label: String, onClick: () -> Unit) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(d2m.accent.copy(alpha = 0.10f))
+            .clickable(role = Role.Button) { haptics.light(); onClick() }
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Filled.Favorite, contentDescription = null, tint = d2m.accent, modifier = Modifier.size(18.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = d2m.accent)
+    }
+}
+
+/** The single floating X: "pass for now" (not a rejection -- the server snoozes it and it comes back later). */
+@Composable
+fun PassFab(label: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberHaptics()
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val ink = d2m.textPrimary
+    Box(
+        modifier = modifier
+            .size(60.dp)
+            .pressScale(interaction)
+            .shadow(10.dp, CircleShape)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button) { haptics.light(); onClick() }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(24.dp)) { drawCross(ink) }
     }
 }
 
@@ -217,94 +358,8 @@ fun SwipeDeckSkeleton(topInset: Dp, bottomClearance: Dp, modifier: Modifier = Mo
     }
 }
 
-/** Slim segmented progress (counter pill when the batch is long) drawn over the hero under the status bar. */
-@Composable
-fun DeckProgress(position: Int, total: Int, modifier: Modifier = Modifier) {
-    if (total <= 0) return
-    if (total <= 12) {
-        Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (i in 1..total) {
-                Box(
-                    Modifier.weight(1f).height(3.dp).clip(CircleShape)
-                        .background(if (i <= position) Color.White else Color.White.copy(alpha = 0.35f)),
-                )
-            }
-        }
-    } else {
-        Box(modifier = modifier.fillMaxWidth()) {
-            Text(
-                LocalStrings.current.discovery.seenOfTotal(position, total),
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-                modifier = Modifier.align(Alignment.Center).clip(CircleShape).background(Color.Black.copy(alpha = 0.35f)).padding(horizontal = 10.dp, vertical = 3.dp),
-            )
-        }
-    }
-}
-
-/** Floating Pass / Snooze / Accept buttons. Full alternative to the gestures; each carries a content description. */
-@Composable
-fun SwipeActionBar(
-    enabled: Boolean,
-    passLabel: String,
-    snoozeLabel: String,
-    acceptLabel: String,
-    onPass: () -> Unit,
-    onSnooze: () -> Unit,
-    onAccept: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val palette = LocalD2MStatusPalette.current
-    val accentOn = d2m.accentOn
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RoundAction(60.dp, passLabel, enabled, MaterialTheme.colorScheme.surface, onPass) { drawCross(palette.danger.fg) }
-        RoundAction(48.dp, snoozeLabel, enabled, MaterialTheme.colorScheme.surface, onSnooze) { drawClock(palette.info.fg) }
-        RoundAction(72.dp, acceptLabel, enabled, d2m.accent, onAccept) { drawCheck(accentOn) }
-    }
-}
-
-@Composable
-private fun RoundAction(
-    size: Dp,
-    label: String,
-    enabled: Boolean,
-    background: Color,
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .shadow(8.dp, CircleShape)
-            .clip(CircleShape)
-            .background(background)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(size * 0.42f)) { icon() }
-    }
-}
-
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCross(color: Color) {
     val w = this.size.width; val sw = w * 0.16f
     drawLine(color, Offset(0f, 0f), Offset(w, w), sw, StrokeCap.Round)
     drawLine(color, Offset(w, 0f), Offset(0f, w), sw, StrokeCap.Round)
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCheck(color: Color) {
-    val w = this.size.width; val sw = w * 0.16f
-    drawLine(color, Offset(0f, w * 0.55f), Offset(w * 0.38f, w * 0.92f), sw, StrokeCap.Round)
-    drawLine(color, Offset(w * 0.38f, w * 0.92f), Offset(w, w * 0.1f), sw, StrokeCap.Round)
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawClock(color: Color) {
-    val w = this.size.width; val sw = w * 0.12f
-    drawCircle(color, radius = w / 2 - sw / 2, style = Stroke(sw))
-    drawLine(color, Offset(w / 2, w / 2), Offset(w / 2, w * 0.24f), sw, StrokeCap.Round)
-    drawLine(color, Offset(w / 2, w / 2), Offset(w * 0.72f, w * 0.6f), sw, StrokeCap.Round)
 }

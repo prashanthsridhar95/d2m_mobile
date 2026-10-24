@@ -110,7 +110,13 @@ data class BrowseCandidateOut(
 
 @Serializable
 data class SuggestionActionRequest(
-    val action: String, // "accept" | "reject" | "snooze"
+    val action: String, // "accept" | "pass" | "snooze" ("reject" is a legacy alias of "pass")
+    /** Optional note sent with an "accept" (a like). */
+    val message: String? = null,
+    val replyToPrompt: String? = null,
+    /** Ties an "accept" to the photo / About-me prompt that was liked: "photo" | "prompt" | "profile". */
+    val likedItemType: String? = null,
+    val likedItemId: String? = null,
 )
 
 /**

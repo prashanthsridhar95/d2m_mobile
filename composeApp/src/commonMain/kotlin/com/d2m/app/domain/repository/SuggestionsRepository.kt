@@ -104,9 +104,26 @@ class SuggestionsRepository(
      * The call is a single POST; for a no-wait UI, advance the deck first and run this in a background scope (see
      * [DelayedActionCommitter] for the undo-able variant).
      */
-    suspend fun act(primaryId: String, candidateId: String, action: String): SuggestionActionResponse {
+    /** "Pass for now": not a rejection -- the server snoozes the profile and it resurfaces. A server that predates the
+     * "pass" action answers 400/422, so fall back to "snooze", which every server version understands (same as web). */
+    private suspend fun passWithFallback(primaryId: String, candidateId: String): SuggestionActionResponse =
+        try {
+            bufferApi.act(primaryId, candidateId, "pass")
+        } catch (e: com.d2m.app.data.network.ApiError) {
+            if (e.status == 400 || e.status == 422) bufferApi.act(primaryId, candidateId, "snooze") else throw e
+        }
+
+    suspend fun act(
+        primaryId: String,
+        candidateId: String,
+        action: String,
+        message: String? = null,
+        likedItemType: String? = null,
+        likedItemId: String? = null,
+    ): SuggestionActionResponse {
         val result = try {
-            bufferApi.act(primaryId, candidateId, action)
+            if (action == "pass") passWithFallback(primaryId, candidateId)
+            else bufferApi.act(primaryId, candidateId, action, message, likedItemType, likedItemId)
         } catch (t: Throwable) {
             cache.softInvalidate("suggestions:$primaryId")
             throw t

@@ -1,5 +1,6 @@
 package com.d2m.app.ui.screens.child
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -11,7 +12,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +28,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
+import com.d2m.app.data.network.ApiError
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.DashboardRepository
@@ -37,9 +38,10 @@ import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
-import com.d2m.app.ui.components.DeckProgress
+import com.d2m.app.ui.components.LikeSheet
+import com.d2m.app.ui.components.LikeTarget
+import com.d2m.app.ui.components.PassFab
 import com.d2m.app.ui.components.ProfileCardContent
-import com.d2m.app.ui.components.SwipeActionBar
 import com.d2m.app.ui.components.SwipeDeck
 import com.d2m.app.ui.components.SwipeDeckSkeleton
 import com.d2m.app.ui.components.SwipeDirection
@@ -50,36 +52,29 @@ import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Window during which a decision can still be undone before it is sent to the server. */
-private const val UNDO_WINDOW_MS = 4_000L
-private val ActionBarBottomPad = 18.dp
-private val BottomClearance = ActionBarBottomPad + 72.dp + 20.dp
+private val FabBottomPad = 18.dp
 
-private class PendingDecision(val card: SuggestionOut, val action: String, var job: Job? = null)
-
-private fun SwipeDirection.wire() = when (this) {
-    SwipeDirection.Accept -> "accept"
-    SwipeDirection.Pass -> "reject"
-    SwipeDirection.Snooze -> "snooze"
-}
+/** Room kept under the hero's name block and at the end of the scroll for the floating pass button. */
+private val BottomClearance = FabBottomPad + 60.dp + 16.dp
 
 /**
- * Child Discover: a Hinge/Bumble-style swipe deck where the ENTIRE profile (hero photo, details, bio/chart tabs) is
- * one card -- see [SwipeDeck] for the gesture/physics contract and [ProfileCardContent] for the card.
+ * Child Discover, Hinge-style (mirrors web's screens/child/DiscoveryScreen.jsx): one profile at a time as a single
+ * card -- hero photo, then photos interleaved with About-me prompt answers, then the detail tabs.
  *
- * Decisions are optimistic: the card leaves immediately and the server call is delayed [UNDO_WINDOW_MS] so an Undo
- * snackbar can cancel it (SuggestionsRepository has no server-side undo). A failed send puts the card back at the top
- * with an error snackbar. A pending decision is flushed (not dropped) if the user leaves the screen.
+ * There is no Accept / Snooze / Pass row. Every photo and every prompt answer has its own heart; tapping it opens a
+ * small sheet for an optional comment and sends the request tied to that exact item (liked_item_type/id). A swipe
+ * right does the same for the profile as a whole (the card springs back and the sheet opens; sending flies it off).
+ * The single floating X -- or a swipe left -- is "pass for now": the server snoozes the profile, it is never
+ * rejected, and it rotates to the back of the queue so it comes round again.
+ *
+ * See [SwipeDeck] for the gesture/physics contract and [ProfileCardContent] for the card.
  */
 @Composable
-fun DiscoveryScreen() {
+fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
     val identityRepo = org.koin.compose.koinInject<IdentityRepository>()
@@ -92,12 +87,15 @@ fun DiscoveryScreen() {
     val deckState = rememberSwipeDeckState()
 
     var queue by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
-    var total by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadTick by remember { mutableStateOf(0) }
     var forceNext by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf<PendingDecision?>(null) }
+
+    var likeTarget by remember { mutableStateOf<LikeTarget?>(null) }
+    var likeBusy by remember { mutableStateOf(false) }
+    var likeError by remember { mutableStateOf<String?>(null) }
+    var matchedId by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
 
@@ -108,8 +106,6 @@ fun DiscoveryScreen() {
         try {
             queue = suggestionsRepo.getSuggestions(primaryId, forceRefresh = forceNext)
             forceNext = false
-            // Seeded once per load so the progress counts down within a stable batch.
-            total = queue.size
         } catch (e: Exception) {
             error = friendlyError(e, strings.errLoadCandidates)
         } finally {
@@ -117,76 +113,57 @@ fun DiscoveryScreen() {
         }
     }
 
-    // Survives scope cancellation so a decision made right before navigating away is still delivered.
+    // A pass is fire-and-forget and must survive leaving the screen right after the swipe.
     val detachedScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
 
-    fun restore(card: SuggestionOut) {
-        if (queue.none { it.candidateId == card.candidateId }) queue = listOf(card) + queue
-    }
-
-    suspend fun send(p: PendingDecision) {
-        val pid = primaryId ?: return
-        runCatching { suggestionsRepo.act(pid, p.card.candidateId, p.action) }.onFailure {
-            restore(p.card)
-            snackbar.currentSnackbarData?.dismiss()
-            scope.launch { snackbar.showSnackbar(strings.actionFailed, duration = SnackbarDuration.Short) }
-        }
-    }
-
-    fun flushPending() {
-        val p = pending ?: return
-        pending = null
-        p.job?.cancel()
-        scope.launch { send(p) }
-    }
-
-    fun undo() {
-        val p = pending ?: return
-        pending = null
-        p.job?.cancel()
+    fun showSnack(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
         snackbar.currentSnackbarData?.dismiss()
-        restore(p.card)
+        scope.launch {
+            val r = snackbar.showSnackbar(message, actionLabel = actionLabel, duration = SnackbarDuration.Short)
+            if (r == SnackbarResult.ActionPerformed) onAction?.invoke()
+        }
     }
 
     fun onDecision(card: SuggestionOut, dir: SwipeDirection) {
-        flushPending()
-        queue = queue.filterNot { it.candidateId == card.candidateId }
-        val p = PendingDecision(card, dir.wire())
-        pending = p
+        val pid = primaryId
         val first = card.candidateName.substringBefore(" ")
-        val msg = when (dir) {
-            SwipeDirection.Accept -> strings.acceptedSnack(first)
-            SwipeDirection.Pass -> strings.passedSnack(first)
-            SwipeDirection.Snooze -> strings.snoozedSnack(first)
-        }
-        snackbar.currentSnackbarData?.dismiss()
-        scope.launch {
-            val r = snackbar.showSnackbar(msg, actionLabel = strings.undo, duration = SnackbarDuration.Indefinite)
-            if (r == SnackbarResult.ActionPerformed && pending === p) undo()
-        }
-        p.job = scope.launch {
-            delay(UNDO_WINDOW_MS)
-            if (pending === p) {
-                pending = null
-                snackbar.currentSnackbarData?.dismiss()
-                send(p)
+        if (dir == SwipeDirection.Accept) {
+            // The request was already sent by the like sheet before the card flew off.
+            queue = queue.filterNot { it.candidateId == card.candidateId }
+            if (matchedId == card.candidateId) {
+                matchedId = null
+                showSnack(strings.matchBanner(first), strings.sayHi, onOpenMatches)
             }
+            return
         }
+        // Pass for now: snoozed server-side, rotated to the back so unmatched profiles keep cycling.
+        queue = queue.filterNot { it.candidateId == card.candidateId } + card
+        if (pid != null) detachedScope.launch { runCatching { suggestionsRepo.act(pid, card.candidateId, "pass") } }
+        showSnack(strings.passedForNow(first))
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            val p = pending
-            val pid = primaryId
-            if (p != null && pid != null) {
-                pending = null
-                detachedScope.launch { runCatching { suggestionsRepo.act(pid, p.card.candidateId, p.action) } }
+    fun sendLike(comment: String?) {
+        val pid = primaryId ?: return
+        val target = likeTarget ?: return
+        val card = queue.firstOrNull() ?: return
+        scope.launch {
+            likeBusy = true
+            likeError = null
+            try {
+                val res = suggestionsRepo.act(pid, card.candidateId, "accept", comment, target.type, target.id)
+                if (res.mutualMatch) matchedId = card.candidateId
+                likeTarget = null
+                deckState.swipe(SwipeDirection.Accept)
+            } catch (e: Exception) {
+                likeError = if (e is ApiError && !e.detail.isNullOrBlank()) e.detail else strings.likeFailed
+            } finally {
+                likeBusy = false
             }
         }
     }
 
     // Warm everything the next cards need so promoting one shows no loading state: tab data (repository-cached),
-    // extra photos, and the hero images beyond the three the stack already composes.
+    // photos and prompts for the feed, and the hero images beyond the three the stack already composes.
     val imageLoader = rememberPhotoImageLoader()
     val platformContext = LocalPlatformContext.current
     val upcomingIds = queue.drop(1).take(4).map { it.candidateId }
@@ -229,7 +206,7 @@ fun DiscoveryScreen() {
                 }
                 queue.isEmpty() -> Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp).padding(top = topInset),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     D2MEmptyState(strings.caughtUpTitle, strings.caughtUpBody)
@@ -249,6 +226,7 @@ fun DiscoveryScreen() {
                         stampPass = strings.stampPass,
                         stampSnooze = strings.stampSnooze,
                         modifier = Modifier.fillMaxSize(),
+                        onAcceptGesture = { likeError = null; likeTarget = LikeTarget("profile") },
                     ) { card, isTop ->
                         ProfileCardContent(
                             card = card,
@@ -256,29 +234,34 @@ fun DiscoveryScreen() {
                             viewerPrimaryId = primaryId,
                             topInset = topInset,
                             bottomClearance = BottomClearance,
+                            onLike = { likeError = null; likeTarget = it },
                         )
                     }
-                    DeckProgress(
-                        position = (total - queue.size + 1).coerceIn(1, maxOf(total, 1)),
-                        total = total,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 10.dp, start = 16.dp, end = 16.dp),
-                    )
-                    SwipeActionBar(
+                    PassFab(
+                        label = strings.passFab,
                         enabled = !deckState.busy,
-                        passLabel = strings.pass,
-                        snoozeLabel = strings.snooze,
-                        acceptLabel = strings.accept,
-                        onPass = { deckState.swipe(SwipeDirection.Pass) },
-                        onSnooze = { deckState.swipe(SwipeDirection.Snooze) },
-                        onAccept = { deckState.swipe(SwipeDirection.Accept) },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = ActionBarBottomPad),
+                        onClick = { deckState.swipe(SwipeDirection.Pass) },
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = FabBottomPad),
                     )
                 }
             }
             SnackbarHost(
                 hostState = snackbar,
-                // Top, under the progress counter: at the bottom it covers the card's name/occupation block.
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 64.dp),
+                // Top: at the bottom it would cover the card's name block.
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 12.dp),
+            )
+        }
+
+        val target = likeTarget
+        val current = queue.firstOrNull()
+        if (target != null && current != null) {
+            LikeSheet(
+                target = target,
+                name = current.candidateName,
+                busy = likeBusy,
+                error = likeError,
+                onCancel = { likeTarget = null },
+                onSend = ::sendLike,
             )
         }
     }

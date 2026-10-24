@@ -114,7 +114,7 @@ import org.koin.compose.koinInject
 // with no ambiguity, while ProfileDetailScreen serves both roles and
 // needs the real check.
 @Composable
-fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null) {
+fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null, hideAboutPrompts: Boolean = false) {
     val strings = LocalStrings.current.sharedComponents
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
@@ -191,7 +191,7 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 if (showAboutMe) {
                     when (tab) {
-                        0 -> AboutMeTab(aboutMe, aboutMeLoaded, bio, ownAboutMe, ownBio?.childrenPreference)
+                        0 -> AboutMeTab(aboutMe, aboutMeLoaded, bio, ownAboutMe, ownBio?.childrenPreference, hideAboutPrompts)
                         1 -> BioDataTab(bio, bioLoaded)
                         else -> ChartTab(chart, chartNotComputed, chartLoaded)
                     }
@@ -290,6 +290,7 @@ private fun AboutMeTab(
     bio: ExtendedBioDataOut? = null,
     ownAboutMe: AboutMeDataOut? = null,
     ownChildrenPreference: String? = null,
+    hidePrompts: Boolean = false,
 ) {
     val strings = LocalStrings.current.sharedComponents
     val locale = LocalAppLocale.current
@@ -297,7 +298,8 @@ private fun AboutMeTab(
         !loaded -> Text(strings.loading, color = mutedText(0.45f))
         aboutMe == null -> Text(strings.noAboutMeYet, color = mutedText(0.45f))
         else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            aboutMe.aboutPrompts.forEach { p -> PromptCard(p.prompt, p.answer) }
+            // The Discover feed already shows (and lets you like) each prompt, so it asks for them to be left out here.
+            if (!hidePrompts) aboutMe.aboutPrompts.forEach { p -> PromptCard(p.prompt, p.answer) }
 
             if (aboutMe.fitnessRoutine != null || aboutMe.sleepSchedule != null || aboutMe.pets != null || aboutMe.socialEnergy != null) {
                 CasualCard {

@@ -26,6 +26,23 @@ interface DiscoveryStrings {
     val checkAgain: String
     val morePhotos: String
     val cdProfileCard: String
+    val passFab: String
+    val likeThisPhoto: String
+    val likeThisAnswer: String
+    val likeProfile: String
+    fun likePhotoTitle(name: String): String
+    fun likePromptTitle(name: String): String
+    fun likeProfileTitle(name: String): String
+    val likePhotoHint: String
+    fun likeProfileHint(name: String): String
+    val commentPlaceholder: String
+    val cancel: String
+    val sendLike: String
+    val sending: String
+    fun passedForNow(name: String): String
+    val likeFailed: String
+    fun matchBanner(name: String): String
+    val sayHi: String
 }
 
 object DiscoveryStringsEn : DiscoveryStrings {
@@ -45,7 +62,7 @@ object DiscoveryStringsEn : DiscoveryStrings {
     override fun acceptedSnack(firstName: String) = "Accepted $firstName"
     override fun snoozedSnack(firstName: String) = "Snoozed $firstName"
     override val actionFailed = "Couldn't save that. The profile is back in your queue."
-    override val stampAccept = "ACCEPT"
+    override val stampAccept = "LIKE"
     override val stampPass = "PASS"
     override val stampSnooze = "SNOOZE"
     override val caughtUpTitle = "You're all caught up"
@@ -53,6 +70,23 @@ object DiscoveryStringsEn : DiscoveryStrings {
     override val checkAgain = "Check again"
     override val morePhotos = "More photos"
     override val cdProfileCard = "Profile card"
+    override val passFab = "Pass for now"
+    override val likeThisPhoto = "Like this photo"
+    override val likeThisAnswer = "Like this answer"
+    override val likeProfile = "Like their profile"
+    override fun likePhotoTitle(name: String) = "Like $name's photo"
+    override fun likePromptTitle(name: String) = "Like $name's answer"
+    override fun likeProfileTitle(name: String) = "Like $name's profile"
+    override val likePhotoHint = "They'll see which photo you liked."
+    override fun likeProfileHint(name: String) = "Send a request to $name."
+    override val commentPlaceholder = "Add a comment (optional)"
+    override val cancel = "Cancel"
+    override val sendLike = "Send like"
+    override val sending = "Sending…"
+    override fun passedForNow(name: String) = "Skipped $name for now. They'll come back later."
+    override val likeFailed = "Couldn't send that. Please try again."
+    override fun matchBanner(name: String) = "It's a match with $name!"
+    override val sayHi = "Say hi"
 }
 
 object DiscoveryStringsHi : DiscoveryStrings {
@@ -80,6 +114,23 @@ object DiscoveryStringsHi : DiscoveryStrings {
     override val checkAgain = "फिर से जाँचें"
     override val morePhotos = "और फ़ोटो"
     override val cdProfileCard = "प्रोफ़ाइल कार्ड"
+    override val passFab = "अभी छोड़ें"
+    override val likeThisPhoto = "यह फ़ोटो पसंद करें"
+    override val likeThisAnswer = "यह जवाब पसंद करें"
+    override val likeProfile = "प्रोफ़ाइल पसंद करें"
+    override fun likePhotoTitle(name: String) = "$name की फ़ोटो पसंद करें"
+    override fun likePromptTitle(name: String) = "$name का जवाब पसंद करें"
+    override fun likeProfileTitle(name: String) = "$name की प्रोफ़ाइल पसंद करें"
+    override val likePhotoHint = "उन्हें दिखेगा कि आपने कौन सी फ़ोटो पसंद की।"
+    override fun likeProfileHint(name: String) = "$name को अनुरोध भेजें।"
+    override val commentPlaceholder = "टिप्पणी जोड़ें (वैकल्पिक)"
+    override val cancel = "रद्द करें"
+    override val sendLike = "पसंद भेजें"
+    override val sending = "भेज रहे हैं…"
+    override fun passedForNow(name: String) = "$name को अभी छोड़ दिया। वे बाद में फिर दिखेंगे।"
+    override val likeFailed = "भेजा नहीं जा सका। कृपया फिर कोशिश करें।"
+    override fun matchBanner(name: String) = "$name के साथ मैच हो गया!"
+    override val sayHi = "नमस्ते कहें"
 }
 
 object DiscoveryStringsTa : DiscoveryStrings {
@@ -107,4 +158,21 @@ object DiscoveryStringsTa : DiscoveryStrings {
     override val checkAgain = "மீண்டும் பார்"
     override val morePhotos = "மேலும் புகைப்படங்கள்"
     override val cdProfileCard = "சுயவிவர அட்டை"
+    override val passFab = "இப்போதைக்கு தவிர்"
+    override val likeThisPhoto = "இந்தப் புகைப்படத்தை விரும்பு"
+    override val likeThisAnswer = "இந்த பதிலை விரும்பு"
+    override val likeProfile = "சுயவிவரத்தை விரும்பு"
+    override fun likePhotoTitle(name: String) = "$name-ன் புகைப்படத்தை விரும்பு"
+    override fun likePromptTitle(name: String) = "$name-ன் பதிலை விரும்பு"
+    override fun likeProfileTitle(name: String) = "$name-ன் சுயவிவரத்தை விரும்பு"
+    override val likePhotoHint = "எந்தப் புகைப்படத்தை விரும்பினீர்கள் என்பதை அவர்கள் பார்ப்பார்கள்."
+    override fun likeProfileHint(name: String) = "$name-க்கு கோரிக்கை அனுப்பு."
+    override val commentPlaceholder = "கருத்து சேர்க்கவும் (விருப்பம்)"
+    override val cancel = "ரத்து செய்"
+    override val sendLike = "விருப்பத்தை அனுப்பு"
+    override val sending = "அனுப்புகிறது…"
+    override fun passedForNow(name: String) = "$name-ஐ இப்போதைக்கு தவிர்த்தீர்கள். அவர்கள் பின்னர் மீண்டும் வருவார்கள்."
+    override val likeFailed = "அனுப்ப முடியவில்லை. மீண்டும் முயலவும்."
+    override fun matchBanner(name: String) = "$name உடன் பொருத்தம்!"
+    override val sayHi = "வணக்கம் சொல்"
 }
