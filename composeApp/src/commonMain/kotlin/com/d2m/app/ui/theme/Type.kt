@@ -110,6 +110,13 @@ fun d2mTypography(display: FontFamily, body: FontFamily) = Typography(
     // items across this app, which are UI chrome rather than names of
     // things. Making every one of them serif would flatten the distinction
     // the display styles above are drawing.
+    headlineSmall = TextStyle(
+        fontFamily = display,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Normal,
+        lineHeight = 29.sp,
+    ),
+    titleSmall = TextStyle(fontFamily = body, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 19.sp),
     titleMedium = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp),
 
     bodyLarge = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 23.sp),
