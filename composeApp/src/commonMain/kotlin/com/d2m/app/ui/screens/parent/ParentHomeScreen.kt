@@ -368,18 +368,16 @@ private enum class NextKind { REVIEW, MESSAGE, PROFILE, CAUGHT_UP }
 
 @Composable
 private fun HomeHeader(title: String, complete: Boolean, strings: ParentHomeStrings, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f)) { PageTitle(title) }
+    // Title gets the full width (it used to wrap to two lines beside the badge); the badge sits under it as a tap
+    // target into the child's profile.
+    Column(Modifier.fillMaxWidth()) {
+        PageTitle(title)
         Box(
             Modifier
-                .heightIn(min = 48.dp)
+                .heightIn(min = 40.dp)
                 .clip(RoundedCornerShape(percent = 50))
                 .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
+            contentAlignment = Alignment.CenterStart,
         ) {
             D2MBadge(
                 if (complete) strings.profileComplete else strings.profileIncomplete,

@@ -1,6 +1,21 @@
 package com.d2m.app.ui.screens.shared
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.ui.text.font.FontWeight
+import com.d2m.app.ui.components.D2MActionButton
+import com.d2m.app.ui.components.D2MActionEmphasis
+import com.d2m.app.ui.components.D2MBadge
+import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.rememberHaptics
+import com.d2m.app.ui.theme.d2m
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -134,101 +149,123 @@ fun ShareLinksScreen() {
 
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle(strings.pageTitle)
-            Text(
-                strings.createIntro,
-                style = MaterialTheme.typography.bodySmall,
-                color = mutedText(0.55f),
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-            )
-
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "header") {
+                Column {
+                    PageTitle(strings.pageTitle)
+                    Text(
+                        strings.createIntro,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = d2m.meta,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
             when {
-                notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
-                loading -> Text(strings.loading, color = mutedText(0.55f))
+                notClaimed -> item(key = "unclaimed") { D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody) }
+                loading -> {
+                    item(key = "sk-create") { D2MSkeleton(height = 190.dp, radius = 14.dp) }
+                    items(2, key = { "sk-$it" }) { D2MSkeleton(height = 130.dp, radius = 14.dp) }
+                }
                 else -> {
-                    D2MSelectField(
-                        label = strings.linksShowLabel,
-                        value = detailLevel,
-                        options = listOf("full", "minimal", "custom"),
-                        onValueChange = { detailLevel = it },
-                        optionLabel = {
-                            when (it) {
-                                "full" -> strings.detailLevelFull
-                                "minimal" -> strings.detailLevelMinimal
-                                else -> strings.detailLevelCustom
-                            }
-                        },
-                    )
-                    if (detailLevel == "custom") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                strings.fieldsSelectedLabel(customFields.trueFieldCount()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = mutedText(0.55f),
-                            )
-                            D2MButton(text = strings.chooseFieldsCta, onClick = { pickerOpen = true })
-                        }
-                    }
-                    D2MButton(
-                        text = if (creating) strings.linksCreating else strings.linksCreateCta,
-                        enabled = !creating && primaryId != null,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
-                        onClick = {
-                            val id = primaryId ?: return@D2MButton
-                            creating = true
-                            error = null
-                            scope.launch {
-                                try {
-                                    shareLinksRepo.createShareLink(
-                                        id, detailLevel,
-                                        customFields = if (detailLevel == "custom") customFields else null,
-                                    )
-                                    links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
-                                } catch (e: Exception) {
-                                    error = friendlyError(e, strings.linksCreateError)
-                                } finally {
-                                    creating = false
-                                }
-                            }
-                        },
-                    )
-
-                    error?.let { D2MErrorBanner(it, modifier = Modifier.padding(bottom = 12.dp)) }
-
-                    if (links.isNullOrEmpty()) {
-                        D2MEmptyState(strings.linksEmptyTitle, strings.linksEmptyBody)
-                    } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            items(links!!) { link ->
-                                ShareLinkRow(
-                                    link = link,
-                                    busy = busyLinkId == link.id,
-                                    onCopy = { clipboard.setText(AnnotatedString(publicShareUrl(apiClient, link.code))) },
-                                    onToggle = {
-                                        val id = primaryId ?: return@ShareLinkRow
-                                        busyLinkId = link.id
-                                        scope.launch {
-                                            runCatching { shareLinksRepo.updateShareLink(id, link.id, isActive = !link.isActive) }
-                                            links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
-                                            busyLinkId = null
+                    item(key = "create") {
+                        D2MCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                D2MSelectField(
+                                    label = strings.linksShowLabel,
+                                    value = detailLevel,
+                                    options = listOf("full", "minimal", "custom"),
+                                    onValueChange = { detailLevel = it },
+                                    optionLabel = {
+                                        when (it) {
+                                            "full" -> strings.detailLevelFull
+                                            "minimal" -> strings.detailLevelMinimal
+                                            else -> strings.detailLevelCustom
                                         }
                                     },
-                                    onExtend = {
-                                        val id = primaryId ?: return@ShareLinkRow
-                                        busyLinkId = link.id
+                                )
+                                if (detailLevel == "custom") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            strings.fieldsSelectedLabel(customFields.trueFieldCount()),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = d2m.meta,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        D2MActionButton(
+                                            strings.chooseFieldsCta,
+                                            onClick = { pickerOpen = true },
+                                            emphasis = D2MActionEmphasis.SECONDARY,
+                                            height = 44.dp,
+                                        )
+                                    }
+                                }
+                                D2MActionButton(
+                                    text = if (creating) strings.linksCreating else strings.linksCreateCta,
+                                    leadingIcon = Icons.Filled.Link,
+                                    loading = creating,
+                                    enabled = primaryId != null,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        val id = primaryId ?: return@D2MActionButton
+                                        creating = true
+                                        error = null
                                         scope.launch {
-                                            runCatching { shareLinksRepo.updateShareLink(id, link.id, extendHours = EXTEND_HOURS) }
-                                            links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
-                                            busyLinkId = null
+                                            try {
+                                                shareLinksRepo.createShareLink(
+                                                    id, detailLevel,
+                                                    customFields = if (detailLevel == "custom") customFields else null,
+                                                )
+                                                links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
+                                            } catch (e: Exception) {
+                                                error = friendlyError(e, strings.linksCreateError)
+                                            } finally {
+                                                creating = false
+                                            }
                                         }
                                     },
                                 )
                             }
+                        }
+                    }
+
+                    error?.let { msg -> item(key = "error") { D2MErrorBanner(msg) } }
+
+                    if (links.isNullOrEmpty()) {
+                        item(key = "empty") { D2MEmptyState(strings.linksEmptyTitle, strings.linksEmptyBody) }
+                    } else {
+                        items(links!!, key = { it.id }) { link ->
+                            ShareLinkRow(
+                                link = link,
+                                busy = busyLinkId == link.id,
+                                onCopy = { clipboard.setText(AnnotatedString(publicShareUrl(apiClient, link.code))) },
+                                onToggle = {
+                                    val id = primaryId ?: return@ShareLinkRow
+                                    busyLinkId = link.id
+                                    scope.launch {
+                                        runCatching { shareLinksRepo.updateShareLink(id, link.id, isActive = !link.isActive) }
+                                        links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
+                                        busyLinkId = null
+                                    }
+                                },
+                                onExtend = {
+                                    val id = primaryId ?: return@ShareLinkRow
+                                    busyLinkId = link.id
+                                    scope.launch {
+                                        runCatching { shareLinksRepo.updateShareLink(id, link.id, extendHours = EXTEND_HOURS) }
+                                        links = shareLinksRepo.listShareLinks(id, forceRefresh = true)
+                                        busyLinkId = null
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -273,43 +310,72 @@ fun ShareLinksScreen() {
 @Composable
 private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, onToggle: () -> Unit, onExtend: () -> Unit) {
     val strings = LocalStrings.current.shareLinks
+    val haptics = rememberHaptics()
     var menuOpen by remember { mutableStateOf(false) }
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) { if (copied) { delay(1800); copied = false } }
+
+    // ISO dates compare correctly as plain strings; a link past its expiry date is not "Active" whatever the flag says.
+    val expired = link.expiresAt.take(10) < kotlin.time.Clock.System.now().toString().take(10)
+    val (statusText, statusTone) = when {
+        !link.isActive -> strings.linkStatusOff to D2MBadgeTone.NEUTRAL
+        expired -> strings.linkStatusExpired to D2MBadgeTone.WARNING
+        else -> strings.linkStatusActive to D2MBadgeTone.SUCCESS
+    }
 
     D2MCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    if (link.isActive) strings.linkStatusActive else strings.linkStatusOff,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (link.isActive) MaterialTheme.colorScheme.primary else mutedText(0.45f),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (busy) Text("…", color = mutedText(0.45f))
-                    IconButton(onClick = { menuOpen = true }) {
+        Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        when (link.detailLevel) {
+                            "full" -> strings.detailLevelFullShort
+                            "minimal" -> strings.detailLevelMinimal
+                            else -> strings.detailLevelCustomCount(link.customFields?.trueFieldCount() ?: 0)
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.bodySmall, color = d2m.meta)
+                    Text(
+                        strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = d2m.meta,
+                    )
+                }
+                D2MBadge(statusText, statusTone)
+                Box {
+                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Filled.MoreVert, contentDescription = strings.linkActions)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(text = { Text(strings.copyLink) }, onClick = { menuOpen = false; onCopy() })
                         DropdownMenuItem(text = { Text(if (link.isActive) strings.turnOff else strings.turnOn) }, onClick = { menuOpen = false; onToggle() })
                         DropdownMenuItem(text = { Text(strings.extendCta) }, onClick = { menuOpen = false; onExtend() })
                     }
                 }
             }
-            Text(
-                when (link.detailLevel) {
-                    "full" -> strings.detailLevelFullShort
-                    "minimal" -> strings.detailLevelMinimal
-                    else -> strings.detailLevelCustomCount(link.customFields?.trueFieldCount() ?: 0)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
-            Text(
-                strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it) } ?: ""),
-                style = MaterialTheme.typography.labelSmall,
-                color = mutedText(0.45f),
-            )
+            Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                D2MActionButton(
+                    text = if (copied) strings.linkCopied else strings.copyLink,
+                    leadingIcon = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                    onClick = { onCopy(); haptics.success(); copied = true },
+                    emphasis = D2MActionEmphasis.SECONDARY,
+                    done = copied,
+                    height = 44.dp,
+                    modifier = Modifier.weight(1f),
+                )
+                if (expired || !link.isActive) {
+                    D2MActionButton(
+                        text = if (expired) strings.extendCta else strings.turnOn,
+                        onClick = if (expired) onExtend else onToggle,
+                        loading = busy,
+                        height = 44.dp,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (busy) {
+                    D2MActionButton(text = "…", onClick = {}, enabled = false, emphasis = D2MActionEmphasis.TERTIARY, height = 44.dp)
+                }
+            }
         }
     }
 }

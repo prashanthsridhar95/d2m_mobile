@@ -1,6 +1,6 @@
 package com.d2m.app.ui.strings
 
-/** ShareLinksScreen.kt -- mirrors d2m_web's "public_share" namespace where concepts overlap (create/manage only; the public landing page itself is a web-only route). */
+/** ShareLinksScreen.kt — mirrors d2m_web's "public_share" namespace where concepts overlap (create/manage only; the public landing page itself is a web-only route). */
 interface ShareLinksStrings {
     val pageTitle: String
     val createIntro: String
@@ -27,6 +27,8 @@ interface ShareLinksStrings {
     val extendCta: String
     val linkStatusActive: String
     val linkStatusOff: String
+    val linkStatusExpired: String
+    val linkCopied: String
     fun detailLevelCustomCount(count: Int): String
     fun linkExpires(date: String): String
     fun linkViewCount(count: Int): String
@@ -67,7 +69,7 @@ interface ShareLinksStrings {
 
 object ShareLinksStringsEn : ShareLinksStrings {
     override val pageTitle = "Share my profile"
-    override val createIntro = "Anyone with the link can view this profile at the level of detail you choose -- they never see the app itself. Turn a link off (and back on) or let it expire at any time; the link itself never changes."
+    override val createIntro = "Anyone with the link can view this profile at the level of detail you choose — they never see the app itself. Turn a link off (and back on) or let it expire at any time; the link itself never changes."
     override val waitingOnChildTitle = "Waiting on your child"
     override val waitingOnChildBody = "Once they claim your invite, you'll be able to share their profile from here."
     override val loading = "Loading…"
@@ -75,7 +77,7 @@ object ShareLinksStringsEn : ShareLinksStrings {
     override val detailLevelFull = "Entire profile (all photos, full bio data, horoscope)"
     override val detailLevelFullShort = "Entire profile"
     override val detailLevelMinimal = "One photo, name, age, basic bio data & horoscope"
-    override val detailLevelCustom = "Custom -- pick exactly which fields"
+    override val detailLevelCustom = "Custom — pick exactly which fields"
     override fun fieldsSelectedLabel(count: Int) = "$count field${if (count == 1) "" else "s"} selected"
     override val chooseFieldsCta = "Choose fields…"
     override val linksCreateCta = "Create link"
@@ -91,6 +93,8 @@ object ShareLinksStringsEn : ShareLinksStrings {
     override val extendCta = "Extend +7 days"
     override val linkStatusActive = "Active"
     override val linkStatusOff = "Turned off"
+    override val linkStatusExpired = "Expired"
+    override val linkCopied = "Copied"
     override fun detailLevelCustomCount(count: Int) = "Custom ($count field${if (count == 1) "" else "s"})"
     override fun linkExpires(date: String) = "Expires $date"
     override fun linkViewCount(count: Int) = "$count view${if (count == 1) "" else "s"}"
@@ -131,7 +135,7 @@ object ShareLinksStringsEn : ShareLinksStrings {
 
 object ShareLinksStringsHi : ShareLinksStrings {
     override val pageTitle = "मेरी प्रोफ़ाइल शेयर करें"
-    override val createIntro = "लिंक वाला कोई भी व्यक्ति इस प्रोफ़ाइल को आपके चुने विवरण स्तर पर देख सकता है -- वे कभी ऐप नहीं देखते। आप किसी भी समय लिंक बंद (और फिर चालू) कर सकते हैं या इसे समाप्त होने दे सकते हैं; लिंक खुद कभी नहीं बदलता।"
+    override val createIntro = "लिंक वाला कोई भी व्यक्ति इस प्रोफ़ाइल को आपके चुने विवरण स्तर पर देख सकता है — वे कभी ऐप नहीं देखते। आप किसी भी समय लिंक बंद (और फिर चालू) कर सकते हैं या इसे समाप्त होने दे सकते हैं; लिंक खुद कभी नहीं बदलता।"
     override val waitingOnChildTitle = "आपके बच्चे की प्रतीक्षा है"
     override val waitingOnChildBody = "एक बार वे आपका इनवाइट स्वीकार कर लें, तो आप यहां से उनकी प्रोफ़ाइल शेयर कर सकेंगे।"
     override val loading = "लोड हो रहा है…"
@@ -139,7 +143,7 @@ object ShareLinksStringsHi : ShareLinksStrings {
     override val detailLevelFull = "पूरी प्रोफ़ाइल (सभी तस्वीरें, पूरा बायो डेटा, कुंडली)"
     override val detailLevelFullShort = "पूरी प्रोफ़ाइल"
     override val detailLevelMinimal = "एक तस्वीर, नाम, आयु, बुनियादी बायो डेटा और कुंडली"
-    override val detailLevelCustom = "कस्टम -- ठीक-ठीक चुनें कि कौन से फ़ील्ड दिखें"
+    override val detailLevelCustom = "कस्टम — ठीक-ठीक चुनें कि कौन से फ़ील्ड दिखें"
     override fun fieldsSelectedLabel(count: Int) = "$count फ़ील्ड चयनित"
     override val chooseFieldsCta = "फ़ील्ड चुनें…"
     override val linksCreateCta = "लिंक बनाएं"
@@ -155,6 +159,8 @@ object ShareLinksStringsHi : ShareLinksStrings {
     override val extendCta = "+7 दिन बढ़ाएं"
     override val linkStatusActive = "सक्रिय"
     override val linkStatusOff = "बंद किया गया"
+    override val linkStatusExpired = "समाप्त"
+    override val linkCopied = "कॉपी हुआ"
     override fun detailLevelCustomCount(count: Int) = "कस्टम ($count फ़ील्ड)"
     override fun linkExpires(date: String) = "$date को समाप्त"
     override fun linkViewCount(count: Int) = "$count बार देखा गया"
@@ -195,7 +201,7 @@ object ShareLinksStringsHi : ShareLinksStrings {
 
 object ShareLinksStringsTa : ShareLinksStrings {
     override val pageTitle = "எனது சுயவிவரத்தைப் பகிரவும்"
-    override val createIntro = "இணைப்பைப் பெறும் எவரும் நீங்கள் தேர்ந்தெடுக்கும் விவர நிலையில் இந்த சுயவிவரத்தைப் பார்க்கலாம் -- அவர்கள் ஆப்பைப் பார்க்க மாட்டார்கள். எந்த நேரத்திலும் இணைப்பை அணைக்கலாம் (மீண்டும் இயக்கலாம்) அல்லது காலாவதியாக விடலாம்; இணைப்பே ஒருபோதும் மாறாது."
+    override val createIntro = "இணைப்பைப் பெறும் எவரும் நீங்கள் தேர்ந்தெடுக்கும் விவர நிலையில் இந்த சுயவிவரத்தைப் பார்க்கலாம் — அவர்கள் ஆப்பைப் பார்க்க மாட்டார்கள். எந்த நேரத்திலும் இணைப்பை அணைக்கலாம் (மீண்டும் இயக்கலாம்) அல்லது காலாவதியாக விடலாம்; இணைப்பே ஒருபோதும் மாறாது."
     override val waitingOnChildTitle = "உங்கள் குழந்தைக்காக காத்திருக்கிறோம்"
     override val waitingOnChildBody = "அவர்கள் உங்கள் அழைப்பை ஏற்றவுடன், இங்கிருந்து அவர்களின் சுயவிவரத்தைப் பகிரலாம்."
     override val loading = "ஏற்றப்படுகிறது…"
@@ -203,7 +209,7 @@ object ShareLinksStringsTa : ShareLinksStrings {
     override val detailLevelFull = "முழு சுயவிவரம் (அனைத்து புகைப்படங்கள், முழு தனிப்பட்ட தகவல், ஜாதகம்)"
     override val detailLevelFullShort = "முழு சுயவிவரம்"
     override val detailLevelMinimal = "ஒரு படம், பெயர், வயது, அடிப்படை தனிப்பட்ட தகவல் & ஜாதகம்"
-    override val detailLevelCustom = "தனிப்பயன் -- எந்தெந்த புலங்கள் என்று சரியாகத் தேர்ந்தெடுக்கவும்"
+    override val detailLevelCustom = "தனிப்பயன் — எந்தெந்த புலங்கள் என்று சரியாகத் தேர்ந்தெடுக்கவும்"
     override fun fieldsSelectedLabel(count: Int) = "$count புலங்கள் தேர்ந்தெடுக்கப்பட்டன"
     override val chooseFieldsCta = "புலங்களைத் தேர்ந்தெடுக்கவும்…"
     override val linksCreateCta = "இணைப்பை உருவாக்கவும்"
@@ -219,6 +225,8 @@ object ShareLinksStringsTa : ShareLinksStrings {
     override val extendCta = "+7 நாட்கள் நீட்டிக்கவும்"
     override val linkStatusActive = "செயலில்"
     override val linkStatusOff = "அணைக்கப்பட்டது"
+    override val linkStatusExpired = "காலாவதியானது"
+    override val linkCopied = "நகலெடுக்கப்பட்டது"
     override fun detailLevelCustomCount(count: Int) = "தனிப்பயன் ($count புலங்கள்)"
     override fun linkExpires(date: String) = "$date அன்று காலாவதியாகும்"
     override fun linkViewCount(count: Int) = "$count முறை பார்க்கப்பட்டது"

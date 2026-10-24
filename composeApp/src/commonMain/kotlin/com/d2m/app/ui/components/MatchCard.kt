@@ -115,7 +115,7 @@ fun MatchCard(
         MatchCardVariant.FEATURE, MatchCardVariant.TILE -> PhotoOverlayCard(
             suggestion = suggestion,
             photo = photo,
-            ratio = if (variant == MatchCardVariant.FEATURE) 4f / 5f else 3f / 4f,
+            ratio = if (variant == MatchCardVariant.FEATURE) 1f else 3f / 4f,
             large = variant == MatchCardVariant.FEATURE,
             onClick = onClick,
             isShortlisted = isShortlisted,
