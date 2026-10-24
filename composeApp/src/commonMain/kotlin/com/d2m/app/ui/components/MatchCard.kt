@@ -8,6 +8,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,7 +78,16 @@ import com.d2m.app.ui.theme.d2m
  * suggestion list, which is a different reading task from scanning many
  * candidates at once).
  */
-enum class MatchCardVariant { DETAILED, COMPACT }
+enum class MatchCardVariant {
+    DETAILED,
+    COMPACT,
+
+    /** Big portrait photo card for horizontally paged carousels (parent Home): name/age/place over a scrim, heart on the photo. */
+    FEATURE,
+
+    /** Photo-forward grid tile (parent Browse, two across): same overlay treatment as FEATURE at a smaller scale. */
+    TILE,
+}
 
 @Composable
 fun MatchCard(
@@ -81,6 +111,18 @@ fun MatchCard(
     ).joinToString(" · ")
 
     when (variant) {
+        MatchCardVariant.FEATURE, MatchCardVariant.TILE -> PhotoOverlayCard(
+            suggestion = suggestion,
+            photo = photo,
+            ratio = if (variant == MatchCardVariant.FEATURE) 4f / 5f else 3f / 4f,
+            large = variant == MatchCardVariant.FEATURE,
+            onClick = onClick,
+            isShortlisted = isShortlisted,
+            onToggleShortlist = onToggleShortlist,
+            tag = tag,
+            modifier = modifier,
+        )
+
         MatchCardVariant.DETAILED -> D2MCard(modifier) {
             Column(Modifier.clickable(onClick = onClick)) {
                 ProfilePhoto(
@@ -322,6 +364,157 @@ fun UnavailableMatchCard(name: String, modifier: Modifier = Modifier, photoUrl: 
                     Modifier.padding(top = 3.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Shared body of the FEATURE and TILE variants: full-bleed portrait photo,
+ * a bottom scrim carrying name/age/place, the compatibility pill top-left
+ * and the shortlist heart top-right. One composable so the carousel card
+ * and the grid tile can never drift apart. Fixed aspect ratio, so a photo
+ * arriving late (or never) cannot change the item's size.
+ */
+@Composable
+private fun PhotoOverlayCard(
+    suggestion: SuggestionOut,
+    photo: String?,
+    ratio: Float,
+    large: Boolean,
+    onClick: () -> Unit,
+    isShortlisted: Boolean,
+    onToggleShortlist: (() -> Unit)?,
+    tag: String?,
+    modifier: Modifier = Modifier,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val shape = RoundedCornerShape(if (large) 20.dp else 14.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = animateFloatAsState(if (pressed) 0.97f else 1f, label = "card-press")
+    val level = remember(suggestion.compositeScore) { suggestion.compositeScore?.takeIf { it > 0.0 }?.let { overallRating(it) } }
+    val place = suggestion.nativity ?: suggestion.city
+    val title = suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: "")
+
+    Box(
+        modifier
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+            .clip(shape)
+            .border(1.dp, d2m.border, shape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), onClick = onClick),
+    ) {
+        ProfilePhoto(
+            photoUrl = photo,
+            contentDescription = strings.photographOf(suggestion.candidateName),
+            ratio = ratio,
+            caption = if (photo == null && large) strings.noPhotographOnFile else null,
+            glyphSize = if (large) 56.dp else 40.dp,
+        )
+        // scrim + text
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC1A120C))))
+                .padding(start = if (large) 16.dp else 10.dp, end = if (large) 16.dp else 10.dp, top = 36.dp, bottom = if (large) 14.dp else 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (suggestion.isVerified) VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
+            }
+            if (place != null) {
+                Text(
+                    place,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (large) {
+                val work = suggestion.occupationTitle
+                if (work != null) {
+                    Text(
+                        work,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.align(Alignment.TopStart).padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (tag != null) D2MBadge(tag, D2MBadgeTone.GOLD)
+            if (level != null) D2MLevelPill(level)
+        }
+        if (onToggleShortlist != null) {
+            ShortlistHeart(
+                shortlisted = isShortlisted,
+                onToggle = onToggleShortlist,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+    }
+}
+
+/**
+ * Heart toggle for photo cards: 48dp touch target around a 36dp round
+ * chip, a short haptic tick and a springy pop on every toggle. The caller
+ * owns the (optimistic) state; this only reports the tap.
+ */
+@Composable
+fun ShortlistHeart(
+    shortlisted: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val haptic = LocalHapticFeedback.current
+    val pop = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    Box(
+        modifier
+            .size(48.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggle()
+                    scope.launch {
+                        pop.animateTo(1.3f, tween(90))
+                        pop.animateTo(1f, spring(dampingRatio = 0.4f))
+                    }
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
+                .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(percent = 50)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (shortlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
+                tint = if (shortlisted) d2m.accent else Color(0xFF4A3A2C),
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

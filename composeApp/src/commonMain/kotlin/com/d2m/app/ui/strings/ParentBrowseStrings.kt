@@ -25,6 +25,11 @@ interface ParentBrowseStrings {
     val noProfilesYetTitle: String
     val noProfilesMatchingBody: String
     val noProfilesAllBody: String
+    val moreOptions: String
+    val searchById: String
+    val clearAllFilters: String
+    val loadMore: String
+
     val waitingOnChildTitle: String
     val waitingOnChildBody: String
 }
@@ -55,6 +60,10 @@ object ParentBrowseStringsEn : ParentBrowseStrings {
     override val noProfilesAllBody = "There are no active profiles in the pool right now."
     override val waitingOnChildTitle = "Waiting on your child"
     override val waitingOnChildBody = "Once they claim your invite, you'll be able to browse matches for them here."
+    override val moreOptions = "More options"
+    override val searchById = "Search by profile ID"
+    override val clearAllFilters = "Clear all"
+    override val loadMore = "Loading more…"
 }
 
 object ParentBrowseStringsHi : ParentBrowseStrings {
@@ -83,6 +92,10 @@ object ParentBrowseStringsHi : ParentBrowseStrings {
     override val noProfilesAllBody = "अभी पूल में कोई सक्रिय प्रोफ़ाइल नहीं है।"
     override val waitingOnChildTitle = "आपके बच्चे की प्रतीक्षा है"
     override val waitingOnChildBody = "एक बार वे आपका इनवाइट स्वीकार कर लें, तो आप यहां से उनके लिए मैच ब्राउज़ कर सकेंगे।"
+    override val moreOptions = "और विकल्प"
+    override val searchById = "प्रोफ़ाइल आईडी से खोजें"
+    override val clearAllFilters = "सब हटाएं"
+    override val loadMore = "और लोड हो रहा है…"
 }
 
 object ParentBrowseStringsTa : ParentBrowseStrings {
@@ -111,4 +124,8 @@ object ParentBrowseStringsTa : ParentBrowseStrings {
     override val noProfilesAllBody = "இப்போது குளத்தில் செயலில் உள்ள சுயவிவரங்கள் இல்லை."
     override val waitingOnChildTitle = "உங்கள் குழந்தைக்காக காத்திருக்கிறோம்"
     override val waitingOnChildBody = "அவர்கள் உங்கள் அழைப்பை ஏற்றவுடன், இங்கிருந்து அவர்களுக்கான பொருத்தங்களை உலாவலாம்."
+    override val moreOptions = "மேலும் விருப்பங்கள்"
+    override val searchById = "சுயவிவர ஐடி மூலம் தேடுங்கள்"
+    override val clearAllFilters = "அனைத்தையும் அழி"
+    override val loadMore = "மேலும் ஏற்றப்படுகிறது…"
 }
