@@ -1,25 +1,17 @@
 package com.d2m.app.ui.screens.child
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,104 +19,96 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.DashboardRepository
+import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
-import com.d2m.app.ui.components.CompatibilityCard
-import com.d2m.app.ui.components.CompatibilityCardSize
-import com.d2m.app.ui.components.D2MBadge
-import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
-import com.d2m.app.ui.components.D2MProfileTabsPanel
+import com.d2m.app.ui.components.DeckProgress
+import com.d2m.app.ui.components.ProfileCardContent
+import com.d2m.app.ui.components.SwipeActionBar
+import com.d2m.app.ui.components.SwipeDeck
+import com.d2m.app.ui.components.SwipeDeckSkeleton
+import com.d2m.app.ui.components.SwipeDirection
 import com.d2m.app.ui.components.rememberPhotoImageLoader
-import com.d2m.app.ui.components.astrologicalCompatibility
-import com.d2m.app.ui.components.overallRating
-import com.d2m.app.ui.components.preferenceCompatibility
-import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.rememberSwipeDeckState
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
-import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
-import com.d2m.app.ui.theme.mutedText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** Window during which a decision can still be undone before it is sent to the server. */
+private const val UNDO_WINDOW_MS = 4_000L
+private val ActionBarBottomPad = 18.dp
+private val BottomClearance = ActionBarBottomPad + 72.dp + 20.dp
+
+private class PendingDecision(val card: SuggestionOut, val action: String, var job: Job? = null)
+
+private fun SwipeDirection.wire() = when (this) {
+    SwipeDirection.Accept -> "accept"
+    SwipeDirection.Pass -> "reject"
+    SwipeDirection.Snooze -> "snooze"
+}
+
 /**
- * Mirrors screens/child/DiscoveryScreen.jsx -- one-candidate-at-a-time
- * browser. The web version is explicitly "dating-site style" in framing but
- * button-driven (click Accept/Snooze/Pass); this is the one screen the plan
- * flagged as worth genuinely upgrading rather than 1:1 porting (§4/§8) --
- * real drag-to-decide gestures here (drag right = accept, left = pass, tap
- * buttons still work too), a natural fit for Compose that the web DOM
- * version never had. Auto-advances on action, no going back (Pass keeps
- * the same "no undo, no backing up" behavior as web -- the delayed-commit
- * Undo window is a smaller follow-up, not included in this first cut).
+ * Child Discover: a Hinge/Bumble-style swipe deck where the ENTIRE profile (hero photo, details, bio/chart tabs) is
+ * one card -- see [SwipeDeck] for the gesture/physics contract and [ProfileCardContent] for the card.
  *
- * Visual pass (UX audit fix -- "web to mobile translation is very poor...
- * compare it to the UI & UX in web, it's just day & night", with screenshots
- * of this exact screen showing a flat placeholder photo and sparse layout):
- * this used to be a single flat AsyncImage on a solid mutedText background
- * with no rating/compatibility signal anywhere on the card -- everything
- * web shows (LevelPill overall rating, astro/preference compatibility
- * pills, dosha flag chips, the "X of Y" progress line) was silently
- * dropped even though SuggestionOut already carries the scores needed to
- * compute all of it (see Compatibility.kt, a direct port of lib/
- * compatibility.js). Restoring those closes the actual "day and night"
- * gap -- it isn't a skin/polish issue, it's that most of the card's real
- * content was never wired up on this platform.
- *
- * Full-profile layout fix ("stack the bio data/chart view below the
- * current card & place the buttons below the stack -- no need to have a
- * separate view for full profile"): "View full profile" used to navigate
- * away to ProfileDetailScreen entirely, mirroring web's pre-rework
- * behavior before "Both in detail page & in the child's discover page,
- * let's have 2 panes" landed there (see DiscoveryScreen.jsx's own
- * docstring on that change). This now embeds the same Bio data/Chart
- * detail (D2MProfileTabsPanel, shared with ProfileDetailScreen so the two
- * can't drift) directly on the page, stacked below the photo card, with
- * the decision buttons moved below that stack instead of sitting directly
- * under the photo -- no separate screen, no onOpenProfile navigation out
- * of this screen at all anymore.
+ * Decisions are optimistic: the card leaves immediately and the server call is delayed [UNDO_WINDOW_MS] so an Undo
+ * snackbar can cancel it (SuggestionsRepository has no server-side undo). A failed send puts the card back at the top
+ * with an error snackbar. A pending decision is flushed (not dropped) if the user leaves the screen.
  */
 @Composable
 fun DiscoveryScreen() {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
+    val identityRepo = org.koin.compose.koinInject<IdentityRepository>()
+    val dashboardRepo = org.koin.compose.koinInject<DashboardRepository>()
     val apiClient = org.koin.compose.koinInject<ApiClient>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val strings = LocalStrings.current.discovery
+    val snackbar = remember { SnackbarHostState() }
+    val deckState = rememberSwipeDeckState()
 
     var queue by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
     var total by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var actionInFlight by remember { mutableStateOf(false) }
+    var reloadTick by remember { mutableStateOf(0) }
+    var forceNext by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<PendingDecision?>(null) }
 
     val primaryId = identity.primaryId
-    val strings = LocalStrings.current.discovery
 
-    LaunchedEffect(primaryId) {
+    LaunchedEffect(primaryId, reloadTick) {
         if (primaryId == null) return@LaunchedEffect
         loading = true
         error = null
         try {
-            queue = suggestionsRepo.getSuggestions(primaryId)
-            // Seeded once per load, same as web's totalSeededForRef -- "X of
-            // Y" should count down within a stable batch, not re-inflate
-            // toward the current queue size on every optimistic mutation.
+            queue = suggestionsRepo.getSuggestions(primaryId, forceRefresh = forceNext)
+            forceNext = false
+            // Seeded once per load so the progress counts down within a stable batch.
             total = queue.size
         } catch (e: Exception) {
             error = friendlyError(e, strings.errLoadCandidates)
@@ -133,150 +117,168 @@ fun DiscoveryScreen() {
         }
     }
 
-    fun act(action: String) {
+    // Survives scope cancellation so a decision made right before navigating away is still delivered.
+    val detachedScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+
+    fun restore(card: SuggestionOut) {
+        if (queue.none { it.candidateId == card.candidateId }) queue = listOf(card) + queue
+    }
+
+    suspend fun send(p: PendingDecision) {
         val pid = primaryId ?: return
-        val current = queue.firstOrNull() ?: return
-        if (actionInFlight) return
+        runCatching { suggestionsRepo.act(pid, p.card.candidateId, p.action) }.onFailure {
+            restore(p.card)
+            snackbar.currentSnackbarData?.dismiss()
+            scope.launch { snackbar.showSnackbar(strings.actionFailed, duration = SnackbarDuration.Short) }
+        }
+    }
+
+    fun flushPending() {
+        val p = pending ?: return
+        pending = null
+        p.job?.cancel()
+        scope.launch { send(p) }
+    }
+
+    fun undo() {
+        val p = pending ?: return
+        pending = null
+        p.job?.cancel()
+        snackbar.currentSnackbarData?.dismiss()
+        restore(p.card)
+    }
+
+    fun onDecision(card: SuggestionOut, dir: SwipeDirection) {
+        flushPending()
+        queue = queue.filterNot { it.candidateId == card.candidateId }
+        val p = PendingDecision(card, dir.wire())
+        pending = p
+        val first = card.candidateName.substringBefore(" ")
+        val msg = when (dir) {
+            SwipeDirection.Accept -> strings.acceptedSnack(first)
+            SwipeDirection.Pass -> strings.passedSnack(first)
+            SwipeDirection.Snooze -> strings.snoozedSnack(first)
+        }
+        snackbar.currentSnackbarData?.dismiss()
         scope.launch {
-            actionInFlight = true
-            runCatching { suggestionsRepo.act(pid, current.candidateId, action) }
-            queue = queue.drop(1)
-            actionInFlight = false
+            val r = snackbar.showSnackbar(msg, actionLabel = strings.undo, duration = SnackbarDuration.Indefinite)
+            if (r == SnackbarResult.ActionPerformed && pending === p) undo()
+        }
+        p.job = scope.launch {
+            delay(UNDO_WINDOW_MS)
+            if (pending === p) {
+                pending = null
+                snackbar.currentSnackbarData?.dismiss()
+                send(p)
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val p = pending
+            val pid = primaryId
+            if (p != null && pid != null) {
+                pending = null
+                detachedScope.launch { runCatching { suggestionsRepo.act(pid, p.card.candidateId, p.action) } }
+            }
+        }
+    }
+
+    // Warm everything the next cards need so promoting one shows no loading state: tab data (repository-cached),
+    // extra photos, and the hero images beyond the three the stack already composes.
+    val imageLoader = rememberPhotoImageLoader()
+    val platformContext = LocalPlatformContext.current
+    val upcomingIds = queue.drop(1).take(4).map { it.candidateId }
+    LaunchedEffect(upcomingIds) {
+        val upcoming = queue.drop(1).take(4)
+        upcoming.drop(2).forEach { c ->
+            c.photoUrl?.let { imageLoader.enqueue(ImageRequest.Builder(platformContext).data(apiClient.resolveMediaUrl(it)).build()) }
+        }
+        coroutineScope {
+            upcoming.take(2).forEach { c ->
+                launch { runCatching { identityRepo.getExtendedBio(c.candidateId) } }
+                launch { runCatching { identityRepo.getAboutMe(c.candidateId) } }
+                launch { runCatching { identityRepo.getPhotos(c.candidateId) } }
+                launch { runCatching { dashboardRepo.getChart(c.candidateId) } }
+            }
         }
     }
 
     D2MTheme(flow = D2MFlow.CHILD) {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        val density = LocalDensity.current
+        val topInsetPx = WindowInsets.statusBars.getTop(density)
+        val topInset = with(density) { topInsetPx.toDp() }
+
+        // The Scaffold above pads content below the status bar; grow upward by exactly that inset so the hero photo
+        // runs edge-to-edge underneath it. Layout height reported to the parent is unchanged.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .layout { measurable, c ->
+                    val extra = if (c.hasBoundedHeight) topInsetPx else 0
+                    val h = if (c.hasBoundedHeight) c.maxHeight + extra else c.maxHeight
+                    val p = measurable.measure(c.copy(minHeight = if (c.hasBoundedHeight) h else 0, maxHeight = h))
+                    layout(p.width, p.height - extra) { p.place(0, -extra) }
+                },
+        ) {
             when {
-                loading -> Text(strings.loading, color = mutedText(0.55f))
-                error != null -> D2MErrorBanner(error!!)
-                queue.isEmpty() -> D2MEmptyState(strings.noMoreCandidatesTitle, strings.noMoreCandidatesBody)
+                loading && queue.isEmpty() -> SwipeDeckSkeleton(topInset, BottomClearance)
+                error != null && queue.isEmpty() -> Column(Modifier.padding(16.dp).padding(top = topInset)) {
+                    D2MErrorBanner(error!!, onRetry = { reloadTick++ })
+                }
+                queue.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp).padding(top = topInset),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    D2MEmptyState(strings.caughtUpTitle, strings.caughtUpBody)
+                    D2MButton(
+                        strings.checkAgain,
+                        variant = D2MButtonVariant.OUTLINE,
+                        onClick = { forceNext = true; reloadTick++ },
+                    )
+                }
                 else -> {
-                    val current = queue.first()
-                    val seen = total - queue.size
-                    val offsetX = remember(current.candidateId) { Animatable(0f) }
-                    val rating = overallRating(current.scores.compositeScore)
-                    val astroLevel = astrologicalCompatibility(current.scores)
-                    val prefLevel = preferenceCompatibility(current.scores)
-
-                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        if (total > 0) {
-                            Text(
-                                strings.seenOfTotal(seen + 1, total),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = mutedText(0.45f),
-                                modifier = Modifier.padding(bottom = 10.dp),
-                            )
-                        }
-
-                        D2MCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(0.82f)
-                                .graphicsLayer { translationX = offsetX.value; rotationZ = offsetX.value / 40f }
-                                .pointerInput(current.candidateId) {
-                                    detectDragGestures(
-                                        onDragEnd = {
-                                            scope.launch {
-                                                when {
-                                                    offsetX.value > 220f -> { act("accept") }
-                                                    offsetX.value < -220f -> { act("reject") }
-                                                    else -> offsetX.animateTo(0f)
-                                                }
-                                            }
-                                        },
-                                    ) { change, dragAmount ->
-                                        change.consume()
-                                        scope.launch { offsetX.snapTo(offsetX.value + dragAmount.x) }
-                                    }
-                                },
-                        ) {
-                            Column(modifier = Modifier.fillMaxSize().padding(bottom = 4.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(topStart = D2MRadius.lg, topEnd = D2MRadius.lg))
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors = listOf(mutedText(0.12f), mutedText(0.22f)),
-                                            ),
-                                        ),
-                                ) {
-                                    AsyncImage(
-                                        model = current.photoUrl?.let(apiClient::resolveMediaUrl),
-                                        imageLoader = rememberPhotoImageLoader(),
-                                        contentDescription = current.candidateName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                }
-
-                                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                    // Compatibility used to sit inline beside
-                                    // the name (a D2MLevelPill in this same
-                                    // Row) with Astrology/Preferences as two
-                                    // plain "Astrology: High" text badges
-                                    // below -- web has never put
-                                    // Compatibility beside the name on its
-                                    // child view (only the parent's card
-                                    // moved there, and only on web, where
-                                    // there's room beside the name at all).
-                                    // CompatibilityCard on its own row below
-                                    // brings this in line with that, and
-                                    // replaces the plain-text badges with the
-                                    // same big-word treatment the parent's
-                                    // card uses.
-                                    Text(
-                                        "${current.candidateName}${current.age?.let { ", $it" } ?: ""}",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                    val subline = listOfNotNull(current.city, current.occupationTitle).joinToString(" · ")
-                                    if (subline.isNotEmpty()) {
-                                        Text(subline, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
-                                    }
-
-                                    if (current.doshaFlags.isNotEmpty()) {
-                                        LazyRow(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.padding(top = 12.dp),
-                                        ) {
-                                            items(current.doshaFlags) { flag ->
-                                                D2MBadge(flag, D2MBadgeTone.WARNING)
-                                            }
-                                        }
-                                    }
-
-                                    CompatibilityCard(
-                                        level = rating,
-                                        breakdown = listOf(strings.astrology to astroLevel, strings.preferences to prefLevel),
-                                        size = CompatibilityCardSize.Small,
-                                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            strings.moreAbout(current.candidateName.substringBefore(" ")),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 20.dp, bottom = 10.dp),
+                    SwipeDeck(
+                        items = queue,
+                        itemKey = { it.candidateId },
+                        state = deckState,
+                        onDecision = ::onDecision,
+                        stampAccept = strings.stampAccept,
+                        stampPass = strings.stampPass,
+                        stampSnooze = strings.stampSnooze,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { card, isTop ->
+                        ProfileCardContent(
+                            card = card,
+                            isTop = isTop,
+                            viewerPrimaryId = primaryId,
+                            topInset = topInset,
+                            bottomClearance = BottomClearance,
                         )
-                        D2MProfileTabsPanel(candidateId = current.candidateId, modifier = Modifier.fillMaxWidth(), showAboutMe = true, viewerPrimaryId = primaryId)
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            D2MButton(strings.pass, variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("reject") }, modifier = Modifier.weight(1f))
-                            D2MButton(strings.snooze, variant = D2MButtonVariant.OUTLINE, enabled = !actionInFlight, onClick = { act("snooze") }, modifier = Modifier.weight(1f))
-                            D2MButton(strings.accept, enabled = !actionInFlight, onClick = { act("accept") }, modifier = Modifier.weight(1f))
-                        }
                     }
+                    DeckProgress(
+                        position = (total - queue.size + 1).coerceIn(1, maxOf(total, 1)),
+                        total = total,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 10.dp, start = 16.dp, end = 16.dp),
+                    )
+                    SwipeActionBar(
+                        enabled = !deckState.busy,
+                        passLabel = strings.pass,
+                        snoozeLabel = strings.snooze,
+                        acceptLabel = strings.accept,
+                        onPass = { deckState.swipe(SwipeDirection.Pass) },
+                        onSnooze = { deckState.swipe(SwipeDirection.Snooze) },
+                        onAccept = { deckState.swipe(SwipeDirection.Accept) },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = ActionBarBottomPad),
+                    )
                 }
             }
+            SnackbarHost(
+                hostState = snackbar,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = BottomClearance),
+            )
         }
     }
 }
