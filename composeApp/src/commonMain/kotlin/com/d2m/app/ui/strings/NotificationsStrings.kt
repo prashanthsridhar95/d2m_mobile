@@ -20,6 +20,10 @@ interface NotificationsStrings {
     val typeShareLinkViewed: String
     val typeMutualSponsorInterest: String
     val typeShortlistedProfileUpdated: String
+    val groupToday: String
+    val groupYesterday: String
+    val markAllError: String
+    val unreadLabel: String
 }
 
 object NotificationsStringsEn : NotificationsStrings {
@@ -41,6 +45,10 @@ object NotificationsStringsEn : NotificationsStrings {
     override val typeShareLinkViewed = "Your shared profile was viewed"
     override val typeMutualSponsorInterest = "You've now both been suggested to each other"
     override val typeShortlistedProfileUpdated = "Someone on your shortlist updated their profile"
+    override val groupToday = "Today"
+    override val groupYesterday = "Yesterday"
+    override val markAllError = "Couldn't mark everything as read."
+    override val unreadLabel = "Unread"
 }
 
 object NotificationsStringsHi : NotificationsStrings {
@@ -62,6 +70,10 @@ object NotificationsStringsHi : NotificationsStrings {
     override val typeShareLinkViewed = "आपकी शेयर की गई प्रोफ़ाइल देखी गई"
     override val typeMutualSponsorInterest = "अब आप दोनों एक-दूसरे को सुझाए गए हैं"
     override val typeShortlistedProfileUpdated = "आपकी शॉर्टलिस्ट में किसी ने अपनी प्रोफ़ाइल अपडेट की"
+    override val groupToday = "आज"
+    override val groupYesterday = "कल"
+    override val markAllError = "सभी को पढ़ा हुआ चिह्नित नहीं किया जा सका।"
+    override val unreadLabel = "अपठित"
 }
 
 object NotificationsStringsTa : NotificationsStrings {
@@ -83,4 +95,8 @@ object NotificationsStringsTa : NotificationsStrings {
     override val typeShareLinkViewed = "உங்கள் பகிரப்பட்ட சுயவிவரம் பார்க்கப்பட்டது"
     override val typeMutualSponsorInterest = "இப்போது நீங்கள் இருவரும் ஒருவருக்கொருவர் பரிந்துரைக்கப்பட்டுள்ளீர்கள்"
     override val typeShortlistedProfileUpdated = "உங்கள் ஷார்ட்லிஸ்ட்டில் உள்ள ஒருவர் தங்கள் சுயவிவரத்தைப் புதுப்பித்தார்"
+    override val groupToday = "இன்று"
+    override val groupYesterday = "நேற்று"
+    override val markAllError = "அனைத்தையும் படித்ததாகக் குறிக்க முடியவில்லை."
+    override val unreadLabel = "படிக்காதது"
 }

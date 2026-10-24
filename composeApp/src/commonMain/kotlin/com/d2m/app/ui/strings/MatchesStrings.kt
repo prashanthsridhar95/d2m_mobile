@@ -55,6 +55,9 @@ interface MatchesStrings {
     val statusSeriousExploration: String
     val statusSunsetting: String
     val statusClosed: String
+    val youPrefix: String
+    fun unreadDesc(count: Int): String
+    val sayHi: String
 }
 
 object MatchesStringsEn : MatchesStrings {
@@ -111,6 +114,9 @@ object MatchesStringsEn : MatchesStrings {
     override val statusSeriousExploration = "Serious exploration"
     override val statusSunsetting = "Sunsetting"
     override val statusClosed = "Closed"
+    override val youPrefix = "You: "
+    override fun unreadDesc(count: Int) = "$count unread"
+    override val sayHi = "Say hi 👋"
 }
 
 object MatchesStringsHi : MatchesStrings {
@@ -167,6 +173,9 @@ object MatchesStringsHi : MatchesStrings {
     override val statusSeriousExploration = "सीरियस एक्सप्लोरेशन"
     override val statusSunsetting = "समाप्त हो रहा है"
     override val statusClosed = "बंद"
+    override val youPrefix = "आप: "
+    override fun unreadDesc(count: Int) = "$count अपठित"
+    override val sayHi = "नमस्ते कहें 👋"
 }
 
 object MatchesStringsTa : MatchesStrings {
@@ -223,4 +232,7 @@ object MatchesStringsTa : MatchesStrings {
     override val statusSeriousExploration = "சீரியஸ் ஆய்வு"
     override val statusSunsetting = "முடிவடைகிறது"
     override val statusClosed = "மூடப்பட்டது"
+    override val youPrefix = "நீங்கள்: "
+    override fun unreadDesc(count: Int) = "$count படிக்காதவை"
+    override val sayHi = "வணக்கம் சொல்லுங்கள் 👋"
 }

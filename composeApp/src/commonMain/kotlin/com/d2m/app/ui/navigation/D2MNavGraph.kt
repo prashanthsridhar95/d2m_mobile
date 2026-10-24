@@ -1,6 +1,22 @@
 package com.d2m.app.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavDeepLink
+import androidx.navigation.NavGraphBuilder
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -31,6 +47,10 @@ import com.d2m.app.ui.screens.shared.SettingsScreen
 import com.d2m.app.ui.screens.shared.ShareLinksScreen
 import com.d2m.app.ui.screens.shared.TrustScreen
 
+private const val PUSH_MS = 300
+private const val PUSH_FADE_MS = 160
+private val PushEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
 /**
  * Root NavHost -- mirrors src/App.jsx's route tree (Routes.kt). Bottom-tab
  * chrome per role (parent: Dashboard/Search/Sharing/Settings; child:
@@ -40,10 +60,45 @@ import com.d2m.app.ui.screens.shared.TrustScreen
  * that chrome; this graph only owns route -> screen wiring.
  */
 @Composable
-fun D2MNavGraph(navController: NavHostController = rememberNavController(), startDestination: String = Routes.LOGIN) {
-    NavHost(navController = navController, startDestination = startDestination) {
+fun D2MNavGraph(
+    navController: NavHostController = rememberNavController(),
+    startDestination: String = Routes.LOGIN,
+    /** Routes currently shown as bottom tabs for this role; tab<->tab hops crossfade instead of sliding. */
+    tabRoutes: Set<String> = emptySet(),
+    modifier: Modifier = Modifier,
+) {
+    // Transition rules (read lazily at transition time, so they follow role changes):
+    //  - tab <-> tab, or into/out of Login: short crossfade (no spatial relationship)
+    //  - everything else: iOS-style push -- new screen slides in from the right
+    //    while the old one drifts left at ~30% speed (parallax); pop reverses it.
+    fun AnimatedContentTransitionScope<NavBackStackEntry>.isFade(): Boolean {
+        val from = initialState.destination.route
+        val to = targetState.destination.route
+        return (from in tabRoutes && to in tabRoutes) || from == Routes.LOGIN || to == Routes.LOGIN
+    }
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        enterTransition = {
+            if (isFade()) fadeIn(tween(PUSH_FADE_MS, delayMillis = 40))
+            else slideInHorizontally(tween(PUSH_MS, easing = PushEasing)) { it } + fadeIn(tween(PUSH_MS / 2))
+        },
+        exitTransition = {
+            if (isFade()) fadeOut(tween(PUSH_FADE_MS))
+            else slideOutHorizontally(tween(PUSH_MS, easing = PushEasing)) { -(it * 3) / 10 } + fadeOut(tween(PUSH_MS, easing = PushEasing), targetAlpha = 0.6f)
+        },
+        popEnterTransition = {
+            if (isFade()) fadeIn(tween(PUSH_FADE_MS, delayMillis = 40))
+            else slideInHorizontally(tween(PUSH_MS, easing = PushEasing)) { -(it * 3) / 10 } + fadeIn(tween(PUSH_MS, easing = PushEasing), initialAlpha = 0.6f)
+        },
+        popExitTransition = {
+            if (isFade()) fadeOut(tween(PUSH_FADE_MS))
+            else slideOutHorizontally(tween(PUSH_MS, easing = PushEasing)) { it } + fadeOut(tween(PUSH_MS / 2, delayMillis = PUSH_MS / 2))
+        },
+    ) {
 
-        composable(Routes.LOGIN) {
+        d2mComposable(Routes.LOGIN) {
             LoginScreen(
                 onLoginAsParent = { navController.navigate(Routes.PARENT_HOME) { popUpTo(Routes.LOGIN) { inclusive = true } } },
                 onLoginAsChild = { navController.navigate(Routes.CHILD_HOME) { popUpTo(Routes.LOGIN) { inclusive = true } } },
@@ -51,26 +106,26 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             )
         }
 
-        composable(Routes.ROLE_PICKER) {
+        d2mComposable(Routes.ROLE_PICKER) {
             RolePickerScreen(
                 onPickParent = { navController.navigate(Routes.ONBOARDING_WIZARD) },
                 onPickChild = { navController.navigate(Routes.claim("")) },
             )
         }
 
-        composable(Routes.ONBOARDING_WIZARD) {
+        d2mComposable(Routes.ONBOARDING_WIZARD) {
             OnboardingWizardScreen(
                 onComplete = { navController.navigate(Routes.HANDOFF) },
             )
         }
 
-        composable(Routes.HANDOFF) {
+        d2mComposable(Routes.HANDOFF) {
             HandoffScreen(
                 onBrowseProfiles = { navController.navigate(Routes.PARENT_HOME) { popUpTo(Routes.LOGIN) { inclusive = true } } },
             )
         }
 
-        composable(
+        d2mComposable(
             route = Routes.CLAIM,
             arguments = listOf(navArgument(Routes.CLAIM_ARG_TOKEN) { type = NavType.StringType; defaultValue = "" }),
             deepLinks = listOf(
@@ -85,7 +140,7 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             )
         }
 
-        composable(Routes.PARENT_HOME) {
+        d2mComposable(Routes.PARENT_HOME) {
             ParentHomeScreen(
                 onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
                 onOpenChildProfileDialog = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
@@ -93,36 +148,37 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             )
         }
 
-        composable(Routes.PARENT_BROWSE) {
+        d2mComposable(Routes.PARENT_BROWSE) {
             ParentBrowseScreen(onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) })
         }
 
-        composable(Routes.PARENT_MESSAGES) {
+        d2mComposable(Routes.PARENT_MESSAGES) {
             ParentMessagesScreen()
         }
 
-        composable(Routes.CHILD_HOME) {
+        d2mComposable(Routes.CHILD_HOME) {
             ChildHomeScreen(
                 onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
-                onOpenDiscover = { navController.navigate(Routes.DISCOVERY) },
-                onOpenMatches = { navController.navigate(Routes.MATCHES) },
+                onOpenDiscover = { navController.navigateToTab(Routes.DISCOVERY) },
+                onOpenMatches = { navController.navigateToTab(Routes.MATCHES) },
+                onOpenNotifications = { navController.navigateToTab(Routes.NOTIFICATIONS) },
                 onOpenChildProfileDialog = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
 
-        composable(Routes.DISCOVERY) {
+        d2mComposable(Routes.DISCOVERY) {
             DiscoveryScreen()
         }
 
-        composable(Routes.MATCHES) {
+        d2mComposable(Routes.MATCHES) {
             MatchesScreen(
                 onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
                 onOpenGallery = { navController.navigate(Routes.SUCCESS_GALLERY) },
             )
         }
 
-        composable(
+        d2mComposable(
             route = Routes.PROFILE_DETAIL,
             arguments = listOf(navArgument(Routes.PROFILE_ARG_CANDIDATE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
@@ -138,15 +194,15 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             )
         }
 
-        composable(Routes.NOTIFICATIONS) { NotificationsScreen() }
+        d2mComposable(Routes.NOTIFICATIONS) { NotificationsScreen() }
 
-        composable(Routes.SHARE_LINKS) { ShareLinksScreen() }
+        d2mComposable(Routes.SHARE_LINKS) { ShareLinksScreen() }
 
-        composable(Routes.TRUST) { TrustScreen() }
+        d2mComposable(Routes.TRUST) { TrustScreen() }
 
-        composable(Routes.IDENTITY_VERIFICATION) { IdentityVerificationScreen(onBack = { navController.popBackStack() }) }
+        d2mComposable(Routes.IDENTITY_VERIFICATION) { IdentityVerificationScreen(onBack = { navController.popBackStack() }) }
 
-        composable(Routes.SETTINGS) {
+        d2mComposable(Routes.SETTINGS) {
             SettingsScreen(
                 onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
                 onOpenShareLinks = { navController.navigate(Routes.SHARE_LINKS) },
@@ -166,15 +222,15 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
             )
         }
 
-        composable(Routes.CHILD_PROFILE_DIALOG) {
+        d2mComposable(Routes.CHILD_PROFILE_DIALOG) {
             ChildProfileDialogScreen(onClose = { navController.popBackStack() })
         }
 
-        composable(Routes.SUCCESS_GALLERY) { SuccessGalleryScreen() }
-        composable(Routes.ADMIN_GALLERY_MODERATION) { AdminGalleryModerationScreen() }
-        composable(Routes.PANCHANGAM_CALENDAR) { PanchangamCalendarScreen() }
+        d2mComposable(Routes.SUCCESS_GALLERY) { SuccessGalleryScreen() }
+        d2mComposable(Routes.ADMIN_GALLERY_MODERATION) { AdminGalleryModerationScreen() }
+        d2mComposable(Routes.PANCHANGAM_CALENDAR) { PanchangamCalendarScreen() }
 
-        composable(
+        d2mComposable(
             route = Routes.PROFILE_LINK,
             arguments = listOf(navArgument(Routes.PROFILE_LINK_ARG_CODE) { type = NavType.StringType; defaultValue = "" }),
             deepLinks = listOf(
@@ -188,5 +244,21 @@ fun D2MNavGraph(navController: NavHostController = rememberNavController(), star
                 onReachOut = { navController.navigate(Routes.LOGIN) { popUpTo(0) } },
             )
         }
+    }
+}
+
+/**
+ * Every destination gets an opaque page-ground behind it: during push/pop the
+ * outgoing and incoming screens overlap, and screens draw no background of
+ * their own, so without this the old screen would show through the new one.
+ */
+private fun NavGraphBuilder.d2mComposable(
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    deepLinks: List<NavDeepLink> = emptyList(),
+    content: @Composable (NavBackStackEntry) -> Unit,
+) {
+    composable(route = route, arguments = arguments, deepLinks = deepLinks) { entry ->
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { content(entry) }
     }
 }
