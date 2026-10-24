@@ -5,9 +5,12 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,9 +49,8 @@ enum class SwipeDirection { Accept, Pass, Snooze }
 
 /**
  * Hinge/Bumble-style card stack. The whole card (whatever [card] draws) is one unit that translates + rotates; a
- * horizontal drag decides, a vertical drag is left to the card's own scroll container (the standard Compose axis lock:
- * `draggable(Horizontal)` only claims a pointer once horizontal travel passes touch slop, and a child's `verticalScroll`
- * consumes first when the vertical travel wins, so the two never fight).
+ * horizontal drag decides, a vertical drag is left to the card's own scroll container (see [horizontalSwipe] for the
+ * explicit axis lock).
  *
  * Perf contract: nothing here reads the drag Animatables during composition. They are only read inside
  * `graphicsLayer {}` / `drawWithContent {}` lambdas, so a drag recomposes nothing.
@@ -137,7 +139,7 @@ fun <T : Any> SwipeDeck(
         state.swiper = { dir -> flyOff(dir, 0f) }
 
         var crossed by remember { mutableStateOf(false) }
-        val draggable = rememberDraggableState { delta ->
+        val onDrag: (Float) -> Unit = { delta ->
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val next = state.offsetX.value + delta
                 state.offsetX.snapTo(next)
@@ -180,12 +182,11 @@ fun <T : Any> SwipeDeck(
                         }
                         .then(
                             if (isTop) {
-                                Modifier.draggable(
-                                    state = draggable,
-                                    orientation = Orientation.Horizontal,
+                                Modifier.horizontalSwipe(
                                     enabled = !state.busy,
-                                    onDragStarted = { crossed = false },
-                                    onDragStopped = { velocity ->
+                                    onStart = { crossed = false },
+                                    onDelta = { delta -> onDrag(delta) },
+                                    onStop = { velocity ->
                                         val (w, _) = size
                                         val x = state.offsetX.value
                                         val dir = when {
@@ -245,4 +246,54 @@ private fun androidx.compose.foundation.layout.BoxScope.Stamp(
             .border(3.dp, color, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 4.dp),
     )
+}
+
+/**
+ * Horizontal swipe with an explicit axis lock, decided in the Initial pass (before the card's inner `verticalScroll`
+ * sees the event). `draggable` around a scroll container loses to the scroller whenever the finger drifts a few points
+ * vertically before horizontally, which real thumbs always do; here the first axis past touch slop wins, with a bias
+ * toward horizontal, and a vertical gesture is never consumed so the profile scrolls normally.
+ */
+private fun Modifier.horizontalSwipe(
+    enabled: Boolean,
+    onStart: () -> Unit,
+    onDelta: (Float) -> Unit,
+    onStop: (velocityX: Float) -> Unit,
+): Modifier = if (!enabled) this else pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val slop = viewConfiguration.touchSlop
+        val tracker = VelocityTracker()
+        tracker.addPosition(down.uptimeMillis, down.position)
+        var totalX = 0f
+        var totalY = 0f
+        var locked = false
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) {
+                if (locked) onStop(tracker.calculateVelocity().x)
+                break
+            }
+            tracker.addPosition(change.uptimeMillis, change.position)
+            val d = change.positionChange()
+            if (!locked) {
+                totalX += d.x
+                totalY += d.y
+                val ax = abs(totalX)
+                val ay = abs(totalY)
+                if (ax > slop || ay > slop) {
+                    if (ax >= ay * 0.6f) {
+                        locked = true
+                        onStart()
+                        change.consume()
+                        onDelta(totalX)
+                    } else break // vertical: leave it to the profile's scroll
+                }
+            } else {
+                change.consume()
+                onDelta(d.x)
+            }
+        }
+    }
 }

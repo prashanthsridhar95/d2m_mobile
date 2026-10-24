@@ -40,6 +40,9 @@ internal fun photoAuthHttpClient(identityStore: IdentityStore): HttpClient =
             val identity = identityStore.identity.value
             val userId = if (identity.role == D2MRole.PARENT) identity.sponsorId else identity.primaryId
             if (userId != null) header("X-D2M-User-Id", userId)
+            // The photo route authenticates the session (get_current_user), same as every other endpoint --
+            // without the bearer token every photo request is rejected and cards show no photo at all.
+            identity.wedlockAccessToken?.let { header("Authorization", "Bearer $it") }
         }
     }
 

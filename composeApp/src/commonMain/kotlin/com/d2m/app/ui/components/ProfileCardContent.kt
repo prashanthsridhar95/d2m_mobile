@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -96,7 +97,9 @@ fun ProfileCardContent(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().clip(CardShape).background(MaterialTheme.colorScheme.surface)) {
         val heroHeight = maxHeight
-        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = isTop)) {
+        val scroll = rememberScrollState()
+        val heroPx = with(androidx.compose.ui.platform.LocalDensity.current) { heroHeight.toPx() }
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll, enabled = isTop)) {
             Box(modifier = Modifier.fillMaxWidth().height(heroHeight).background(d2m.surfaceSunken)) {
                 if (card.photoUrl != null) {
                     AsyncImage(
@@ -180,6 +183,20 @@ fun ProfileCardContent(
                     Spacer(Modifier.height(bottomClearance))
                 }
             }
+        }
+        if (isTop) {
+            // Keeps the clock/status icons legible once profile text scrolls up underneath them; invisible over the hero.
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().height(topInset + 16.dp)
+                    .graphicsLayer { alpha = (scroll.value / (heroPx * 0.6f)).coerceIn(0f, 1f) }
+                    .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f), Color.Transparent))),
+            )
+            // Keeps the floating action buttons legible once profile text scrolls underneath them; invisible over the hero.
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottomClearance + 28.dp)
+                    .graphicsLayer { alpha = (scroll.value / (heroPx * 0.6f)).coerceIn(0f, 1f) }
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)))),
+            )
         }
     }
 }

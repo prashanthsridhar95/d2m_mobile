@@ -60,6 +60,7 @@ struct ContentView: View {
             // state -- the "app only fills ~60% of the screen" sizing issue
             // needs a different root cause than this.
             .ignoresSafeArea(.keyboard)
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
             // Paint the status-bar and home-indicator bands with the page
             // ground (Color.kt PageBg, 0xFAF6ED) so they don't show as a
             // white strip above and below the cream content.

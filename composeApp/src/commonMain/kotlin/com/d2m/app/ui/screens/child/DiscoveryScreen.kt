@@ -277,7 +277,8 @@ fun DiscoveryScreen() {
             }
             SnackbarHost(
                 hostState = snackbar,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = BottomClearance),
+                // Top, under the progress counter: at the bottom it covers the card's name/occupation block.
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 64.dp),
             )
         }
     }
