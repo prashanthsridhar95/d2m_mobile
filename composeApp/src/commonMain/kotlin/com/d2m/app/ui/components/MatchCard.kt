@@ -481,6 +481,8 @@ fun ShortlistHeart(
     shortlisted: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** No white chip behind the icon -- for use on a plain surface (table rows) instead of over a photo. */
+    flat: Boolean = false,
 ) {
     val strings = LocalStrings.current.sharedComponents
     val haptic = LocalHapticFeedback.current
@@ -503,18 +505,31 @@ fun ShortlistHeart(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        // A small status badge, not a button-sized disc: 28dp chip, 16dp bookmark. The tap target stays 48dp (above).
+        // On a photo: shortlisted = white chip + accent filled bookmark; not shortlisted = dark scrim + white outline.
+        // `flat` (table rows on a plain surface) drops the chip entirely.
+        val chip = when {
+            flat -> Color.Transparent
+            shortlisted -> Color.White.copy(alpha = 0.95f)
+            else -> Color.Black.copy(alpha = 0.32f)
+        }
+        val tint = when {
+            shortlisted -> d2m.accent
+            flat -> Color(0xFF4A3A2C)
+            else -> Color.White
+        }
         Box(
             Modifier
-                .size(36.dp)
+                .size(if (flat) 36.dp else 28.dp)
                 .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
-                .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(percent = 50)),
+                .background(chip, RoundedCornerShape(percent = 50)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                 contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
-                tint = if (shortlisted) d2m.accent else Color(0xFF4A3A2C),
-                modifier = Modifier.size(20.dp),
+                tint = tint,
+                modifier = Modifier.size(if (flat) 20.dp else 16.dp),
             )
         }
     }

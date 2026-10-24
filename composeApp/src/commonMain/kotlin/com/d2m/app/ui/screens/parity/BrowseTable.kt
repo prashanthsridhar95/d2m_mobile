@@ -57,11 +57,12 @@ import com.d2m.app.ui.theme.d2m
  * header to sort; tap again to reverse.
  */
 private enum class Col(val width: Dp, val numeric: Boolean = false) {
-    MATCH(112.dp), CITY(128.dp), JOB(168.dp), AGE(64.dp, true), HEIGHT(84.dp, true),
+    MATCH(144.dp), CITY(128.dp), JOB(168.dp), AGE(64.dp, true), HEIGHT(84.dp, true),
     GOTHRAM(128.dp), SECT(116.dp), STAR(132.dp),
 }
 
-private val FROZEN_WIDTH = 204.dp
+private val FROZEN_WIDTH = 148.dp
+private val SAVE_COL_WIDTH = 56.dp
 private val ROW_HEIGHT = 56.dp
 private val HEADER_HEIGHT = 44.dp
 
@@ -152,6 +153,8 @@ fun BrowseTable(
                 ascDesc = strings.sortedAscending to strings.sortedDescending,
             )
             Row(Modifier.horizontalScroll(scroll)) {
+                // matches the bookmark column in the rows below
+                Box(Modifier.width(SAVE_COL_WIDTH))
                 dataCols.forEach { c ->
                     HeaderCell(
                         label = headerLabels.getValue(c), width = c.width, active = sortKey == c.sortKey(),
@@ -190,18 +193,13 @@ fun BrowseTable(
                                         fontWeight = FontWeight.SemiBold, color = d2m.textPrimary,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     )
-                                    val sub = listOfNotNull(s.age?.toString(), s.shortId).joinToString(" · ")
-                                    if (sub.isNotEmpty()) {
-                                        Text(
-                                            sub, style = MaterialTheme.typography.bodySmall, color = d2m.meta,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
                                 }
-                                ShortlistHeart(shortlisted = shortlisted, onToggle = { onToggleShortlist(s, !shortlisted) })
                             }
                             // scrolling data columns (same ScrollState as the header)
                             Row(Modifier.horizontalScroll(scroll).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.width(SAVE_COL_WIDTH), contentAlignment = Alignment.Center) {
+                                    ShortlistHeart(shortlisted = shortlisted, onToggle = { onToggleShortlist(s, !shortlisted) }, flat = true)
+                                }
                                 dataCols.forEach { c ->
                                     Box(Modifier.width(c.width).padding(horizontal = 10.dp), contentAlignment = if (c.numeric) Alignment.CenterEnd else Alignment.CenterStart) {
                                         when (c) {

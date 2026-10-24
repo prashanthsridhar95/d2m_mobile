@@ -353,20 +353,23 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                     Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.bodySmall, color = d2m.meta)
                     Row(
                         modifier = Modifier
-                            .heightIn(min = 36.dp)
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                             .clickable(enabled = link.viewCount > 0, role = androidx.compose.ui.semantics.Role.Button, onClick = onSeeViewers),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.Visibility, contentDescription = null, tint = d2m.meta, modifier = Modifier.size(16.dp))
-                        Text(
-                            strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = d2m.meta,
-                        )
-                        if (link.viewCount > 0) {
-                            Text(strings.seeViewers, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = d2m.accent)
+                        Icon(Icons.Filled.Visibility, contentDescription = null, tint = d2m.meta, modifier = Modifier.size(18.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = d2m.meta,
+                            )
+                            if (link.viewCount > 0) {
+                                Text(strings.seeViewers, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = d2m.accent)
+                            }
                         }
                     }
                 }
@@ -482,17 +485,16 @@ private fun ViewerRow(v: ShareLinkViewerOut, last: Boolean) {
                 Text(name.first().uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    D2MBadge(
-                        if (verified) strings.viewerVerified else strings.viewerNotVerified,
-                        if (verified) D2MBadgeTone.SUCCESS else D2MBadgeTone.NEUTRAL,
-                    )
-                }
+                Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Text(
                     if (v.isAnonymous) (v.phone ?: strings.viewerNoPhone) else strings.viewerMember,
                     style = MaterialTheme.typography.bodyMedium,
                     color = d2m.meta,
+                )
+                D2MBadge(
+                    if (verified) strings.viewerVerified else strings.viewerNotVerified,
+                    if (verified) D2MBadgeTone.SUCCESS else D2MBadgeTone.NEUTRAL,
+                    modifier = Modifier.padding(vertical = 2.dp),
                 )
                 Text(
                     strings.viewerFirstLast(v.firstViewedAt.take(10), v.lastViewedAt.take(10)),

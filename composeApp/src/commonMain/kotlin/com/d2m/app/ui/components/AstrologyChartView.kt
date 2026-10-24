@@ -247,9 +247,9 @@ private fun drawChartGrid(
             drawLine(pal.line, Offset(3 * cell, i * cell), Offset(4 * cell, i * cell), thin)
         }
 
-        val signStyle = TextStyle(fontSize = 9.sp, color = pal.muted)
-        val planetStyle = TextStyle(fontSize = 13.sp, color = pal.ink, fontWeight = FontWeight.Bold)
-        val lagnaStyle = TextStyle(fontSize = 13.sp, color = pal.lagnaInk, fontWeight = FontWeight.Bold)
+        val signStyle = TextStyle(fontSize = 10.sp, color = pal.muted)
+        val planetStyle = TextStyle(fontSize = 16.sp, color = pal.ink, fontWeight = FontWeight.Bold)
+        val lagnaStyle = TextStyle(fontSize = 16.sp, color = pal.lagnaInk, fontWeight = FontWeight.Bold)
         val gap = 6.dp.toPx()
 
         for (index in 0..15) {
@@ -278,7 +278,7 @@ private fun drawChartGrid(
         }
 
         // Centre: the caption lines (or just the chart title), centred as a block.
-        val centerStyle = TextStyle(fontSize = 11.sp, color = pal.ink, textAlign = TextAlign.Center)
+        val centerStyle = TextStyle(fontSize = 13.sp, color = pal.ink, textAlign = TextAlign.Center)
         val maxW = (cell * 2 - 2 * pad).toInt().coerceAtLeast(1)
         val results = (centerLines.ifEmpty { listOf(centerLabel) }).map {
             textMeasurer.measure(it, centerStyle, constraints = androidx.compose.ui.unit.Constraints(maxWidth = maxW))
