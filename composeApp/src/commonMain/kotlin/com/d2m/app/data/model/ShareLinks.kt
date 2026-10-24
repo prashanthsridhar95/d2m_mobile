@@ -75,6 +75,22 @@ data class ShareLinkOut(
     val lastViewedAt: String? = null,
 )
 
+/** Mirrors app/schemas.py's ShareLinkViewerOut -- one entry per real visitor to a link (not per visit). */
+@Serializable
+data class ShareLinkViewerOut(
+    val name: String? = null,
+    val isAnonymous: Boolean = false,
+    val viewerPrimaryId: String? = null,
+    /** Only set for an anonymous, lead-captured visitor. */
+    val phone: String? = null,
+    /** "authenticated_account" | "self_declared_unverified" -- a typed name/phone is a lead label, not a verified identity. */
+    val identityAssurance: String = "self_declared_unverified",
+    val contactVerified: Boolean = false,
+    val visitCount: Int = 1,
+    val firstViewedAt: String = "",
+    val lastViewedAt: String = "",
+)
+
 /** Mirrors app/schemas.py's ShareLinkUpdateIn -- optional-field partial update. */
 @Serializable
 data class ShareLinkUpdateIn(

@@ -3,6 +3,7 @@ package com.d2m.app.domain.repository
 import com.d2m.app.data.cache.ApiCache
 import com.d2m.app.data.model.CustomFieldSelection
 import com.d2m.app.data.model.ShareLinkOut
+import com.d2m.app.data.model.ShareLinkViewerOut
 import com.d2m.app.data.network.ShareLinksApi
 
 class ShareLinksRepository(
@@ -31,4 +32,7 @@ class ShareLinksRepository(
         cache.invalidateKey("share-links:$primaryId")
         return r
     }
+
+    /** Not cached: who has looked is exactly the thing that changes between two opens of the sheet. */
+    suspend fun listViewers(primaryId: String, linkId: String): List<ShareLinkViewerOut> = api.listViewers(primaryId, linkId)
 }

@@ -1,6 +1,13 @@
 package com.d2m.app.ui.screens.shared
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.ui.draw.clip
+import com.d2m.app.data.model.ShareLinkViewerOut
+import com.d2m.app.ui.components.D2MDivider
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
@@ -109,6 +116,7 @@ fun ShareLinksScreen() {
     var pickerOpen by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var busyLinkId by remember { mutableStateOf<String?>(null) }
+    var viewersLink by remember { mutableStateOf<ShareLinkOut?>(null) }
 
     // Child role already has its own primary_id directly on identity. The
     // parent role's linked child id lives under childPrimaryId instead --
@@ -247,6 +255,7 @@ fun ShareLinksScreen() {
                                 link = link,
                                 busy = busyLinkId == link.id,
                                 onCopy = { clipboard.setText(AnnotatedString(publicShareUrl(apiClient, link.code))) },
+                                onSeeViewers = { viewersLink = link },
                                 onToggle = {
                                     val id = primaryId ?: return@ShareLinkRow
                                     busyLinkId = link.id
@@ -304,11 +313,16 @@ fun ShareLinksScreen() {
         }
     }
 
+    viewersLink?.let { link ->
+        val pid = primaryId
+        if (pid != null) ViewersSheet(primaryId = pid, link = link, onDismiss = { viewersLink = null })
+    }
+
     LaunchedEffect(customFields) { fieldsCache.save(customFields) }
 }
 
 @Composable
-private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, onToggle: () -> Unit, onExtend: () -> Unit) {
+private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, onSeeViewers: () -> Unit, onToggle: () -> Unit, onExtend: () -> Unit) {
     val strings = LocalStrings.current.shareLinks
     val haptics = rememberHaptics()
     var menuOpen by remember { mutableStateOf(false) }
@@ -337,11 +351,24 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                         fontWeight = FontWeight.Bold,
                     )
                     Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.bodySmall, color = d2m.meta)
-                    Text(
-                        strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = d2m.meta,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .heightIn(min = 36.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .clickable(enabled = link.viewCount > 0, role = androidx.compose.ui.semantics.Role.Button, onClick = onSeeViewers),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Filled.Visibility, contentDescription = null, tint = d2m.meta, modifier = Modifier.size(16.dp))
+                        Text(
+                            strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = d2m.meta,
+                        )
+                        if (link.viewCount > 0) {
+                            Text(strings.seeViewers, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = d2m.accent)
+                        }
+                    }
                 }
                 D2MBadge(statusText, statusTone)
                 Box {
@@ -377,6 +404,105 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                 }
             }
         }
+    }
+}
+
+/**
+ * "List of users accessed the link should be able to be seen by the creator of the link" (web: ViewersModal in
+ * ShareLinksScreen.jsx). One entry per real visitor, grouped server-side, not one per visit.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ViewersSheet(primaryId: String, link: ShareLinkOut, onDismiss: () -> Unit) {
+    val strings = LocalStrings.current.shareLinks
+    val repo: ShareLinksRepository = koinInject()
+    var viewers by remember(link.id) { mutableStateOf<List<ShareLinkViewerOut>?>(null) }
+    var error by remember(link.id) { mutableStateOf<String?>(null) }
+    var tick by remember(link.id) { mutableStateOf(0) }
+
+    LaunchedEffect(link.id, tick) {
+        viewers = null
+        error = null
+        try {
+            viewers = repo.listViewers(primaryId, link.id)
+        } catch (e: Exception) {
+            error = friendlyError(e, strings.viewersLoadError)
+        }
+    }
+
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = d2m.textPrimary,
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Text(strings.viewersTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                strings.linkViewCount(link.viewCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = d2m.meta,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+            )
+            val list = viewers
+            when {
+                error != null -> D2MErrorBanner(error!!, onRetry = { tick++ })
+                list == null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(3) { D2MSkeleton(height = 72.dp, radius = 12.dp) }
+                }
+                list.isEmpty() -> D2MEmptyState(strings.viewersEmpty, "")
+                else -> LazyColumn(
+                    modifier = Modifier.heightIn(max = 480.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    items(list.size, key = { list[it].viewerPrimaryId ?: "${list[it].name}-${list[it].phone}-$it" }) { i ->
+                        ViewerRow(list[i], last = i == list.lastIndex)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewerRow(v: ShareLinkViewerOut, last: Boolean) {
+    val strings = LocalStrings.current.shareLinks
+    val name = v.name?.takeIf { it.isNotBlank() } ?: strings.viewerUnknown
+    val verified = v.identityAssurance == "authenticated_account"
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(d2m.accentSoft),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(name.first().uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    D2MBadge(
+                        if (verified) strings.viewerVerified else strings.viewerNotVerified,
+                        if (verified) D2MBadgeTone.SUCCESS else D2MBadgeTone.NEUTRAL,
+                    )
+                }
+                Text(
+                    if (v.isAnonymous) (v.phone ?: strings.viewerNoPhone) else strings.viewerMember,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = d2m.meta,
+                )
+                Text(
+                    strings.viewerFirstLast(v.firstViewedAt.take(10), v.lastViewedAt.take(10)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = d2m.meta,
+                )
+            }
+            Text(strings.viewerVisits(v.visitCount), style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+        }
+        if (!last) D2MDivider()
     }
 }
 

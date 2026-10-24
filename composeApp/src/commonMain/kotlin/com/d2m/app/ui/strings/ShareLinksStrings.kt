@@ -29,6 +29,18 @@ interface ShareLinksStrings {
     val linkStatusOff: String
     val linkStatusExpired: String
     val linkCopied: String
+    val seeViewers: String
+    val viewersTitle: String
+    val viewersEmpty: String
+    val viewersLoadError: String
+    val viewerUnknown: String
+    val viewerMember: String
+    val viewerNoPhone: String
+    val viewerNotVerified: String
+    val viewerVerified: String
+    fun viewerVisits(count: Int): String
+    fun viewerFirstLast(first: String, last: String): String
+    val viewersClose: String
     fun detailLevelCustomCount(count: Int): String
     fun linkExpires(date: String): String
     fun linkViewCount(count: Int): String
@@ -95,6 +107,18 @@ object ShareLinksStringsEn : ShareLinksStrings {
     override val linkStatusOff = "Turned off"
     override val linkStatusExpired = "Expired"
     override val linkCopied = "Copied"
+    override val seeViewers = "See who viewed"
+    override val viewersTitle = "Who's viewed this link"
+    override val viewersEmpty = "No one has opened this link yet."
+    override val viewersLoadError = "Couldn't load viewers."
+    override val viewerUnknown = "Unknown visitor"
+    override val viewerMember = "D2M member"
+    override val viewerNoPhone = "No phone captured"
+    override val viewerNotVerified = "Self-declared, not verified"
+    override val viewerVerified = "Verified account"
+    override fun viewerVisits(count: Int) = "$count visit${if (count == 1) "" else "s"}"
+    override fun viewerFirstLast(first: String, last: String) = "First viewed $first · Last viewed $last"
+    override val viewersClose = "Close"
     override fun detailLevelCustomCount(count: Int) = "Custom ($count field${if (count == 1) "" else "s"})"
     override fun linkExpires(date: String) = "Expires $date"
     override fun linkViewCount(count: Int) = "$count view${if (count == 1) "" else "s"}"
@@ -161,6 +185,18 @@ object ShareLinksStringsHi : ShareLinksStrings {
     override val linkStatusOff = "बंद किया गया"
     override val linkStatusExpired = "समाप्त"
     override val linkCopied = "कॉपी हुआ"
+    override val seeViewers = "देखने वालों को देखें"
+    override val viewersTitle = "इस लिंक को किसने देखा"
+    override val viewersEmpty = "अभी तक किसी ने यह लिंक नहीं खोला।"
+    override val viewersLoadError = "देखने वालों की सूची लोड नहीं हो सकी।"
+    override val viewerUnknown = "अज्ञात आगंतुक"
+    override val viewerMember = "D2M सदस्य"
+    override val viewerNoPhone = "फ़ोन नंबर नहीं मिला"
+    override val viewerNotVerified = "स्वयं बताया, सत्यापित नहीं"
+    override val viewerVerified = "सत्यापित खाता"
+    override fun viewerVisits(count: Int) = "$count बार आए"
+    override fun viewerFirstLast(first: String, last: String) = "पहली बार $first · आखिरी बार $last"
+    override val viewersClose = "बंद करें"
     override fun detailLevelCustomCount(count: Int) = "कस्टम ($count फ़ील्ड)"
     override fun linkExpires(date: String) = "$date को समाप्त"
     override fun linkViewCount(count: Int) = "$count बार देखा गया"
@@ -227,6 +263,18 @@ object ShareLinksStringsTa : ShareLinksStrings {
     override val linkStatusOff = "அணைக்கப்பட்டது"
     override val linkStatusExpired = "காலாவதியானது"
     override val linkCopied = "நகலெடுக்கப்பட்டது"
+    override val seeViewers = "பார்த்தவர்களைக் காண்க"
+    override val viewersTitle = "இந்த இணைப்பை யார் பார்த்தார்கள்"
+    override val viewersEmpty = "இதுவரை யாரும் இந்த இணைப்பைத் திறக்கவில்லை."
+    override val viewersLoadError = "பார்வையாளர்களை ஏற்ற முடியவில்லை."
+    override val viewerUnknown = "தெரியாத பார்வையாளர்"
+    override val viewerMember = "D2M உறுப்பினர்"
+    override val viewerNoPhone = "தொலைபேசி எண் பெறப்படவில்லை"
+    override val viewerNotVerified = "தாமே குறிப்பிட்டது, சரிபார்க்கப்படவில்லை"
+    override val viewerVerified = "சரிபார்க்கப்பட்ட கணக்கு"
+    override fun viewerVisits(count: Int) = "$count முறை வந்தார்"
+    override fun viewerFirstLast(first: String, last: String) = "முதலில் $first · கடைசியாக $last"
+    override val viewersClose = "மூடு"
     override fun detailLevelCustomCount(count: Int) = "தனிப்பயன் ($count புலங்கள்)"
     override fun linkExpires(date: String) = "$date அன்று காலாவதியாகும்"
     override fun linkViewCount(count: Int) = "$count முறை பார்க்கப்பட்டது"

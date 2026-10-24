@@ -22,4 +22,7 @@ class ShareLinksApi(private val api: ApiClient) {
 
     suspend fun updateShareLink(primaryId: String, linkId: String, isActive: Boolean? = null, extendHours: Int? = null): ShareLinkOut =
         api.put("/primaries/$primaryId/share-links/$linkId", ShareLinkUpdateIn(isActive, extendHours))
+
+    suspend fun listViewers(primaryId: String, linkId: String): List<ShareLinkViewerOut> =
+        api.get("/primaries/$primaryId/share-links/$linkId/viewers")
 }
