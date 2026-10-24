@@ -1,6 +1,7 @@
 package com.d2m.app.ui.screens.shared
 
 import androidx.compose.foundation.clickable
+import com.d2m.app.ui.components.bounceClickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
@@ -345,7 +346,7 @@ private fun AccountHeader(identity: Identity, accountId: String?, onOpenProfile:
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth().clickable { onOpenProfile() },
+        modifier = Modifier.fillMaxWidth().bounceClickable(onClick = onOpenProfile, pressedScale = 0.985f),
     ) {
         ProfileThumb(photoUrl = photoUrl, contentDescription = name, size = 52.dp, shape = CircleShape)
         Column(modifier = Modifier.weight(1f)) {

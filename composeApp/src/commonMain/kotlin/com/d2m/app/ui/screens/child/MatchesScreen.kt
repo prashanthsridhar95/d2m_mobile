@@ -9,7 +9,19 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
+import com.d2m.app.ui.components.D2MErrorState
+import com.d2m.app.ui.components.SkeletonList
+import com.d2m.app.ui.components.bounceClickable
+import com.d2m.app.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -109,25 +121,6 @@ import org.koin.compose.koinInject
 @Composable
 private fun avatarPlaceholder() = d2m.surfaceSunken
 
-// Shared loading placeholder for this screen's three list tabs (Matches,
-// Received, Sent) -- mirrors ThreadRow's own avatar-plus-two-lines shape
-// so the list doesn't visibly reflow once real rows replace it.
-@Composable
-private fun MatchesListSkeleton(count: Int = 3) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 14.dp)) {
-        repeat(count) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    D2MSkeleton(width = 140.dp, height = 13.dp)
-                    D2MSkeleton(width = 90.dp, height = 11.dp)
-                }
-            }
-        }
-    }
-}
-
-
 private val SHORT_MONTH_NAMES = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -185,6 +178,7 @@ private fun fmtThreadListTime(epochMillis: Long, yesterdayLabel: String): String
  * it full-width with a back button, same single-pane-at-a-time pattern as
  * any phone messaging app (and as web itself falls back to below 720px).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Unit = {}) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
@@ -196,6 +190,9 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
     val offboardingRepo = org.koin.compose.koinInject<OffboardingRepository>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    var pulling by remember { mutableStateOf(false) }
+    val unreadByPeer by messagingRepo.unreadByPeer.collectAsState()
 
     // "Integrate offboarding flow" (reported directly) -- the union-confirm
     // + Success Gallery opt-in banner, mirroring web's MatchesScreen.jsx
@@ -462,95 +459,148 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
     // unfiltered (rememberPeerName/pendingOpenPeer above still need every
     // match, closed or not); only the rendered list hides them.
     val visibleThreads = remember(threads) { threads.filterNot { it.status == "closed" } }
+    // Most recent conversation first; brand-new matches (no messages yet) pin
+    // to the top so they get a first hello. Re-sorts when a message arrives
+    // (unreadByPeer changes), not on every frame.
+    val sortedThreads = remember(visibleThreads, unreadByPeer) {
+        visibleThreads.sortedByDescending {
+            messagingRepo.lastMessageAt(d2mIdToMessagingUsername(it.otherParticipantId)) ?: Long.MAX_VALUE
+        }
+    }
 
     D2MTheme(flow = D2MFlow.CHILD) {
       Box(modifier = Modifier.fillMaxSize()) {
         val t = selected
         if (t == null) {
             // Thread list, full width -- default pane.
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                PageTitle(strings.pageTitle)
-                D2MTabs(
-                    titles = listOf(strings.tabMatches, strings.tabReceived, strings.tabSent),
-                    selectedIndex = matchesTab,
-                    onSelect = { matchesTab = it },
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-                when (matchesTab) {
-                    0 -> when {
-                        loading -> MatchesListSkeleton()
-                        error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                        visibleThreads.isEmpty() -> D2MEmptyState(strings.noMatchesTitle, strings.noMatchesBody)
-                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                            items(visibleThreads) { thread ->
-                                ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
-                            }
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+                    PageTitle(strings.pageTitle)
+                    D2MTabs(
+                        titles = listOf(strings.tabMatches, strings.tabReceived, strings.tabSent),
+                        selectedIndex = matchesTab,
+                        onSelect = { if (it != matchesTab) { haptics.light(); matchesTab = it } },
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                PullToRefreshBox(
+                    isRefreshing = pulling,
+                    onRefresh = {
+                        scope.launch {
+                            pulling = true
+                            refresh()
+                            refreshReceived()
+                            runCatching { sentRequests = suggestionsRepo.getSentRequests(primaryId ?: return@runCatching) }
+                            pulling = false
                         }
-                    }
-                    1 -> {
-                        requestsError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
-                        when {
-                            receivedRequests == null -> MatchesListSkeleton()
-                            receivedFiltered.isEmpty() -> D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
-                            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                                items(receivedFiltered, key = { it.candidateId }) { r ->
-                                    val busy = requestBusyId == r.candidateId
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
-                                            Text(strings.wantsToMatch, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                    ) {
+                        when (matchesTab) {
+                            0 -> when {
+                                loading -> item(key = "sk0", contentType = "skeleton") { SkeletonList(count = 7) }
+                                error != null -> item(key = "err0", contentType = "state") {
+                                    D2MErrorState(error!!, onRetry = {
+                                        scope.launch { loading = true; error = null; runCatching { refresh() }; loading = false }
+                                    })
+                                }
+                                sortedThreads.isEmpty() -> item(key = "empty0", contentType = "state") {
+                                    D2MEmptyState(strings.noMatchesTitle, strings.noMatchesBody)
+                                }
+                                else -> items(sortedThreads, key = { it.threadId }, contentType = { "thread" }) { thread ->
+                                    ThreadRow(
+                                        thread = thread,
+                                        unread = unreadByPeer[d2mIdToMessagingUsername(thread.otherParticipantId)] ?: 0,
+                                        onClick = { chatUiState.setActiveThreadId(thread.threadId) },
+                                    )
+                                }
+                            }
+                            1 -> {
+                                requestsError?.let { msg -> item(key = "reqErr", contentType = "banner") { D2MErrorBanner(msg, modifier = Modifier.padding(vertical = 8.dp)) } }
+                                when {
+                                    receivedRequests == null -> item(key = "sk1", contentType = "skeleton") { SkeletonList(count = 5) }
+                                    receivedFiltered.isEmpty() -> item(key = "empty1", contentType = "state") {
+                                        D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
+                                    }
+                                    else -> items(receivedFiltered, key = { it.candidateId }, contentType = { "received" }) { r ->
+                                        val busy = requestBusyId == r.candidateId
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .bounceClickable(onClick = { onOpenProfile(r.candidateId) }, pressedScale = 0.985f, enforceMinimumTarget = false)
+                                                .padding(vertical = 10.dp),
+                                        ) {
+                                            InitialAvatar(r.candidateName, 56.dp)
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(r.candidateName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(strings.wantsToMatch, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            D2MButton(
+                                                text = strings.accept, size = D2MButtonSize.SM, enabled = !busy,
+                                                onClick = {
+                                                    val pid = primaryId ?: return@D2MButton
+                                                    requestBusyId = r.candidateId
+                                                    scope.launch {
+                                                        try {
+                                                            suggestionsRepo.act(pid, r.candidateId, "accept")
+                                                            haptics.success()
+                                                            refreshReceived()
+                                                            refresh()
+                                                        } catch (e: Exception) {
+                                                            requestsError = friendlyError(e, strings.errAcceptRequest)
+                                                        } finally {
+                                                            requestBusyId = null
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                            D2MButton(
+                                                text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
+                                                onClick = {
+                                                    val pid = primaryId ?: return@D2MButton
+                                                    requestBusyId = r.candidateId
+                                                    scope.launch {
+                                                        try {
+                                                            suggestionsRepo.act(pid, r.candidateId, "reject")
+                                                            haptics.medium()
+                                                            refreshReceived()
+                                                        } catch (e: Exception) {
+                                                            requestsError = friendlyError(e, strings.errDeclineRequest)
+                                                        } finally {
+                                                            requestBusyId = null
+                                                        }
+                                                    }
+                                                },
+                                            )
                                         }
-                                        D2MButton(
-                                            text = strings.accept, size = D2MButtonSize.SM, enabled = !busy,
-                                            onClick = {
-                                                val pid = primaryId ?: return@D2MButton
-                                                requestBusyId = r.candidateId
-                                                scope.launch {
-                                                    try {
-                                                        suggestionsRepo.act(pid, r.candidateId, "accept")
-                                                        refreshReceived()
-                                                        refresh()
-                                                    } catch (e: Exception) {
-                                                        requestsError = friendlyError(e, strings.errAcceptRequest)
-                                                    } finally {
-                                                        requestBusyId = null
-                                                    }
-                                                }
-                                            },
-                                        )
-                                        D2MButton(
-                                            text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
-                                            onClick = {
-                                                val pid = primaryId ?: return@D2MButton
-                                                requestBusyId = r.candidateId
-                                                scope.launch {
-                                                    try {
-                                                        suggestionsRepo.act(pid, r.candidateId, "reject")
-                                                        refreshReceived()
-                                                    } catch (e: Exception) {
-                                                        requestsError = friendlyError(e, strings.errDeclineRequest)
-                                                    } finally {
-                                                        requestBusyId = null
-                                                    }
-                                                }
-                                            },
-                                        )
                                     }
                                 }
                             }
-                        }
-                    }
-                    else -> when {
-                        sentRequests == null -> MatchesListSkeleton()
-                        sentFiltered.isEmpty() -> D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
-                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                            items(sentFiltered, key = { it.candidateId }) { r ->
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                                    Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
-                                    Column {
-                                        Text(r.candidateName, style = MaterialTheme.typography.titleSmall)
-                                        Text(strings.waitingForReply, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                            else -> when {
+                                sentRequests == null -> item(key = "sk2", contentType = "skeleton") { SkeletonList(count = 5) }
+                                sentFiltered.isEmpty() -> item(key = "empty2", contentType = "state") {
+                                    D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
+                                }
+                                else -> items(sentFiltered, key = { it.candidateId }, contentType = { "sent" }) { r ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .bounceClickable(onClick = { onOpenProfile(r.candidateId) }, pressedScale = 0.985f, enforceMinimumTarget = false)
+                                            .padding(vertical = 10.dp),
+                                    ) {
+                                        InitialAvatar(r.candidateName, 56.dp)
+                                        Column {
+                                            Text(r.candidateName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(strings.waitingForReply, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                        }
                                     }
                                 }
                             }
@@ -732,23 +782,17 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
  * directly in the chat list rather than only after opening a thread.
  */
 @Composable
-private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
+private fun ThreadRow(thread: ThreadOut, unread: Int, onClick: () -> Unit) {
     val messagingRepo: MessagingRepository = koinInject()
     val strings = LocalStrings.current.matches
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
+    // remember{}: MessagingRepository.messagesFor() launches a never-cancelled
+    // collector on every call, so calling it bare in the body (as this row
+    // used to) leaked one per recomposition while scrolling.
+    val messagesFlow = remember(peerUsername) { messagingRepo.messagesFor(peerUsername) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
-    // "In matches view, last sent/received message is shown below the name
-    // in web. in mobile - matched is shown. i want same as web." Web's
-    // sidebar row (MatchesScreen.jsx's sortedThreads/_preview) derives this
-    // from the same messagesByPeer state the open conversation reads, not a
-    // separate fetch -- messagingRepo.messagesFor() is the mobile equivalent
-    // (already loaded from local cache + live updates, see
-    // MessagingRepository.kt's messagesFor doc comment), so this row just
-    // needs to pick the newest message and format it the same way web does:
-    // typing (highest priority) > last message preview > the old static
-    // status label as a fallback for a fresh match with no messages yet.
-    val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
+    val messages by messagesFlow.collectAsState()
 
     LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
 
@@ -761,42 +805,80 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
             else -> lastMessage.text
         }
     }
-    val subtitleBase = if (peerTyping) strings.typing else previewText.ifBlank { threadStatusLabel(thread.status, strings) }
+    val previewWithPrefix = if (lastMessage?.isMine == true && previewText.isNotBlank()) strings.youPrefix + previewText else previewText
+    val subtitleBase = if (peerTyping) strings.typing else previewWithPrefix.ifBlank { if (lastMessage == null && thread.status == "active") strings.sayHi else threadStatusLabel(thread.status, strings) }
     val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) strings.seriousModePendingSuffix(subtitleBase) else subtitleBase
+    val hasUnread = unread > 0
+    val timeLabel = remember(lastMessage?.sentAt) { lastMessage?.let { fmtThreadListTime(it.sentAt, strings.yesterday) } }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .bounceClickable(onClick = onClick, pressedScale = 0.985f, enforceMinimumTarget = false)
+            .padding(vertical = 10.dp)
+            .semantics { if (hasUnread) stateDescription = strings.unreadDesc(unread) },
     ) {
-        Box(modifier = Modifier.size(48.dp)) {
-            Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
+        Box(modifier = Modifier.size(60.dp)) {
+            InitialAvatar(thread.otherParticipantName, 60.dp)
             PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(thread.otherParticipantName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (lastMessage != null) {
-                    Text(
-                        fmtThreadListTime(lastMessage.sentAt, strings.yesterday),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = mutedText(0.55f),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-            }
             Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (peerTyping) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (peerTyping) MaterialTheme.colorScheme.primary else mutedText(0.55f),
+                thread.otherParticipantName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (hasUnread) FontWeight.ExtraBold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (peerTyping || hasUnread) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (peerTyping) MaterialTheme.colorScheme.primary else if (hasUnread) MaterialTheme.colorScheme.onSurface else mutedText(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (timeLabel != null) {
+                Text(
+                    timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (hasUnread) d2m.accent else mutedText(0.55f),
+                    fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
+            if (hasUnread) {
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+                        .background(d2m.accent, CircleShape)
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (unread > 99) "99+" else unread.toString(), color = d2m.accentOn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/** Circle avatar showing the person's initial on the warm sunken surface (ThreadOut carries no photo URL). */
+@Composable
+private fun InitialAvatar(name: String, size: Dp) {
+    Box(
+        modifier = Modifier.size(size).background(avatarPlaceholder(), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            (name.trim().firstOrNull() ?: '?').uppercaseChar().toString(),
+            fontWeight = FontWeight.Bold,
+            fontSize = (size.value * 0.38f).sp,
+            color = d2m.label,
+        )
     }
 }
 
