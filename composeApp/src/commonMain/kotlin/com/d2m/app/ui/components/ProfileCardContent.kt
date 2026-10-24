@@ -153,7 +153,7 @@ fun ProfileCardContent(
                     LikeHeart(
                         label = strings.likeThisPhoto,
                         onClick = { onLike(LikeTarget("photo", heroPhotoId, card.photoUrl)) },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 24.dp),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 16.dp),
                     )
                 }
             }
@@ -163,7 +163,6 @@ fun ProfileCardContent(
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    LikeProfilePill(strings.likeProfile) { onLike(LikeTarget("profile")) }
                     CompatibilityCard(
                         level = rating,
                         breakdown = listOf(
@@ -302,25 +301,6 @@ fun LikeHeart(label: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     }
 }
 
-@Composable
-private fun LikeProfilePill(label: String, onClick: () -> Unit) {
-    val haptics = rememberHaptics()
-    Row(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(d2m.accent.copy(alpha = 0.10f))
-            .clickable(role = Role.Button) { haptics.light(); onClick() }
-            .padding(horizontal = 16.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        androidx.compose.material3.Icon(
-            androidx.compose.material.icons.Icons.Filled.Favorite, contentDescription = null, tint = d2m.accent, modifier = Modifier.size(18.dp),
-        )
-        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = d2m.accent)
-    }
-}
-
 /** The single floating X: "pass for now" (not a rejection -- the server snoozes it and it comes back later). */
 @Composable
 fun PassFab(label: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -329,16 +309,16 @@ fun PassFab(label: String, enabled: Boolean, onClick: () -> Unit, modifier: Modi
     val ink = d2m.textPrimary
     Box(
         modifier = modifier
-            .size(60.dp)
+            .size(44.dp)
             .pressScale(interaction)
-            .shadow(10.dp, CircleShape)
+            .shadow(6.dp, CircleShape)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button) { haptics.light(); onClick() }
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(24.dp)) { drawCross(ink) }
+        Canvas(Modifier.size(15.dp)) { drawCross(ink) }
     }
 }
 

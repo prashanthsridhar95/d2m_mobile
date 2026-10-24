@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
 private val FabBottomPad = 18.dp
 
 /** Room kept under the hero's name block and at the end of the scroll for the floating pass button. */
-private val BottomClearance = FabBottomPad + 60.dp + 16.dp
+private val BottomClearance = FabBottomPad + 44.dp + 16.dp
 
 /**
  * Child Discover, Hinge-style (mirrors web's screens/child/DiscoveryScreen.jsx): one profile at a time as a single
