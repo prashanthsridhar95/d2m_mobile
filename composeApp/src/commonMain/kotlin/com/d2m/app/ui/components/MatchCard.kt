@@ -1,5 +1,6 @@
 package com.d2m.app.ui.components
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -198,11 +199,11 @@ fun MatchCard(
                 }
 
                 // The comps' card closes on a full-width outline action.
-                D2MButton(
+                D2MActionButton(
                     text = strings.viewProfile,
                     onClick = onClick,
-                    variant = D2MButtonVariant.ACCENT_OUTLINE,
-                    size = D2MButtonSize.SM,
+                    emphasis = D2MActionEmphasis.SECONDARY,
+                    height = 48.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp),

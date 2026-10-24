@@ -1,5 +1,7 @@
 package com.d2m.app.ui.screens.parent
 
+import com.d2m.app.ui.components.D2MActionButton
+import com.d2m.app.ui.components.D2MActionEmphasis
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -688,9 +690,10 @@ private fun ConsentProspectCard(
                                 D2MBadge(strings.consentPendingBadge, D2MBadgeTone.WARNING)
                                 MetaText(strings.consentWaitingOnDecision, Modifier.padding(top = 6.dp))
                             } else {
-                                D2MButton(
+                                D2MActionButton(
                                     text = strings.consentRequestAccess,
-                                    enabled = !requestBusy,
+                                    loading = requestBusy,
+                                    modifier = Modifier.fillMaxWidth(),
                                     onClick = { requestAccess() },
                                 )
                             }
@@ -712,17 +715,17 @@ private fun ConsentProspectCard(
                         }
                         MetaText(strings.consentFullAccessBody, Modifier.padding(top = 14.dp))
                         messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 10.dp)) }
-                        Row(modifier = Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            D2MButton(
+                        Column(modifier = Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            D2MActionButton(
                                 text = strings.consentViewFullProfile,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
                                 onClick = { onOpenProfile(c.prospectId) },
                             )
-                            D2MButton(
+                            D2MActionButton(
                                 text = if (messageParentBusy) strings.consentOpening else strings.consentMessageTheirParent,
-                                variant = D2MButtonVariant.OUTLINE,
-                                enabled = !messageParentBusy,
-                                modifier = Modifier.weight(1f),
+                                emphasis = D2MActionEmphasis.SECONDARY,
+                                loading = messageParentBusy,
+                                modifier = Modifier.fillMaxWidth(),
                                 onClick = { messageParent() },
                             )
                         }
