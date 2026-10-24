@@ -506,7 +506,7 @@ private fun BioSection(title: String, anyValues: List<Any?>, content: @Composabl
 @Composable
 private fun BioRow(label: String, value: String?) {
     if (value.isNullOrBlank()) return
-    val stacked = value.length > 26 || label.length > 22
+    val stacked = value.length > 26 || label.length + value.length > 40
     Column {
         if (stacked) {
             Column(

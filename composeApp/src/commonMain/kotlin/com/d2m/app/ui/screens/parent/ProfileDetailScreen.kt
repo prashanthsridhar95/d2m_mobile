@@ -273,6 +273,9 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     }
     var suggestedDone by remember(candidateId) { mutableStateOf(false) }
     val scroll = rememberScrollState()
+    val barDensity = androidx.compose.ui.platform.LocalDensity.current.density
+    // Flips once, when the solid top bar has taken over from the photo -- the floating buttons restyle for it.
+    val barShown by remember { androidx.compose.runtime.derivedStateOf { scroll.value > 420f * barDensity } }
     val haptic = LocalHapticFeedback.current
     val shared = LocalStrings.current.sharedComponents
 
@@ -481,7 +484,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = topInset + 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                FloatingCircleButton(Icons.AutoMirrored.Filled.ArrowBack, strings.back, onClick = onBack)
+                FloatingCircleButton(Icons.AutoMirrored.Filled.ArrowBack, strings.back, onClick = onBack, onBar = barShown)
                 // Share is parent-only and meaningless pointed at your own profile
                 // (same "Share my profile" row exists in Settings).
                 if (candidate != null && !isSelf && identity.role == D2MRole.PARENT) {
@@ -494,6 +497,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         },
                         enabled = shareState != "busy",
                         onClick = { shareProfile() },
+                        onBar = barShown,
                     )
                 }
             }
@@ -627,21 +631,27 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     }
 }
 
-/** Round, scrim-backed icon button that stays legible over any photograph; 48dp touch target. */
+/**
+ * Round icon button, 48dp touch target. Over the photo it is a dark scrim disc with a white icon (legible on any
+ * photograph); once the solid top bar has taken over ([onBar]) it becomes a light disc with an ink icon.
+ */
 @Composable
 private fun FloatingCircleButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    onBar: Boolean = false,
 ) {
+    val bg by androidx.compose.animation.animateColorAsState(if (onBar) d2m.surfaceSunken else Color.Black.copy(alpha = 0.45f), label = "fab-bg")
+    val tint by androidx.compose.animation.animateColorAsState(if (onBar) d2m.textPrimary else Color.White, label = "fab-tint")
     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(percent = 50)).background(Color.Black.copy(alpha = 0.45f)),
+            Modifier.size(40.dp).clip(RoundedCornerShape(percent = 50)).background(bg),
             contentAlignment = Alignment.Center,
         ) {
             IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
-                Icon(icon, contentDescription = contentDescription, tint = Color.White)
+                Icon(icon, contentDescription = contentDescription, tint = tint)
             }
         }
     }
