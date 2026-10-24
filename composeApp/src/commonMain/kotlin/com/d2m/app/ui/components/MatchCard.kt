@@ -35,8 +35,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -313,30 +313,50 @@ fun ShortlistStar(
     onPhoto: Boolean = false,
 ) {
     val strings = LocalStrings.current.sharedComponents
-    val shape = if (onPhoto) RoundedCornerShape(percent = 50) else RoundedCornerShape(D2MRadius.sm)
-    // "Shortlist button to be shown clearly for parent view" (reported
-    // directly) -- always gold-bordered and gold-tinted now, not a plain
-    // muted-label-colored star when unselected. A bigger icon in the same
-    // low-contrast color was still easy to miss; this makes it read as a
-    // shortlist control at a glance regardless of its current on/off state.
-    Box(
-        modifier
-            .size(40.dp)
-            .clip(shape)
-            // On a photograph the control needs its own ground to stay
-            // legible over an arbitrary image; in a text row it can sit on
-            // the card.
-            .background(if (onPhoto) d2m.surfaceSunken.copy(alpha = 0.92f) else if (shortlisted) d2m.gold.copy(alpha = 0.13f) else MaterialTheme.colorScheme.surface, shape)
-            .border(1.5.dp, d2m.gold, shape),
-        contentAlignment = Alignment.Center,
-    ) {
-        IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
-            Icon(
-                imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
-                tint = if (shortlisted) d2m.goldStrong else d2m.gold,
-                modifier = Modifier.size(22.dp),
-            )
+    val label = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist
+    if (onPhoto) {
+        // A status badge, not a control-sized disc: a 22dp chip with a 13dp bookmark in the photo's corner (it used to be a
+        // 40dp gold disc that covered half of a 68dp avatar). The tap target is still 48dp.
+        Box(
+            modifier
+                .size(48.dp)
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onToggle)
+                .semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .background(if (shortlisted) Color.White.copy(alpha = 0.95f) else Color.Black.copy(alpha = 0.32f), RoundedCornerShape(percent = 50)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = null,
+                    tint = if (shortlisted) d2m.accent else Color.White,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
+    } else {
+        // Off a photo, in a plain row: a squared outline control, bookmark like everywhere else.
+        val shape = RoundedCornerShape(D2MRadius.sm)
+        Box(
+            modifier
+                .size(40.dp)
+                .clip(shape)
+                .background(if (shortlisted) d2m.accentSoft else MaterialTheme.colorScheme.surface, shape)
+                .border(1.5.dp, if (shortlisted) d2m.accent else d2m.borderStrong, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = label,
+                    tint = if (shortlisted) d2m.accent else d2m.meta,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }
