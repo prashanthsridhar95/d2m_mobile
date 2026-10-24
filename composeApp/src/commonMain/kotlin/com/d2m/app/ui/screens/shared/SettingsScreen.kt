@@ -188,7 +188,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = Icons.Filled.VerifiedUser,
                         title = strings.verification,
-                        subtitle = strings.verificationSubtitle,
+                        subtitle = if (primaryVerified || verificationStatus == "approved") null else strings.verificationSubtitle,
                         onClick = onOpenVerification,
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
