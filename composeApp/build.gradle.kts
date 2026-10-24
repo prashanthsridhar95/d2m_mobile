@@ -407,6 +407,11 @@ val hasReleaseSigningConfig =
     releaseStoreFilePath != null && releaseStorePassword != null &&
         releaseKeyAlias != null && releaseKeyPassword != null
 
+compose.resources {
+    // Fonts live in src/commonMain/composeResources/font; Res is generated into this package.
+    packageOfResClass = "com.d2m.app.resources"
+}
+
 android {
     namespace = "com.d2m.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()

@@ -9,6 +9,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -149,14 +150,17 @@ fun D2MTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val fonts = rememberD2MFonts()
+    val typography = remember(fonts) { d2mTypography(fonts.display, fonts.body) }
     CompositionLocalProvider(
+        LocalD2MFonts provides fonts,
         LocalD2MFlow provides flow,
         LocalD2MStatusPalette provides if (darkTheme) DarkStatusPalette else LightStatusPalette,
         LocalD2MSemantic provides if (darkTheme) DarkSemantic else LightSemantic,
     ) {
         MaterialTheme(
             colorScheme = schemeFor(darkTheme),
-            typography = D2MTypography,
+            typography = typography,
             shapes = D2MShapes,
             content = content,
         )

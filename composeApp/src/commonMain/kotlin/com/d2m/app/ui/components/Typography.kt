@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.d2m.app.ui.theme.D2MNoteStyle
+import com.d2m.app.ui.theme.d2mNoteStyle
 import com.d2m.app.ui.theme.D2MRefNoStyle
 import com.d2m.app.ui.theme.d2m
 
@@ -125,7 +125,7 @@ fun RefNoText(text: String, modifier: Modifier = Modifier) {
  */
 @Composable
 fun NoteText(text: String, modifier: Modifier = Modifier) {
-    Text(text = text, style = D2MNoteStyle, color = d2m.meta, modifier = modifier)
+    Text(text = text, style = d2mNoteStyle(), color = d2m.meta, modifier = modifier)
 }
 
 /**

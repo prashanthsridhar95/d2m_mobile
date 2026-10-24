@@ -52,7 +52,7 @@ import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.strings.LocalAppLocale
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.strings.SharedComponentsStrings
-import com.d2m.app.ui.theme.D2MNoteStyle
+import com.d2m.app.ui.theme.d2mNoteStyle
 import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import com.d2m.app.ui.components.D2MTabs
@@ -475,7 +475,7 @@ private fun FlowWrap(modifier: Modifier = Modifier, content: @Composable FlowRow
 private fun PromptCard(prompt: String, answer: String) {
     CasualCard {
         Text(prompt, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
-        Text(answer, style = D2MNoteStyle.copy(fontSize = 17.sp, lineHeight = 24.sp), modifier = Modifier.padding(top = 6.dp))
+        Text(answer, style = d2mNoteStyle().copy(fontSize = 17.sp, lineHeight = 24.sp), modifier = Modifier.padding(top = 6.dp))
     }
 }
 
