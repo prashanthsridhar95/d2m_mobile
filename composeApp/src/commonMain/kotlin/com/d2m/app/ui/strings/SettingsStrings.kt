@@ -28,6 +28,22 @@ interface SettingsStrings {
     val copied: String
     val languageTitle: String
     val languageHint: String
+    val roleParent: String
+    val roleChild: String
+    val yourAccount: String
+    val sectionProfile: String
+    val sectionTrust: String
+    val sectionPreferences: String
+    val sectionFamily: String
+    val shareMyProfileSubtitle: String
+    val trustSubtitle: String
+    val verificationSubtitle: String
+    val statusVerified: String
+    val statusInReview: String
+    val statusRejected: String
+    val statusNotStarted: String
+    val logOutConfirmTitle: String
+    val logOutConfirmBody: String
 }
 
 object SettingsStringsEn : SettingsStrings {
@@ -57,6 +73,22 @@ object SettingsStringsEn : SettingsStrings {
     override val copied = "Copied"
     override val languageTitle = "Language"
     override val languageHint = "Changes the app's language everywhere -- menus, buttons, and messages."
+    override val roleParent = "Parent account"
+    override val roleChild = "Child account"
+    override val yourAccount = "Your account"
+    override val sectionProfile = "Profile & sharing"
+    override val sectionTrust = "Trust & safety"
+    override val sectionPreferences = "Preferences"
+    override val sectionFamily = "Family"
+    override val shareMyProfileSubtitle = "Send your profile link to family and friends"
+    override val trustSubtitle = "Vouches and trusted connections"
+    override val verificationSubtitle = "Add an ID check to earn a verified badge"
+    override val statusVerified = "Verified"
+    override val statusInReview = "In review"
+    override val statusRejected = "Rejected"
+    override val statusNotStarted = "Not started"
+    override val logOutConfirmTitle = "Log out?"
+    override val logOutConfirmBody = "You'll need to sign in again to use D2M."
 }
 
 object SettingsStringsHi : SettingsStrings {
@@ -86,6 +118,22 @@ object SettingsStringsHi : SettingsStrings {
     override val copied = "कॉपी हो गया"
     override val languageTitle = "भाषा"
     override val languageHint = "यह ऐप की भाषा हर जगह बदल देता है -- मेनू, बटन और संदेश।"
+    override val roleParent = "अभिभावक खाता"
+    override val roleChild = "बच्चे का खाता"
+    override val yourAccount = "आपका खाता"
+    override val sectionProfile = "प्रोफ़ाइल और शेयरिंग"
+    override val sectionTrust = "भरोसा और सुरक्षा"
+    override val sectionPreferences = "पसंद"
+    override val sectionFamily = "परिवार"
+    override val shareMyProfileSubtitle = "अपनी प्रोफ़ाइल का लिंक परिवार और दोस्तों को भेजें"
+    override val trustSubtitle = "वाउच और भरोसेमंद कनेक्शन"
+    override val verificationSubtitle = "सत्यापित बैज पाने के लिए आईडी जाँच जोड़ें"
+    override val statusVerified = "सत्यापित"
+    override val statusInReview = "समीक्षा में"
+    override val statusRejected = "अस्वीकृत"
+    override val statusNotStarted = "शुरू नहीं हुआ"
+    override val logOutConfirmTitle = "लॉग आउट करें?"
+    override val logOutConfirmBody = "D2M इस्तेमाल करने के लिए आपको फिर से साइन इन करना होगा।"
 }
 
 object SettingsStringsTa : SettingsStrings {
@@ -115,4 +163,20 @@ object SettingsStringsTa : SettingsStrings {
     override val copied = "நகலெடுக்கப்பட்டது"
     override val languageTitle = "மொழி"
     override val languageHint = "இது ஆப்பின் மொழியை எல்லா இடங்களிலும் மாற்றும் -- மெனுக்கள், பொத்தான்கள் மற்றும் செய்திகள்."
+    override val roleParent = "பெற்றோர் கணக்கு"
+    override val roleChild = "குழந்தை கணக்கு"
+    override val yourAccount = "உங்கள் கணக்கு"
+    override val sectionProfile = "சுயவிவரம் & பகிர்வு"
+    override val sectionTrust = "நம்பிக்கை & பாதுகாப்பு"
+    override val sectionPreferences = "விருப்பங்கள்"
+    override val sectionFamily = "குடும்பம்"
+    override val shareMyProfileSubtitle = "உங்கள் சுயவிவர இணைப்பை குடும்பத்தினர், நண்பர்களுக்கு அனுப்புங்கள்"
+    override val trustSubtitle = "வவுச்கள் மற்றும் நம்பகமான தொடர்புகள்"
+    override val verificationSubtitle = "சரிபார்க்கப்பட்ட பேட்ஜ் பெற அடையாள சரிபார்ப்பைச் சேர்க்கவும்"
+    override val statusVerified = "சரிபார்க்கப்பட்டது"
+    override val statusInReview = "மதிப்பாய்வில்"
+    override val statusRejected = "நிராகரிக்கப்பட்டது"
+    override val statusNotStarted = "தொடங்கவில்லை"
+    override val logOutConfirmTitle = "வெளியேறவா?"
+    override val logOutConfirmBody = "D2M ஐப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்."
 }

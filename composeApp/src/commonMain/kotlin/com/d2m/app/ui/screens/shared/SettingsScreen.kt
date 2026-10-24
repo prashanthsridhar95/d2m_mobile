@@ -1,23 +1,39 @@
 package com.d2m.app.ui.screens.shared
 
-import androidx.compose.foundation.clickable
-import com.d2m.app.ui.components.bounceClickable
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,14 +44,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.model.NotificationPreferenceIn
@@ -46,31 +58,39 @@ import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.NotificationsRepository
 import com.d2m.app.domain.repository.TrustRepository
+import com.d2m.app.ui.components.D2MBadge
+import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MTextField
-import com.d2m.app.ui.components.LanguageSettingControl
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.ProfileThumb
+import com.d2m.app.ui.components.SettingsCard
+import com.d2m.app.ui.components.SettingsDivider
+import com.d2m.app.ui.components.SettingsRow
+import com.d2m.app.ui.components.SettingsSection
+import com.d2m.app.ui.components.SettingsSwitchRow
+import com.d2m.app.ui.components.VerifiedBadge
+import com.d2m.app.ui.components.bounceClickable
+import com.d2m.app.ui.components.rememberHaptics
+import com.d2m.app.ui.strings.AppLocale
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.strings.LocaleStore
-import com.d2m.app.ui.strings.SettingsStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
- * Mirrors screens/shared/SettingsScreen.jsx: role-branching -- child gets a
- * tabbed Preferences/Others layout (Preferences moved into
- * ChildProfileDialogScreen here, same "Preferences tab reuses the same
- * fields" split web already made), parent gets a single notifications+
- * logout page (no equivalent basic-data/filters concept for sponsors).
+ * Mirrors screens/shared/SettingsScreen.jsx, restyled mobile-first: a profile
+ * header card, then grouped inset sections (Profile & sharing, Trust & safety,
+ * Preferences, Family) and a standalone Log out row. Role gating is unchanged:
+ * child-only "Share my profile"; hide-name / verification / family-link /
+ * preview need a linked primary profile.
  */
 @Composable
 fun SettingsScreen(
@@ -87,20 +107,23 @@ fun SettingsScreen(
     val trustRepo: TrustRepository = koinInject()
     val localeStore: LocaleStore = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val locale by localeStore.locale.collectAsState()
     val strings = LocalStrings.current.settings
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     var muted by remember { mutableStateOf(false) }
     var frequency by remember { mutableStateOf("immediate") }
     var hideNameOverride by remember { mutableStateOf(false) }
+    var primaryVerified by remember { mutableStateOf(false) }
+    var verificationStatus by remember { mutableStateOf<String?>(null) }
+    var languageSheet by remember { mutableStateOf(false) }
+    var logoutConfirm by remember { mutableStateOf(false) }
 
     val accountId = identity.sponsorId ?: identity.primaryId
-    // "Linking management of parent with child & vice versa" (reported
-    // directly) -- a Sponsor's linked child is identity.childPrimaryId
-    // (resolved and cached onto Identity the same way ParentBrowseScreen.kt
-    // does for search); if nothing has populated it yet (a first-ever
-    // visit landing directly on Settings), this section just doesn't
-    // render rather than re-implementing that lookup here too.
+    // A Sponsor's linked child is identity.childPrimaryId (resolved and cached
+    // onto Identity the same way ParentBrowseScreen.kt does for search); if
+    // nothing has populated it yet, the linked-profile rows just don't render.
     val linkedPrimaryId = if (identity.role == D2MRole.PARENT) identity.childPrimaryId else identity.primaryId
     LaunchedEffect(accountId) {
         if (accountId == null) return@LaunchedEffect
@@ -113,107 +136,206 @@ fun SettingsScreen(
         if (linkedPrimaryId == null) return@LaunchedEffect
         runCatching { identityRepo.getPrimaryProfile(linkedPrimaryId) }.onSuccess {
             hideNameOverride = it.hideNameOverride
+            primaryVerified = it.isVerified
         }
+        verificationStatus = runCatching { identityRepo.getIdentityVerification(linkedPrimaryId)?.status }.getOrNull()
     }
 
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
-        // verticalScroll: the content is taller than a phone screen, and without it Log out sat below the bottom bar, unreachable
-        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            PageTitle(strings.pageTitle)
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            PageTitle(strings.pageTitle, modifier = Modifier.padding(start = 4.dp))
 
-            AccountHeader(identity = identity, accountId = accountId, onOpenProfile = onOpenProfile)
-            if (linkedPrimaryId != null) {
-                D2MButton(text = strings.previewProfile, variant = D2MButtonVariant.OUTLINE, onClick = { onOpenProfilePreview(linkedPrimaryId) })
-            }
-            HorizontalDivider()
+            AccountHeader(identity = identity, accountId = accountId, verified = identity.role == D2MRole.CHILD && primaryVerified, onOpenProfile = onOpenProfile)
 
-            Column {
-                Text(strings.languageTitle, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                LanguageSettingControl(localeStore = localeStore, hint = strings.languageHint)
-            }
-            HorizontalDivider()
-
-            SettingSwitchRow(
-                title = strings.muteNotificationsTitle,
-                subtitle = strings.muteNotificationsSubtitle,
-                checked = muted,
-                onCheckedChange = { checked ->
-                    muted = checked
-                    if (accountId != null) {
-                        scope.launch { runCatching { notificationsRepo.setPreferences(accountId, NotificationPreferenceIn(muted = checked)) } }
+            val isChild = identity.role == D2MRole.CHILD
+            if (linkedPrimaryId != null || isChild) {
+                SettingsSection(strings.sectionProfile) {
+                    if (linkedPrimaryId != null) {
+                        SettingsRow(
+                            icon = Icons.Filled.Visibility,
+                            title = strings.previewProfile,
+                            subtitle = strings.previewProfileHint,
+                            onClick = { onOpenProfilePreview(linkedPrimaryId) },
+                        )
                     }
-                },
-            )
+                    if (linkedPrimaryId != null && isChild) SettingsDivider()
+                    // Child role only -- the parent role reaches this via its own "Sharing" tab.
+                    if (isChild) {
+                        SettingsRow(
+                            icon = Icons.Filled.Share,
+                            title = strings.shareMyProfile,
+                            subtitle = strings.shareMyProfileSubtitle,
+                            onClick = onOpenShareLinks,
+                        )
+                    }
+                }
+            }
 
-            // "Hide name" (reported directly) -- by default a name
-            // auto-masks to any viewer until a match exists, then auto-
-            // unmasks (no setting needed for that half, see suggestion_
-            // service._display_name on the backend). This switch is the
-            // manual override: keeps it masked even after a match.
-            if (linkedPrimaryId != null) {
-                SettingSwitchRow(
-                    title = strings.hideNameTitle,
-                    subtitle = strings.hideNameSubtitle,
-                    checked = hideNameOverride,
-                    onCheckedChange = { checked ->
-                        hideNameOverride = checked
-                        scope.launch { runCatching { identityRepo.setHideNameOverride(linkedPrimaryId, checked) } }
+            SettingsSection(strings.sectionTrust) {
+                SettingsRow(
+                    icon = Icons.Filled.Shield,
+                    title = strings.trustAndVouches,
+                    subtitle = strings.trustSubtitle,
+                    onClick = onOpenTrust,
+                )
+                // Verification -- both roles (a parent can submit on the child's behalf).
+                if (linkedPrimaryId != null) {
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Filled.VerifiedUser,
+                        title = strings.verification,
+                        subtitle = strings.verificationSubtitle,
+                        onClick = onOpenVerification,
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val (label, tone) = when {
+                                    primaryVerified || verificationStatus == "approved" -> strings.statusVerified to D2MBadgeTone.SUCCESS
+                                    verificationStatus == "pending" -> strings.statusInReview to D2MBadgeTone.WARNING
+                                    verificationStatus == "rejected" -> strings.statusRejected to D2MBadgeTone.DANGER
+                                    else -> strings.statusNotStarted to D2MBadgeTone.NEUTRAL
+                                }
+                                D2MBadge(label, tone)
+                                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
+                            }
+                        },
+                    )
+                }
+            }
+
+            SettingsSection(strings.sectionPreferences) {
+                SettingsRow(
+                    icon = Icons.Filled.Language,
+                    title = strings.languageTitle,
+                    onClick = { languageSheet = true },
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(locale.nativeName, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+                            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
+                        }
                     },
                 )
-            }
-
-            // Child role only -- the parent role reaches this via its own
-            // "Sharing" bottom tab (AppScaffold.kt's D2MTab.ParentSharing),
-            // but the child tab bar has no free slot (Settings itself was
-            // deliberately pulled off it already), so this is the child
-            // side's only entry point, same placement as web's
-            // SettingsScreen.jsx "Share my profile" button.
-            if (identity.role == D2MRole.CHILD) {
-                D2MButton(text = strings.shareMyProfile, variant = D2MButtonVariant.OUTLINE, onClick = onOpenShareLinks)
-            }
-
-            // WedLock trust subsystem (vouches/trusted connections/
-            // endorsements) -- neither role's bottom tab bar has a free
-            // slot (both already have 4, see AppScaffold.kt's D2MTab), so
-            // this is the entry point for both roles, same "Settings" home
-            // "Share my profile" is already using for the child side.
-            D2MButton(text = strings.trustAndVouches, variant = D2MButtonVariant.OUTLINE, onClick = onOpenTrust)
-
-            // "Verified" badge submission (Phase 3 of the backlog this
-            // session is working) -- both roles. Not parent-only: unlike
-            // this app's existing parent-only settings (hide-name/
-            // visibility, explicitly scoped to "In parent login" when
-            // reported), verification is the CHILD's own ID + selfie, and
-            // the backend's require_owns_primary already allows either the
-            // Primary itself or its linked Sponsor to submit (app/auth.py)
-            // -- a parent can still do it on their child's behalf, the
-            // child just isn't blocked from doing it themselves. Same
-            // linkedPrimaryId gate FamilyLinkSection below already needs.
-            if (linkedPrimaryId != null) {
-                D2MButton(text = strings.verification, variant = D2MButtonVariant.OUTLINE, onClick = onOpenVerification)
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Filled.NotificationsOff,
+                    title = strings.muteNotificationsTitle,
+                    subtitle = strings.muteNotificationsSubtitle,
+                    checked = muted,
+                    onCheckedChange = { checked ->
+                        muted = checked
+                        if (accountId != null) {
+                            scope.launch { runCatching { notificationsRepo.setPreferences(accountId, NotificationPreferenceIn(muted = checked)) } }
+                        }
+                    },
+                )
+                // "Hide name": a name auto-masks until a match exists, then unmasks; this
+                // is the manual override that keeps it masked even after a match.
+                if (linkedPrimaryId != null) {
+                    SettingsDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Filled.VisibilityOff,
+                        title = strings.hideNameTitle,
+                        subtitle = strings.hideNameSubtitle,
+                        checked = hideNameOverride,
+                        onCheckedChange = { checked ->
+                            hideNameOverride = checked
+                            scope.launch { runCatching { identityRepo.setHideNameOverride(linkedPrimaryId, checked) } }
+                        },
+                    )
+                }
             }
 
             if (linkedPrimaryId != null) {
                 FamilyLinkSection(identity = identity, linkedPrimaryId = linkedPrimaryId, trustRepo = trustRepo)
             }
 
-            D2MButton(text = strings.logOut, variant = D2MButtonVariant.OUTLINE, onClick = {
-                identityStore.clear()
-                onLogout()
-            })
+            SettingsCard {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    title = strings.logOut,
+                    destructive = true,
+                    trailing = null,
+                    onClick = { logoutConfirm = true },
+                )
+            }
+
+            Text(
+                "D2M",
+                style = MaterialTheme.typography.labelMedium,
+                color = mutedText(0.35f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+
+        if (languageSheet) LanguageSheet(localeStore = localeStore, hint = strings.languageHint, title = strings.languageTitle, onDismiss = { languageSheet = false })
+
+        if (logoutConfirm) {
+            AlertDialog(
+                onDismissRequest = { logoutConfirm = false },
+                title = { Text(strings.logOutConfirmTitle) },
+                text = { Text(strings.logOutConfirmBody) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        logoutConfirm = false
+                        haptics.medium()
+                        identityStore.clear()
+                        onLogout()
+                    }) { Text(strings.logOut, color = com.d2m.app.ui.theme.LocalD2MStatusPalette.current.danger.fg) }
+                },
+                dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text(strings.cancel) } },
+            )
         }
     }
 }
 
-// "Linking management of parent with child & vice versa" (reported
-// directly) -- not built on StepUpConfirmDialog.kt's existing pattern:
-// that mints a pre-scoped X-Step-Up-Token via WedLock's generic
-// reauthenticate(), which can't satisfy unlink_family's stricter,
-// action-bound require_action_proof (confirmed by live testing against
-// the real stack -- see trust_bridge_service.unlink_family's own
-// docstring on the d2m_core_engine side); this sends the raw password
-// straight through instead.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguageSheet(localeStore: LocaleStore, hint: String, title: String, onDismiss: () -> Unit) {
+    val locale by localeStore.locale.collectAsState()
+    val haptics = rememberHaptics()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = d2m.textPrimary,
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+            SettingsCard {
+                AppLocale.entries.forEachIndexed { i, l ->
+                    if (i > 0) SettingsDivider(inset = 16.dp)
+                    Row(
+                        Modifier.fillMaxWidth().bounceClickable(
+                            onClick = { haptics.light(); localeStore.setLocale(l); onDismiss() },
+                            pressedScale = 0.985f, enforceMinimumTarget = false,
+                        ).padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            l.nativeName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (l == locale) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (l == locale) Icon(Icons.Filled.Check, contentDescription = null, tint = d2m.accent)
+                    }
+                }
+            }
+            Text(hint, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f), modifier = Modifier.padding(start = 4.dp, top = 12.dp))
+        }
+    }
+}
+
+// "Linking management of parent with child & vice versa" -- not built on
+// StepUpConfirmDialog.kt's pattern: that mints a pre-scoped X-Step-Up-Token
+// which can't satisfy unlink_family's stricter, action-bound
+// require_action_proof (see trust_bridge_service.unlink_family on the
+// d2m_core_engine side); this sends the raw password straight through.
 @Composable
 private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trustRepo: TrustRepository) {
     val strings = LocalStrings.current.settings
@@ -224,26 +346,21 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
     var error by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
 
-    HorizontalDivider()
-    Column {
-        Text(strings.familyLinkTitle, fontWeight = FontWeight.Bold)
+    SettingsSection(strings.sectionFamily) {
         if (done) {
             Text(
                 strings.familyLinkUnlinkedNotice,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedText(0.55f),
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(16.dp),
             )
         } else {
-            Text(
-                if (identity.role == D2MRole.PARENT) strings.familyLinkUnlinkDescParent else strings.familyLinkUnlinkDescChild,
-                style = MaterialTheme.typography.bodySmall,
-                color = mutedText(0.55f),
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
-            )
-            D2MButton(
-                text = strings.unlinkFamilyAccount,
-                variant = D2MButtonVariant.OUTLINE,
+            SettingsRow(
+                icon = Icons.Filled.LinkOff,
+                title = strings.unlinkFamilyAccount,
+                subtitle = if (identity.role == D2MRole.PARENT) strings.familyLinkUnlinkDescParent else strings.familyLinkUnlinkDescChild,
+                destructive = true,
+                trailing = null,
                 onClick = { password = ""; error = null; dialogOpen = true },
             )
         }
@@ -295,28 +412,16 @@ private fun FamilyLinkSection(identity: Identity, linkedPrimaryId: String, trust
     }
 }
 
-// The SaaS-standard "who am I" header -- photo/name/contact/account id
-// above everything else -- so Settings opens by confirming whose account
-// this is before it gets into preferences ("I want it to be how saas
-// products have it as. It should have a header section with user image,
-// name, email address, account id. Then comes the other settings",
-// reported directly). Mirrors d2m_web's SettingsScreen.jsx AccountHeader.
-// Fetches the account's own profile once per screen open (name/
-// contactInfo aren't part of IdentityStore's own Identity -- that only
-// ever holds role + raw ids, see data/session/IdentityStore.kt) rather
-// than duplicating another screen's fetch. Sponsors have no photo of
-// their own in this app (only a linked child's Primary profile does), so
-// the parent role always falls back to ProfileThumb's own PersonGlyph;
-// the child role fetches its first photo (if any) the same way
-// ChildHomeScreen's own profile row does.
 @Composable
-private fun AccountHeader(identity: Identity, accountId: String?, onOpenProfile: () -> Unit) {
+private fun AccountHeader(identity: Identity, accountId: String?, verified: Boolean, onOpenProfile: () -> Unit) {
     val strings = LocalStrings.current.settings
     val identityRepo: IdentityRepository = koinInject()
     var name by remember { mutableStateOf<String?>(null) }
     var contactInfo by remember { mutableStateOf<String?>(null) }
     var photoUrl by remember { mutableStateOf<String?>(null) }
 
+    // Name/contact aren't part of IdentityStore's Identity (role + raw ids only), so fetch once per open.
+    // Sponsors have no photo of their own; the child role uses its first photo.
     LaunchedEffect(accountId, identity.role) {
         val pid = accountId ?: return@LaunchedEffect
         if (identity.role == D2MRole.PARENT) {
@@ -335,61 +440,40 @@ private fun AccountHeader(identity: Identity, accountId: String?, onOpenProfile:
         }
     }
 
-    val clipboard = LocalClipboardManager.current
-    var copied by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val displayName = name?.takeIf { it.isNotBlank() } ?: strings.yourAccount
+    val roleLabel = if (identity.role == D2MRole.PARENT) strings.roleParent else strings.roleChild
 
-    // "Show an arrow in the name/email card for going into profile"
-    // (reported directly) -- the whole row is now a tap target leading to
-    // the profile edit screen, with a trailing chevron same as any other
-    // navigation row in this app.
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth().bounceClickable(onClick = onOpenProfile, pressedScale = 0.985f),
-    ) {
-        ProfileThumb(photoUrl = photoUrl, contentDescription = name, size = 52.dp, shape = CircleShape)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(name ?: "…", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            val contact = contactInfo
-            if (!contact.isNullOrBlank()) {
-                Text(contact, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+    SettingsCard(Modifier.bounceClickable(onClick = onOpenProfile, pressedScale = 0.985f, enforceMinimumTarget = false)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        ) {
+            ProfileThumb(
+                photoUrl = photoUrl,
+                contentDescription = displayName,
+                size = 72.dp,
+                shape = CircleShape,
+                fallback = if (name.isNullOrBlank()) null else ({
+                    Text(
+                        displayName.first().uppercase(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = d2m.accentStrong,
+                    )
+                }),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(displayName, style = MaterialTheme.typography.titleLarge, color = d2m.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
+                    Text(roleLabel, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+                    if (verified) VerifiedBadge(size = 16.dp)
+                }
+                val contact = contactInfo
+                if (!contact.isNullOrBlank()) {
+                    Text(contact, style = MaterialTheme.typography.bodySmall, color = mutedText(0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-            if (accountId != null) {
-                Text(
-                    if (copied) strings.copied else accountId,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (copied) d2m.accentStrong else mutedText(0.45f),
-                    modifier = Modifier.padding(top = 4.dp).clickable {
-                        clipboard.setText(AnnotatedString(accountId))
-                        copied = true
-                        scope.launch {
-                            delay(1500)
-                            copied = false
-                        }
-                    },
-                )
-            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
         }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
-    }
-}
-
-
-/**
- * A labelled on/off setting as ONE control: the whole row toggles and is exposed to accessibility services as a single
- * switch named by its title (previously the Switch stood alone, so a screen reader announced just "switch").
- */
-@Composable
-private fun SettingSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = mutedText(0.55f), style = MaterialTheme.typography.labelMedium)
-        }
-        Switch(checked = checked, onCheckedChange = null)
     }
 }
