@@ -17,11 +17,52 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import com.d2m.app.data.session.D2MRole
+import com.d2m.app.data.session.IdentityStore
+import com.d2m.app.domain.repository.NotificationsRepository
+import com.d2m.app.messaging.MessagingRepository
+import com.d2m.app.ui.components.pressScale
+import com.d2m.app.ui.components.rememberHaptics
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,40 +128,188 @@ fun D2MTab.localizedLabel(common: CommonStrings): String = when (this) {
     D2MTab.ChildNotifications -> common.tabNotifications
 }
 
+/**
+ * Cross-screen unread counters for the tab badges. A tiny process-wide
+ * holder (not DI) because NotificationsScreen writes it when the user reads
+ * things and the shell bar reads it from outside the nav graph.
+ */
+object UnreadBadges {
+    val notifications = MutableStateFlow(0)
+}
+
+/**
+ * Tab navigation that preserves each tab's back stack, scroll position and
+ * state. Reselecting the current tab is a no-op (launchSingleTop), so there
+ * is no rebuild or flicker.
+ */
+fun NavHostController.navigateToTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+/**
+ * The bar App.kt mounts. Owns its own badge sources so unread-count churn
+ * recomposes only this bar, never the whole app shell.
+ */
 @Composable
-fun D2MBottomBar(tabs: List<D2MTab>, currentRoute: String?, onTabSelected: (D2MTab) -> Unit) {
+fun D2MShellBottomBar(tabs: List<D2MTab>, currentRoute: String?, onTabSelected: (D2MTab) -> Unit) {
+    val messagingRepo: MessagingRepository = koinInject()
+    val identityStore: IdentityStore = koinInject()
+    val notificationsRepo: NotificationsRepository = koinInject()
+    val identity by identityStore.identity.collectAsState()
+    val isChild = identity.role == D2MRole.CHILD
+
+    val unreadMessages by remember(messagingRepo) {
+        messagingRepo.unreadByPeer.map { m -> m.values.sum() }.distinctUntilChanged()
+    }.collectAsState(0)
+    val unreadNotifications by UnreadBadges.notifications.collectAsState()
+
+    val accountId = identity.primaryId
+    LaunchedEffect(accountId, currentRoute, isChild) {
+        if (!isChild || accountId == null) return@LaunchedEffect
+        // Cached for 20s in the repository, so tab hops cost nothing.
+        runCatching { notificationsRepo.getNotifications(accountId) }
+            .onSuccess { list -> UnreadBadges.notifications.value = list.count { it.readAt == null } }
+    }
+
+    val badges = remember(unreadMessages, unreadNotifications, isChild) {
+        if (!isChild) emptyMap() else buildMap {
+            if (unreadMessages > 0) put(D2MTab.ChildMatches, unreadMessages)
+            if (unreadNotifications > 0) put(D2MTab.ChildNotifications, unreadNotifications)
+        }
+    }
+    D2MBottomBar(tabs = tabs, currentRoute = currentRoute, onTabSelected = onTabSelected, badges = badges)
+}
+
+@Composable
+fun D2MBottomBar(
+    tabs: List<D2MTab>,
+    currentRoute: String?,
+    onTabSelected: (D2MTab) -> Unit,
+    badges: Map<D2MTab, Int> = emptyMap(),
+) {
     val common = LocalStrings.current.common
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+    val haptics = rememberHaptics()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            // Home indicator / gesture bar: iOS safe-area and Android
+            // edge-to-edge both surface as navigationBars insets.
+            .windowInsetsPadding(WindowInsets.navigationBars),
+    ) {
         // A hairline instead of Material's tonal elevation -- nothing in
-        // this design floats, and an elevated bar over a cream page reads
-        // as a different material from everything above it.
+        // this design floats.
         D2MDivider(soft = false)
-        NavigationBar(
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = d2m.meta,
-            tonalElevation = 0.dp,
-        ) {
+        Row(Modifier.fillMaxWidth().height(64.dp).selectableGroup()) {
             tabs.forEach { tab ->
-                val label = tab.localizedLabel(common)
-                NavigationBarItem(
-                    selected = currentRoute == tab.route,
-                    onClick = { onTabSelected(tab) },
-                    icon = { Icon(tab.icon, contentDescription = label) },
-                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = d2m.accent,
-                        selectedTextColor = d2m.accent,
-                        unselectedIconColor = d2m.label,
-                        unselectedTextColor = d2m.label,
-                        // The indicator is the warm sunken tone, not a
-                        // maroon-tinted pill: at 4 tabs a saturated pill
-                        // under the active icon competes with whatever
-                        // primary action the screen itself is showing.
-                        indicatorColor = d2m.surfaceSunken,
-                    ),
+                val selected = currentRoute == tab.route
+                BottomBarItem(
+                    tab = tab,
+                    label = tab.localizedLabel(common),
+                    selected = selected,
+                    badge = badges[tab] ?: 0,
+                    onClick = {
+                        if (!selected) haptics.light()
+                        onTabSelected(tab)
+                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BottomBarItem(
+    tab: D2MTab,
+    label: String,
+    selected: Boolean,
+    badge: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val source = remember { MutableInteractionSource() }
+    val tint by animateColorAsState(if (selected) d2m.accent else d2m.label, tween(180), label = "tabTint")
+    val pill = animateFloatAsState(if (selected) 1f else 0f, spring(stiffness = Spring.StiffnessMediumLow), label = "tabPill")
+    val lift = animateFloatAsState(if (selected) 1.12f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "tabLift")
+    val pillColor = d2m.surfaceSunken
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .pressScale(source, 0.92f)
+            .selectable(
+                selected = selected,
+                interactionSource = source,
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .height(30.dp)
+                .width(58.dp)
+                // Selected pill grows from the centre; read in draw phase.
+                .drawBehind {
+                    val p = pill.value
+                    if (p > 0.01f) {
+                        val w = size.width * p
+                        drawRoundRect(
+                            color = pillColor,
+                            topLeft = Offset((size.width - w) / 2f, 0f),
+                            size = Size(w, size.height),
+                            cornerRadius = CornerRadius(size.height / 2f),
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier.graphicsLayer {
+                    val l = lift.value
+                    scaleX = l
+                    scaleY = l
+                },
+            ) {
+                Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            }
+            if (badge > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-2).dp, y = (-2).dp)
+                        .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
+                        .background(d2m.accent, CircleShape)
+                        .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        .padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (badge > 99) "99+" else badge.toString(),
+                        color = d2m.accentOn,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
     }
 }
 

@@ -36,6 +36,14 @@ interface ChildHomeStrings {
     val emptyHeroTitle: String
     val emptyHeroSubtitle: String
     val emptyHeroCta: String
+    val waitingOnYouTitle: String
+    val summaryMatchesTitle: String
+    fun summaryMatchesSubtitle(count: Int): String
+    val summaryNotificationsTitle: String
+    fun summaryNotificationsSubtitle(unread: Int): String
+    val summarySentTitle: String
+    fun summarySentSubtitle(count: Int): String
+    val discoverHeadline: String
 }
 
 object ChildHomeStringsEn : ChildHomeStrings {
@@ -73,6 +81,14 @@ object ChildHomeStringsEn : ChildHomeStrings {
     override val emptyHeroTitle = "Your person's out there"
     override val emptyHeroSubtitle = "No matches yet -- let's find someone worth a hello."
     override val emptyHeroCta = "Let's go"
+    override val waitingOnYouTitle = "Waiting on you"
+    override val summaryMatchesTitle = "Matches"
+    override fun summaryMatchesSubtitle(count: Int) = if (count == 0) "No conversations yet" else if (count == 1) "1 conversation" else "$count conversations"
+    override val summaryNotificationsTitle = "Notifications"
+    override fun summaryNotificationsSubtitle(unread: Int) = if (unread == 0) "All caught up" else "$unread unread"
+    override val summarySentTitle = "Requests sent"
+    override fun summarySentSubtitle(count: Int) = if (count == 1) "1 waiting for a reply" else "$count waiting for a reply"
+    override val discoverHeadline = "Discover"
 }
 
 object ChildHomeStringsHi : ChildHomeStrings {
@@ -110,6 +126,14 @@ object ChildHomeStringsHi : ChildHomeStrings {
     override val emptyHeroTitle = "आपका हमसफ़र कहीं है"
     override val emptyHeroSubtitle = "अभी कोई मैच नहीं -- चलिए किसी खास से मुलाक़ात ढूंढते हैं।"
     override val emptyHeroCta = "चलिए शुरू करें"
+    override val waitingOnYouTitle = "आपके जवाब का इंतज़ार"
+    override val summaryMatchesTitle = "मैच"
+    override fun summaryMatchesSubtitle(count: Int) = if (count == 0) "अभी कोई बातचीत नहीं" else "$count बातचीत"
+    override val summaryNotificationsTitle = "सूचनाएं"
+    override fun summaryNotificationsSubtitle(unread: Int) = if (unread == 0) "सब देख लिया" else "$unread अपठित"
+    override val summarySentTitle = "भेजे गए अनुरोध"
+    override fun summarySentSubtitle(count: Int) = "$count जवाब की प्रतीक्षा में"
+    override val discoverHeadline = "खोजें"
 }
 
 object ChildHomeStringsTa : ChildHomeStrings {
@@ -147,4 +171,12 @@ object ChildHomeStringsTa : ChildHomeStrings {
     override val emptyHeroTitle = "உங்கள் துணை எங்கோ இருக்கிறார்"
     override val emptyHeroSubtitle = "இன்னும் மேட்ச் இல்லை -- ஒரு ஹலோவுக்கு தகுதியான ஒருவரைத் தேடுவோம்."
     override val emptyHeroCta = "செல்லலாம்"
+    override val waitingOnYouTitle = "உங்கள் பதிலுக்காகக் காத்திருப்பவை"
+    override val summaryMatchesTitle = "பொருத்தங்கள்"
+    override fun summaryMatchesSubtitle(count: Int) = if (count == 0) "இன்னும் உரையாடல்கள் இல்லை" else "$count உரையாடல்கள்"
+    override val summaryNotificationsTitle = "அறிவிப்புகள்"
+    override fun summaryNotificationsSubtitle(unread: Int) = if (unread == 0) "அனைத்தும் பார்த்தாயிற்று" else "$unread படிக்காதவை"
+    override val summarySentTitle = "அனுப்பிய கோரிக்கைகள்"
+    override fun summarySentSubtitle(count: Int) = "$count பதிலுக்காகக் காத்திருக்கின்றன"
+    override val discoverHeadline = "கண்டறி"
 }

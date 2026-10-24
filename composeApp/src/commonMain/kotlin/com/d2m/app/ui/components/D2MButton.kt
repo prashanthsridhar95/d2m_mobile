@@ -9,7 +9,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button as M3Button
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,8 @@ fun D2MButton(
         D2MButtonSize.LG -> PaddingValues(horizontal = 24.dp, vertical = 15.dp)
     }
     val shape = RoundedCornerShape(D2MRadius.md)
+    val source = remember { MutableInteractionSource() }
+    val pressModifier = modifier.pressScale(source)
 
     // Sentence case, never uppercase: the uppercase treatment in this
     // design belongs to labels (see LabelText), and using it on buttons
@@ -81,7 +85,8 @@ fun D2MButton(
     when (variant) {
         D2MButtonVariant.SOLID -> M3Button(
             onClick = onClick,
-            modifier = modifier,
+            modifier = pressModifier,
+            interactionSource = source,
             enabled = enabled,
             shape = shape,
             contentPadding = padding,
@@ -100,7 +105,8 @@ fun D2MButton(
 
         D2MButtonVariant.ACCENT_OUTLINE -> OutlinedButton(
             onClick = onClick,
-            modifier = modifier,
+            modifier = pressModifier,
+            interactionSource = source,
             enabled = enabled,
             shape = shape,
             contentPadding = padding,
@@ -113,7 +119,8 @@ fun D2MButton(
 
         D2MButtonVariant.OUTLINE -> OutlinedButton(
             onClick = onClick,
-            modifier = modifier,
+            modifier = pressModifier,
+            interactionSource = source,
             enabled = enabled,
             shape = shape,
             contentPadding = padding,
@@ -126,7 +133,8 @@ fun D2MButton(
 
         D2MButtonVariant.GOLD -> M3Button(
             onClick = onClick,
-            modifier = modifier,
+            modifier = pressModifier,
+            interactionSource = source,
             enabled = enabled,
             shape = shape,
             contentPadding = padding,
@@ -141,7 +149,8 @@ fun D2MButton(
 
         D2MButtonVariant.GHOST -> TextButton(
             onClick = onClick,
-            modifier = modifier,
+            modifier = pressModifier,
+            interactionSource = source,
             enabled = enabled,
             shape = shape,
             contentPadding = padding,

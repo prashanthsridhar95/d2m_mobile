@@ -63,7 +63,11 @@ import com.d2m.app.ui.components.StepUpConfirmDialogHost
 import com.d2m.app.ui.components.StepUpController
 import com.d2m.app.ui.components.WatermarkOverlay
 import com.d2m.app.ui.navigation.ChildTabs
-import com.d2m.app.ui.navigation.D2MBottomBar
+import com.d2m.app.ui.navigation.D2MShellBottomBar
+import com.d2m.app.ui.navigation.navigateToTab
+import com.d2m.app.ui.components.D2MSnackbarHost
+import com.d2m.app.ui.components.LocalD2MSnackbar
+import com.d2m.app.ui.components.rememberD2MSnackbarState
 import com.d2m.app.ui.navigation.D2MNavGraph
 import com.d2m.app.ui.navigation.ParentTabs
 import com.d2m.app.ui.navigation.Routes
@@ -266,12 +270,15 @@ fun App() {
     // alone can't tell us that (the thread list and an open conversation are
     // both the MATCHES route, see MatchesScreen.kt/ChatUiState.kt), so this
     // also factors in the shared conversationOpen flag.
+    val tabRoutes = remember(tabs) { tabs?.map { it.route }?.toSet().orEmpty() }
     val showBottomBar = tabs != null && tabs.any { it.route == currentRoute } && !conversationOpen
 
+    val snackbarState = rememberD2MSnackbarState()
     CompositionLocalProvider(
         LocalPhotoImageLoader provides photoImageLoader,
         LocalStrings provides stringsFor(locale),
         LocalAppLocale provides locale,
+        LocalD2MSnackbar provides snackbarState,
     ) {
     val strings = LocalStrings.current.sharedComponents
     D2MTheme(flow = D2MFlow.ENTRY) {
@@ -291,24 +298,19 @@ fun App() {
                 // this Scaffold's own chrome, and each screen's header --
                 // stays completely still.
                 contentWindowInsets = WindowInsets.systemBars,
+                snackbarHost = { D2MSnackbarHost(snackbarState) },
                 bottomBar = {
                     if (showBottomBar && tabs != null) {
-                        D2MBottomBar(
+                        D2MShellBottomBar(
                             tabs = tabs,
                             currentRoute = currentRoute,
-                            onTabSelected = { tab ->
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onTabSelected = { tab -> navController.navigateToTab(tab.route) },
                         )
                     }
                 },
             ) { innerPadding ->
                 Box(modifier = Modifier.padding(innerPadding)) {
-                    D2MNavGraph(navController = navController, startDestination = startDestination)
+                    D2MNavGraph(navController = navController, startDestination = startDestination, tabRoutes = tabRoutes)
                 }
             }
 
@@ -349,11 +351,7 @@ fun App() {
                     onOpenPeer = { peerUsername ->
                         chatUiState.requestOpenPeer(peerUsername)
                         val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
-                        navController.navigate(target) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToTab(target)
                     },
                 )
             }
@@ -372,11 +370,7 @@ fun App() {
                 if (identity.role == null) return@LaunchedEffect
                 chatUiState.requestOpenPeer(peerUsername)
                 val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
-                navController.navigate(target) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navController.navigateToTab(target)
                 PendingOpenPeer.clear()
             }
 

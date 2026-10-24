@@ -36,6 +36,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="D2M"
         android:theme="@style/Theme.D2M"
+        android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true">
 
         <!-- windowSoftInputMode: left unspecified before, which several

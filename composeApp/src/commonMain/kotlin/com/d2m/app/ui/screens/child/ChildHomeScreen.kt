@@ -1,13 +1,14 @@
 package com.d2m.app.ui.screens.child
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,11 +19,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -58,13 +59,18 @@ import com.d2m.app.domain.repository.SuggestionsRepository
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.D2MButtonVariant
+import com.d2m.app.ui.components.D2MCard
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSkeleton
-import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.LocalD2MSnackbar
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.ProfilePhoto
 import com.d2m.app.ui.components.ProfileThumb
+import com.d2m.app.ui.components.SkeletonListRow
 import com.d2m.app.ui.components.SubHeading
+import com.d2m.app.ui.components.bounceClickable
+import com.d2m.app.ui.components.rememberHaptics
+import com.d2m.app.ui.navigation.UnreadBadges
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
@@ -125,7 +131,16 @@ import org.koin.compose.koinInject
  * on a warm cache), and there is no more full-screen "Loading…" text at
  * all -- refreshing now genuinely happens in the background the way a
  * revisit should feel.
+  *
+ * Focus pass (mobile UX upgrade): the screen is now deliberately small --
+ * greeting, ONE primary call to action toward Discover (or the active chat
+ * when Discover is paused for Serious Mode), a "waiting on you" card only
+ * when something actually needs a decision, and a compact summary list
+ * (matches / notifications / sent / profile). Pull-to-refresh force-reloads
+ * everything; success/failure feedback goes through the app-wide snackbar and
+ * haptics instead of inline banners.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildHomeScreen(
     onOpenProfile: (String) -> Unit,
@@ -133,6 +148,7 @@ fun ChildHomeScreen(
     onOpenMatches: () -> Unit,
     onOpenChildProfileDialog: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNotifications: () -> Unit = {},
 ) {
     val identityStore: IdentityStore = koinInject()
     val identityRepo: IdentityRepository = koinInject()
@@ -142,6 +158,9 @@ fun ChildHomeScreen(
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val snackbar = LocalD2MSnackbar.current
+    val haptics = rememberHaptics()
+    val unreadNotifications by UnreadBadges.notifications.collectAsState()
 
     var profile by remember { mutableStateOf<PrimaryProfileOut?>(null) }
     var ownPhotoUrl by remember { mutableStateOf<String?>(null) }
@@ -153,60 +172,40 @@ fun ChildHomeScreen(
     var consentRequests by remember { mutableStateOf<List<ConsentRequestOut>>(emptyList()) }
     var activeCandidatePhotoUrl by remember { mutableStateOf<String?>(null) }
 
-    // Per-section readiness, not one global gate -- see the doc comment
-    // above. Each flips true the moment its own fetch resolves, letting
-    // the hero and the list card each show their own shimmer independently
-    // instead of the whole page waiting on the slowest of eight calls.
+    // Per-section readiness (see the loading note above): each flips true the
+    // moment its own fetch resolves, so a warm cache paints instantly.
     var profileLoaded by remember { mutableStateOf(false) }
     var threadsLoaded by remember { mutableStateOf(false) }
     var suggestionsLoaded by remember { mutableStateOf(false) }
-    var requestsLoaded by remember { mutableStateOf(false) } // received + sent + consent, together
+    var requestsLoaded by remember { mutableStateOf(false) }
 
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var actionError by remember { mutableStateOf<String?>(null) }
-    var matchBanner by remember { mutableStateOf<String?>(null) }
     var matchBusyId by remember { mutableStateOf<String?>(null) }
     var consentBusyId by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
     val strings = LocalStrings.current.childHome
 
-    LaunchedEffect(primaryId) {
-        if (primaryId == null) return@LaunchedEffect
+    suspend fun loadAll(force: Boolean) {
+        val pid = primaryId ?: return
         error = null
         try {
-            // coroutineScope{} (not just the implicit LaunchedEffect scope
-            // every async{} below would otherwise launch directly on) is
-            // load-bearing, not decorative. Without it, these eight async{}
-            // calls are direct siblings of THIS try/catch's own coroutine --
-            // structured concurrency propagates a child's failure to the
-            // parent Job the moment it happens, independent of whether that
-            // specific Deferred has been .await()-ed yet. A profile/thread/
-            // suggestion call failing (session expired mid-load, say -- see
-            // ApiError's "authentication required") while an EARLIER await()
-            // is still suspended could crash straight past this catch block
-            // instead of being caught by it (uncaught exception on
-            // AndroidUiDispatcher's own coroutine, not a thrown-and-caught
-            // one this try/catch would ever see -- reported directly as a
-            // FATAL EXCEPTION crash). coroutineScope{} makes the whole group
-            // fail as one unit: the first failure cancels the rest and is
-            // rethrown from the coroutineScope{} call itself, which *is*
-            // ordinary thrown-exception control flow this try/catch catches.
+            // coroutineScope{} is load-bearing: it makes the group of async{}
+            // calls fail as one unit whose exception THIS try/catch sees,
+            // instead of crashing the parent job (see git history: FATAL
+            // EXCEPTION on expired session).
             coroutineScope {
-                val profileDeferred = async { identityRepo.getPrimaryProfile(primaryId) }
-                val photosDeferred = async { runCatching { identityRepo.getPhotos(primaryId) }.getOrDefault(emptyList()) }
-                val sponsorStatusDeferred = async { seriousModeRepo.getSponsorStatus(primaryId) }
-                val threadsDeferred = async { seriousModeRepo.getThreads(primaryId) }
-                val suggestionsDeferred = async { suggestionsRepo.getSuggestions(primaryId) }
-                val receivedDeferred = async { suggestionsRepo.getReceivedRequests(primaryId) }
-                val sentDeferred = async { suggestionsRepo.getSentRequests(primaryId) }
-                val consentDeferred = async { runCatching { consentRepo.getConsentRequests(primaryId) }.getOrDefault(emptyList()) }
+                val profileDeferred = async { identityRepo.getPrimaryProfile(pid, forceRefresh = force) }
+                val photosDeferred = async { runCatching { identityRepo.getPhotos(pid, forceRefresh = force) }.getOrDefault(emptyList()) }
+                val sponsorStatusDeferred = async { seriousModeRepo.getSponsorStatus(pid) }
+                val threadsDeferred = async { seriousModeRepo.getThreads(pid, forceRefresh = force) }
+                val suggestionsDeferred = async { suggestionsRepo.getSuggestions(pid, forceRefresh = force) }
+                val receivedDeferred = async { suggestionsRepo.getReceivedRequests(pid) }
+                val sentDeferred = async { suggestionsRepo.getSentRequests(pid) }
+                val consentDeferred = async { runCatching { consentRepo.getConsentRequests(pid) }.getOrDefault(emptyList()) }
 
-                // Await order (not just launch order) doubles as the reveal
-                // order -- profile/hero data first since the greeting and hero
-                // are the first things on screen, the shared list last since
-                // its dependents (showPicks, discoverDisabled) need suggestions
-                // and sponsorStatus already resolved by the time it renders.
+                // Await order doubles as reveal order.
                 profile = profileDeferred.await()
                 ownPhotoUrl = photosDeferred.await().firstOrNull()?.url
                 profileLoaded = true
@@ -218,7 +217,7 @@ fun ChildHomeScreen(
                 val active = threads.filter { it.status != "closed" }
                     .let { open -> open.find { it.status == "exclusive" } ?: open.firstOrNull() }
                 activeCandidatePhotoUrl = active?.let {
-                    runCatching { suggestionsRepo.getCandidate(primaryId, it.otherParticipantId).photoUrl }.getOrNull()
+                    runCatching { suggestionsRepo.getCandidate(pid, it.otherParticipantId).photoUrl }.getOrNull()
                 }
 
                 suggestions = suggestionsDeferred.await()
@@ -234,16 +233,21 @@ fun ChildHomeScreen(
         }
     }
 
+    LaunchedEffect(primaryId) { loadAll(force = false) }
+
     fun handleMatchAction(candidateId: String, action: String) {
         val pid = primaryId ?: return
         scope.launch {
             matchBusyId = candidateId
             try {
                 val res = suggestionsRepo.act(pid, candidateId, action)
-                if (res.mutualMatch) matchBanner = strings.matchBanner
+                if (res.mutualMatch) {
+                    haptics.success()
+                    snackbar.showSuccess(strings.matchBanner)
+                } else haptics.medium()
                 received = received.filter { it.candidateId != candidateId }
             } catch (e: Exception) {
-                actionError = friendlyError(e, strings.errRecordDecision)
+                snackbar.showError(friendlyError(e, strings.errRecordDecision))
             } finally {
                 matchBusyId = null
             }
@@ -256,173 +260,189 @@ fun ChildHomeScreen(
             consentBusyId = requestId
             try {
                 val res = consentRepo.decide(pid, requestId, decision)
+                haptics.medium()
                 consentRequests = consentRequests.map { if (it.requestId == requestId) it.copy(status = res.status) else it }
             } catch (e: Exception) {
-                actionError = friendlyError(e, strings.errRecordDecision)
+                snackbar.showError(friendlyError(e, strings.errRecordDecision))
             } finally {
                 consentBusyId = null
             }
         }
     }
 
+    // Derived once per data change, not per recomposition.
+    val discoverDisabled = sponsorStatus?.status == "serious_exploration"
+    val openThreads = remember(threads) { threads.filter { it.status != "closed" } }
+    val activeThread = remember(openThreads) { openThreads.find { it.status == "exclusive" } ?: openThreads.firstOrNull() }
+    val matchedIds = remember(openThreads) { openThreads.map { it.otherParticipantId }.toSet() }
+    val receivedFiltered = remember(received, matchedIds) { received.filter { it.candidateId !in matchedIds } }
+    val sentFiltered = remember(sent, matchedIds) { sent.filter { it.candidateId !in matchedIds } }
+    val pendingConsentList = remember(consentRequests) { consentRequests.filter { it.status == "pending" } }
+    val pendingOnMe = remember(threads, primaryId) {
+        threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
+    }
+    val showPicks = !discoverDisabled && suggestions.isNotEmpty()
+
+    val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: strings.greetingFallbackName
+    val subtitle = when {
+        pendingOnMe > 0 -> strings.subtitlePendingDecision
+        receivedFiltered.isNotEmpty() -> strings.subtitleNewRequest(receivedFiltered.size)
+        pendingConsentList.isNotEmpty() -> strings.subtitleConsentPending
+        showPicks -> strings.subtitleNewPicks
+        else -> strings.subtitleCaughtUp
+    }
+
     D2MTheme(flow = D2MFlow.CHILD) {
-        val discoverDisabled = sponsorStatus?.status == "serious_exploration"
-        val openThreads = threads.filter { it.status != "closed" }
-        val activeThread = openThreads.find { it.status == "exclusive" } ?: openThreads.firstOrNull()
-        val matchedIds = openThreads.map { it.otherParticipantId }.toSet()
-        val receivedFiltered = received.filter { it.candidateId !in matchedIds }
-        val sentFiltered = sent.filter { it.candidateId !in matchedIds }
-        val pendingConsentList = consentRequests.filter { it.status == "pending" }
-        val pendingOnMe = threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
-        val showPicks = !discoverDisabled && suggestions.isNotEmpty()
-
-        val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: strings.greetingFallbackName
-        val subtitle = when {
-            pendingOnMe > 0 -> strings.subtitlePendingDecision
-            receivedFiltered.isNotEmpty() -> strings.subtitleNewRequest(receivedFiltered.size)
-            pendingConsentList.isNotEmpty() -> strings.subtitleConsentPending
-            showPicks -> strings.subtitleNewPicks
-            else -> strings.subtitleCaughtUp
-        }
-
-        val listItems = buildList {
-            if (receivedFiltered.isEmpty() && sentFiltered.isEmpty() && pendingConsentList.isEmpty()) {
-                add(HomeListItem.Empty)
-            } else {
-                receivedFiltered.forEach { add(HomeListItem.Received(it)) }
-                pendingConsentList.forEach { add(HomeListItem.ConsentAsk(it)) }
-                sentFiltered.forEach { add(HomeListItem.Sent(it)) }
-            }
-            if (showPicks) add(HomeListItem.Picks(suggestions.size))
-            add(HomeListItem.Profile)
-        }
-
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                scope.launch {
+                    refreshing = true
+                    loadAll(force = true)
+                    refreshing = false
+                }
+            },
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        PageTitle(strings.greeting(firstName))
-                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = strings.settingsContentDescription)
-                    }
-                }
-            }
-
-            if (error != null) {
-                item { D2MErrorBanner(error!!) }
-            }
-            if (actionError != null) {
-                item { D2MErrorBanner(actionError!!) }
-            }
-            if (matchBanner != null) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(D2MRadius.md))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                            .padding(16.dp),
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                item(key = "header", contentType = "header") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
                     ) {
-                        Text("🎉 $matchBanner", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.weight(1f)) {
+                            PageTitle(strings.greeting(firstName))
+                            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 6.dp))
+                        }
+                        Box(
+                            Modifier
+                                .bounceClickable(onClick = onOpenSettings)
+                                .size(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Settings, contentDescription = strings.settingsContentDescription)
+                        }
                     }
                 }
-            }
 
-            item {
-                HeroBanner(
-                    loaded = threadsLoaded,
-                    activeThread = activeThread,
-                    candidatePhotoUrl = activeCandidatePhotoUrl,
-                    discoverDisabled = discoverDisabled,
-                    apiClient = apiClient,
-                    onOpenChat = onOpenMatches,
-                    onOpenDiscover = onOpenDiscover,
-                )
-            }
+                error?.let { msg ->
+                    item(key = "error", contentType = "banner") {
+                        D2MErrorBanner(msg, onRetry = { scope.launch { loadAll(force = true) } })
+                    }
+                }
 
-            item {
-                D2MCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        if (!requestsLoaded || !suggestionsLoaded || !profileLoaded) {
-                            SkeletonHomeRow()
-                            HorizontalDivider(color = mutedText(0.1f))
-                            SkeletonHomeRow()
-                        } else {
-                            listItems.forEachIndexed { index, item ->
-                                when (item) {
-                                    HomeListItem.Empty -> HomeListRow(
-                                        avatar = { GlyphCircle("👀") },
-                                        title = strings.noOneNewYetTitle,
-                                        subtitle = strings.emptyListSubtitle,
-                                    )
+                item(key = "cta", contentType = "cta") {
+                    PrimaryCta(
+                        loaded = threadsLoaded && suggestionsLoaded,
+                        activeThread = activeThread,
+                        candidatePhotoUrl = activeCandidatePhotoUrl,
+                        discoverDisabled = discoverDisabled,
+                        pickCount = suggestions.size,
+                        apiClient = apiClient,
+                        onOpenChat = onOpenMatches,
+                        onOpenDiscover = onOpenDiscover,
+                    )
+                }
 
-                                    is HomeListItem.Received -> {
-                                        val busy = matchBusyId == item.s.candidateId
-                                        HomeListRow(
-                                            avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
-                                            title = item.s.candidateName,
+                if (requestsLoaded && (receivedFiltered.isNotEmpty() || pendingConsentList.isNotEmpty())) {
+                    item(key = "waiting", contentType = "card") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SubHeading(strings.waitingOnYouTitle)
+                            D2MCard(modifier = Modifier.fillMaxWidth()) {
+                                Column {
+                                    receivedFiltered.forEachIndexed { index, r ->
+                                        val busy = matchBusyId == r.candidateId
+                                        if (index > 0) HorizontalDivider(color = mutedText(0.1f))
+                                        SummaryRow(
+                                            avatar = { PhotoCircle(r.photoUrl, r.candidateName, 44.dp, apiClient) },
+                                            title = r.candidateName,
                                             subtitle = strings.wantsToMatch,
-                                            onClick = { onOpenProfile(item.s.candidateId) },
-                                            action = {
+                                            onClick = { onOpenProfile(r.candidateId) },
+                                            trailing = {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton(strings.accept, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "accept") })
-                                                    D2MButton(strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(item.s.candidateId, "reject") })
+                                                    D2MButton(strings.accept, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(r.candidateId, "accept") })
+                                                    D2MButton(strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(r.candidateId, "reject") })
                                                 }
                                             },
                                         )
                                     }
-
-                                    is HomeListItem.ConsentAsk -> {
-                                        val busy = consentBusyId == item.r.requestId
-                                        HomeListRow(
-                                            avatar = { GlyphCircle("💛") },
-                                            title = strings.consentRowTitle(item.r.prospectName ?: strings.consentFallbackName),
-                                            action = {
+                                    pendingConsentList.forEachIndexed { index, c ->
+                                        val busy = consentBusyId == c.requestId
+                                        if (index > 0 || receivedFiltered.isNotEmpty()) HorizontalDivider(color = mutedText(0.1f))
+                                        SummaryRow(
+                                            avatar = { GlyphCircle("💛", 44.dp) },
+                                            title = strings.consentRowTitle(c.prospectName ?: strings.consentFallbackName),
+                                            trailing = {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton(strings.grant, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "grant") })
-                                                    D2MButton(strings.deny, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(item.r.requestId, "deny") })
+                                                    D2MButton(strings.grant, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(c.requestId, "grant") })
+                                                    D2MButton(strings.deny, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(c.requestId, "deny") })
                                                 }
                                             },
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
 
-                                    is HomeListItem.Sent -> HomeListRow(
-                                        avatar = { PhotoCircle(item.s.photoUrl, item.s.candidateName, 40.dp, apiClient) },
-                                        title = item.s.candidateName,
-                                        subtitle = strings.waitingForResponse,
-                                        onClick = { onOpenProfile(item.s.candidateId) },
-                                    )
-
-                                    is HomeListItem.Picks -> HomeListRow(
-                                        avatar = { GlyphCircle("💌") },
-                                        title = strings.todaysPicksTitle,
-                                        subtitle = strings.todaysPicksSubtitle(item.count),
-                                        onClick = onOpenDiscover,
-                                        action = { D2MButton(strings.takeALook, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, onClick = onOpenDiscover) },
-                                    )
-
-                                    HomeListItem.Profile -> HomeListRow(
-                                        avatar = { PhotoCircle(ownPhotoUrl, profile?.name, 40.dp, apiClient) },
-                                        title = strings.yourProfileTitle,
-                                        subtitle = strings.yourProfileSubtitle,
-                                        onClick = onOpenChildProfileDialog,
-                                        action = {
-                                            Text(
-                                                if (profile?.profileCompleted == true) strings.viewAndEdit else strings.completeProfile,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                            )
-                                        },
+                item(key = "summary", contentType = "card") {
+                    D2MCard(modifier = Modifier.fillMaxWidth()) {
+                        Column {
+                            if (!threadsLoaded || !requestsLoaded || !profileLoaded) {
+                                SkeletonListRow(Modifier.padding(horizontal = 18.dp), avatarSize = 44.dp)
+                                SkeletonListRow(Modifier.padding(horizontal = 18.dp), avatarSize = 44.dp)
+                                SkeletonListRow(Modifier.padding(horizontal = 18.dp), avatarSize = 44.dp)
+                            } else {
+                                SummaryRow(
+                                    avatar = {
+                                        if (activeCandidatePhotoUrl != null && activeThread != null) {
+                                            PhotoCircle(activeCandidatePhotoUrl, activeThread.otherParticipantName, 44.dp, apiClient)
+                                        } else GlyphCircle("💬", 44.dp)
+                                    },
+                                    title = strings.summaryMatchesTitle,
+                                    subtitle = strings.summaryMatchesSubtitle(openThreads.size),
+                                    onClick = onOpenMatches,
+                                )
+                                HorizontalDivider(color = mutedText(0.1f))
+                                SummaryRow(
+                                    avatar = { GlyphCircle("🔔", 44.dp) },
+                                    title = strings.summaryNotificationsTitle,
+                                    subtitle = strings.summaryNotificationsSubtitle(unreadNotifications),
+                                    onClick = onOpenNotifications,
+                                    trailing = if (unreadNotifications > 0) {
+                                        { CountDot(unreadNotifications) }
+                                    } else null,
+                                )
+                                if (sentFiltered.isNotEmpty()) {
+                                    HorizontalDivider(color = mutedText(0.1f))
+                                    SummaryRow(
+                                        avatar = { GlyphCircle("✉️", 44.dp) },
+                                        title = strings.summarySentTitle,
+                                        subtitle = strings.summarySentSubtitle(sentFiltered.size),
+                                        onClick = onOpenMatches,
                                     )
                                 }
-                                if (index != listItems.lastIndex) HorizontalDivider(color = mutedText(0.1f))
+                                HorizontalDivider(color = mutedText(0.1f))
+                                SummaryRow(
+                                    avatar = { PhotoCircle(ownPhotoUrl, profile?.name, 44.dp, apiClient) },
+                                    title = strings.yourProfileTitle,
+                                    subtitle = strings.yourProfileSubtitle,
+                                    onClick = onOpenChildProfileDialog,
+                                    trailing = {
+                                        Text(
+                                            if (profile?.profileCompleted == true) strings.viewAndEdit else strings.completeProfile,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    },
+                                )
                             }
                         }
                     }
@@ -432,31 +452,31 @@ fun ChildHomeScreen(
     }
 }
 
-private sealed class HomeListItem {
-    data object Empty : HomeListItem()
-    data class Received(val s: SuggestionOut) : HomeListItem()
-    data class ConsentAsk(val r: ConsentRequestOut) : HomeListItem()
-    data class Sent(val s: SuggestionOut) : HomeListItem()
-    data class Picks(val count: Int) : HomeListItem()
-    data object Profile : HomeListItem()
+@Composable
+private fun CountDot(count: Int) {
+    Box(
+        Modifier
+            .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+            .background(d2m.accent, CircleShape)
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(if (count > 99) "99+" else count.toString(), color = d2m.accentOn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 /**
- * The one big visual moment on the page -- full-bleed photo of whoever
- * you're actually talking to (most-open thread, exclusive wins), name/
- * status on a bottom scrim, "Open chat" floating top-right on the image
- * itself. No active thread yet gets a soft gradient invite into Discover
- * instead, sized to match rather than a smaller fallback -- mirrors
- * HomeScreen.jsx's HeroBanner exactly. `loaded=false` (threads not
- * resolved yet) renders a shimmer block at the same height instead of
- * either real state, same as web's Skeleton fallback there.
+ * The one big visual moment. Discover available: a dark panel inviting you in
+ * (with today's pick count when there is one). Discover paused (Serious
+ * Mode): the photo of whoever you're talking to, tap to open the chat.
  */
 @Composable
-private fun HeroBanner(
+private fun PrimaryCta(
     loaded: Boolean,
     activeThread: ThreadOut?,
     candidatePhotoUrl: String?,
     discoverDisabled: Boolean,
+    pickCount: Int,
     apiClient: ApiClient,
     onOpenChat: () -> Unit,
     onOpenDiscover: () -> Unit,
@@ -465,17 +485,17 @@ private fun HeroBanner(
     val strings = LocalStrings.current.childHome
 
     if (!loaded) {
-        D2MSkeleton(modifier = Modifier.fillMaxWidth(), height = 220.dp, radius = D2MRadius.lg)
+        D2MSkeleton(modifier = Modifier.fillMaxWidth(), height = 190.dp, radius = D2MRadius.lg)
         return
     }
 
-    if (activeThread != null) {
-        val resolvedPhoto = candidatePhotoUrl?.let(apiClient::resolveMediaUrl)
+    if (discoverDisabled && activeThread != null) {
+        val resolvedPhoto = remember(candidatePhotoUrl) { candidatePhotoUrl?.let(apiClient::resolveMediaUrl) }
         val isExclusive = activeThread.status == "exclusive"
         ProfilePhoto(
             photoUrl = resolvedPhoto,
             contentDescription = activeThread.otherParticipantName,
-            modifier = Modifier.clickable(onClick = onOpenChat),
+            modifier = Modifier.bounceClickable(onClick = onOpenChat, pressedScale = 0.985f, enforceMinimumTarget = false),
             fixedHeight = 220.dp,
             shape = shape,
             fallback = {
@@ -504,7 +524,6 @@ private fun HeroBanner(
                         )
                     }
                 }
-
                 D2MButton(
                     strings.openChat,
                     onClick = onOpenChat,
@@ -513,46 +532,52 @@ private fun HeroBanner(
                 )
             },
         )
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .clip(shape)
-                .background(SolidColor(d2m.surfaceSunken))
-                .then(if (!discoverDisabled) Modifier.clickable(onClick = onOpenDiscover) else Modifier)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("✨", fontSize = 40.sp)
-            SubHeading(strings.emptyHeroTitle, Modifier.padding(top = 10.dp))
-            Text(
-                strings.emptyHeroSubtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = d2m.meta,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            if (!discoverDisabled) {
-                D2MButton(strings.emptyHeroCta, onClick = onOpenDiscover, size = D2MButtonSize.SM, modifier = Modifier.padding(top = 16.dp))
-            }
-        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SolidColor(d2m.panelBg))
+            .padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            strings.discoverHeadline.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = d2m.goldButton,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            if (pickCount > 0) strings.todaysPicksTitle else strings.emptyHeroTitle,
+            style = MaterialTheme.typography.headlineSmall,
+            color = d2m.panelFg,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            if (pickCount > 0) strings.todaysPicksSubtitle(pickCount) else strings.emptyHeroSubtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = d2m.panelFgMuted,
+        )
+        Spacer(Modifier.height(10.dp))
+        D2MButton(
+            if (pickCount > 0) strings.takeALook else strings.emptyHeroCta,
+            onClick = onOpenDiscover,
+            variant = D2MButtonVariant.GOLD,
+            size = D2MButtonSize.LG,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
-/**
- * One compact row inside the shared list Card -- avatar, title + optional
- * subtitle, optional trailing action. Thin dividers between rows (added by
- * the caller, not this composable) are what make this read as one list
- * rather than several stacked boxes, same as ListRow.jsx.
- */
+/** One compact row inside a shared list card: avatar, title (+ subtitle), optional trailing action. 56dp+ tap target. */
 @Composable
-private fun HomeListRow(
+private fun SummaryRow(
     avatar: @Composable () -> Unit,
     title: String,
     subtitle: String? = null,
-    action: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -560,8 +585,9 @@ private fun HomeListRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
+            .then(if (onClick != null) Modifier.bounceClickable(onClick = onClick, pressedScale = 0.985f, enforceMinimumTarget = false) else Modifier)
+            .defaultMinSize(minHeight = 64.dp)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
     ) {
         avatar()
         Column(modifier = Modifier.weight(1f)) {
@@ -570,31 +596,14 @@ private fun HomeListRow(
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = mutedText(0.45f), modifier = Modifier.padding(top = 2.dp))
             }
         }
-        if (action != null) action()
+        if (trailing != null) trailing()
     }
 }
 
-/** Shimmer placeholder for one HomeListRow -- circle + two bars, same shape/padding as the real row. */
-@Composable
-private fun SkeletonHomeRow() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-    ) {
-        D2MSkeleton(width = 40.dp, height = 40.dp, radius = 20.dp)
-        Column(modifier = Modifier.weight(1f)) {
-            D2MSkeleton(width = 140.dp, height = 13.dp)
-            Spacer(Modifier.height(6.dp))
-            D2MSkeleton(width = 90.dp, height = 11.dp)
-        }
-    }
-}
-
-/** Gradient avatar circle with a real photo (cropped) or an initial fallback -- mirrors PhotoCircle.jsx. */
+/** Avatar circle with a real photo (cropped) or an initial fallback -- mirrors PhotoCircle.jsx. */
 @Composable
 private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiClient) {
-    val resolved = url?.let(apiClient::resolveMediaUrl)
+    val resolved = remember(url) { url?.let(apiClient::resolveMediaUrl) }
     ProfileThumb(
         photoUrl = resolved,
         contentDescription = name,
@@ -611,9 +620,9 @@ private fun PhotoCircle(url: String?, name: String?, size: Dp, apiClient: ApiCli
     )
 }
 
-/** Gradient avatar circle with an emoji glyph instead of a photo -- mirrors GlyphCircle.jsx. */
+/** Avatar circle with an emoji glyph instead of a photo -- mirrors GlyphCircle.jsx. */
 @Composable
-private fun GlyphCircle(glyph: String, size: Dp = 40.dp) {
+private fun GlyphCircle(glyph: String, size: Dp = 44.dp) {
     Box(
         modifier = Modifier
             .size(size)

@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +45,7 @@ fun D2MEmptyState(
     title: String,
     subtitle: String? = null,
     modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     Column(
@@ -57,7 +60,7 @@ fun D2MEmptyState(
                 .background(d2m.surfaceSunken),
             contentAlignment = Alignment.Center,
         ) {
-            PersonGlyph(26.dp)
+            if (icon != null) icon() else PersonGlyph(26.dp)
         }
         SubHeading(title, Modifier.padding(top = 6.dp))
         if (subtitle != null) {
@@ -66,7 +69,7 @@ fun D2MEmptyState(
                 style = MaterialTheme.typography.bodyMedium,
                 color = d2m.meta,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.width(320.dp),
+                modifier = Modifier.widthIn(max = 320.dp),
             )
         }
         if (action != null) {
@@ -115,4 +118,33 @@ fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Mod
             }
         }
     }
+}
+
+/**
+ * Full-area failure state with a real Retry button -- use instead of an
+ * inline banner when a screen has nothing else to show. [message] is the
+ * already-localized reason (usually friendlyError(...)).
+ */
+@Composable
+fun D2MErrorState(
+    message: String,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    title: String = LocalStrings.current.common.somethingWentWrong,
+) {
+    D2MEmptyState(
+        title = title,
+        subtitle = message,
+        modifier = modifier,
+        icon = {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Filled.ErrorOutline,
+                contentDescription = null,
+                tint = LocalD2MStatusPalette.current.danger.fg,
+            )
+        },
+        action = if (onRetry != null) {
+            { D2MButton(LocalStrings.current.common.retry, onClick = onRetry, variant = D2MButtonVariant.OUTLINE) }
+        } else null,
+    )
 }
