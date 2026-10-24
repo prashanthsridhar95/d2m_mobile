@@ -4,6 +4,7 @@ import com.d2m.app.data.cache.ApiCache
 import com.d2m.app.data.model.*
 import com.d2m.app.data.network.AdminApi
 import com.d2m.app.data.network.OffboardingApi
+import com.d2m.app.data.network.StaffGalleryApi
 
 class OffboardingRepository(
     private val api: OffboardingApi,
@@ -27,7 +28,14 @@ class OffboardingRepository(
 
 /** Internal-only, mirrors GalleryModerationScreen.jsx -- see plan §4 (Phase 4 parity closeout). */
 class AdminRepository(private val api: AdminApi) {
-    suspend fun publishGalleryEntry(entryId: String): SuccessGalleryEntryOut = api.publishGalleryEntry(entryId)
     suspend fun getAccounts(): AccountsListOut = api.getAccounts()
     suspend fun getInviteLink(sponsorId: String): InviteLinkOut = api.getInviteLink(sponsorId)
+}
+
+/** Staff-token gallery moderation (/staff/gallery/...). */
+class StaffGalleryRepository(private val api: StaffGalleryApi) {
+    suspend fun queue(status: String = "pending") = api.queue(status)
+    suspend fun publish(entryId: String, acknowledgeRisk: Boolean, note: String? = null) = api.publish(entryId, acknowledgeRisk, note)
+    suspend fun reject(entryId: String, note: String) = api.reject(entryId, note)
+    suspend fun unpublish(entryId: String, note: String) = api.unpublish(entryId, note)
 }
