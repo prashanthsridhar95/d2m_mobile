@@ -11,9 +11,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
@@ -449,6 +450,32 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 }
             }
 
+            // ---- top bar that takes over once the photo has scrolled away -----
+            // Without it the floating buttons and the clock sat on top of the profile text.
+            val titleName = candidate?.candidateName
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(topInset + 56.dp)
+                    .graphicsLayer {
+                        val d = density.density
+                        alpha = ((scroll.value - 360f * d) / (120f * d)).coerceIn(0f, 1f)
+                    }
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                if (titleName != null) {
+                    Text(
+                        titleName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 15.dp, start = 64.dp, end = 64.dp),
+                    )
+                }
+                HorizontalDivider(Modifier.align(Alignment.BottomCenter), color = mutedText(0.12f))
+            }
+
             // ---- floating back / share over the photo ----------------------
             Row(
                 Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = topInset + 4.dp),
@@ -490,8 +517,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             D2MToggleIconButton(
                                 selected = shortlisted,
                                 onToggle = { toggleShortlist(shortlisted) },
-                                selectedIcon = Icons.Filled.Favorite,
-                                unselectedIcon = Icons.Outlined.FavoriteBorder,
+                                selectedIcon = Icons.Filled.Bookmark,
+                                unselectedIcon = Icons.Outlined.BookmarkBorder,
                                 contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
                             )
                             // Parent-to-parent only (no request/accept gate, see

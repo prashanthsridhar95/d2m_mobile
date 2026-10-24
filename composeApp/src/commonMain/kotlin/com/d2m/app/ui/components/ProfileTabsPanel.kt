@@ -497,17 +497,40 @@ private fun BioSection(title: String, anyValues: List<Any?>, content: @Composabl
     }
 }
 
-/** label:value pair with a bottom divider -- mirrors BioRow.jsx's own `borderBottom` on every row, not just between sections. */
+/**
+ * label:value pair with a bottom divider -- mirrors BioRow.jsx's own `borderBottom` on every row, not just between
+ * sections. Short values sit beside the label (label gets at most ~40% of the width and always a 16dp gutter, so a
+ * long label can never run into its value); long or list-like values drop below the label instead of squeezing into
+ * a narrow right-aligned column that wraps one word per line.
+ */
 @Composable
 private fun BioRow(label: String, value: String?) {
     if (value.isNullOrBlank()) return
+    val stacked = value.length > 26 || label.length > 22
     Column {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        ) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.45f))
-            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        if (stacked) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.5f))
+                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.5f), modifier = Modifier.weight(0.4f))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    modifier = Modifier.weight(0.6f),
+                )
+            }
         }
         HorizontalDivider(color = mutedText(0.1f))
     }

@@ -31,6 +31,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -285,57 +296,86 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
         }
     }
 
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    fun closeSearch() {
+        searchOpen = false
+        shortIdQuery = ""
+        shortIdError = null
+        focusManager.clearFocus()
+    }
+    LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
+
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(Modifier.fillMaxSize()) {
             // ---- sticky chrome -------------------------------------------
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        PageTitle(strings.browseTitle)
-                        if (!loading && error == null) {
-                            MetaText(strings.filteredOfPool(filtered.size, pool.size), Modifier.padding(top = 2.dp))
+                Crossfade(targetState = searchOpen, label = "browse-header") { searching ->
+                    if (searching) {
+                        // Search by profile ID, only while asked for: it replaces the title row instead of
+                        // permanently taking a third of the screen above the results.
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            ToolbarIcon(Icons.AutoMirrored.Filled.ArrowBack, strings.closeSearch, onClick = ::closeSearch, bordered = false)
+                            OutlinedTextField(
+                                value = shortIdQuery,
+                                onValueChange = { shortIdQuery = it; shortIdError = null },
+                                placeholder = { Text(strings.searchById, style = MaterialTheme.typography.bodyMedium) },
+                                trailingIcon = {
+                                    if (shortIdQuery.isNotBlank()) {
+                                        TextButton(onClick = { findById() }, enabled = !shortIdSearching, modifier = Modifier.heightIn(min = 48.dp)) {
+                                            Text(if (shortIdSearching) strings.finding else strings.find)
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(percent = 50),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { findById() }),
+                                modifier = Modifier.weight(1f).focusRequester(searchFocus),
+                            )
                         }
-                    }
-                    if (mode == 1) {
-                        Box {
-                            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = strings.moreOptions)
+                    } else {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                PageTitle(strings.browseTitle)
+                                if (!loading && error == null) {
+                                    MetaText(strings.filteredOfPool(filtered.size, pool.size), Modifier.padding(top = 2.dp))
+                                }
                             }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(strings.grid, fontWeight = if (!tableView) FontWeight.Bold else FontWeight.Normal) },
-                                    onClick = { tableView = false; menuOpen = false },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(strings.table, fontWeight = if (tableView) FontWeight.Bold else FontWeight.Normal) },
-                                    onClick = { tableView = true; menuOpen = false },
-                                )
+                            ToolbarIcon(Icons.Filled.Search, strings.searchById, onClick = { searchOpen = true })
+                            ToolbarIcon(
+                                Icons.Filled.FilterList,
+                                if (activeFacetCount > 0) strings.filtersWithCount(activeFacetCount) else strings.filters,
+                                onClick = { sheetOpen = true },
+                                badge = activeFacetCount,
+                            )
+                            if (mode == 1) {
+                                Box {
+                                    ToolbarIcon(Icons.Filled.MoreVert, strings.moreOptions, onClick = { menuOpen = true })
+                                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                        DropdownMenuItem(
+                                            text = { Text(strings.grid, fontWeight = if (!tableView) FontWeight.Bold else FontWeight.Normal) },
+                                            onClick = { tableView = false; menuOpen = false },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(strings.table, fontWeight = if (tableView) FontWeight.Bold else FontWeight.Normal) },
+                                            onClick = { tableView = true; menuOpen = false },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-
-                OutlinedTextField(
-                    value = shortIdQuery,
-                    onValueChange = { shortIdQuery = it; shortIdError = null },
-                    placeholder = { Text(strings.searchById, style = MaterialTheme.typography.bodyMedium) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (shortIdQuery.isNotBlank()) {
-                            TextButton(onClick = { findById() }, enabled = !shortIdSearching, modifier = Modifier.heightIn(min = 48.dp)) {
-                                Text(if (shortIdSearching) strings.finding else strings.find)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(percent = 50),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { findById() }),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
                 shortIdError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 6.dp)) }
 
                 Row(
@@ -345,15 +385,8 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 ) {
                     BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
                     BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
-                    BrowseChip(
-                        label = if (activeFacetCount > 0) strings.filtersWithCount(activeFacetCount) else strings.filters,
-                        selected = activeFacetCount > 0,
-                        onClick = { sheetOpen = true },
-                        leading = Icons.Filled.FilterList,
-                        outlinedAccent = true,
-                    )
                     if (activeFacetCount > 0) {
-                        BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets)
+                        BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
                     }
                 }
             }
@@ -453,6 +486,37 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 ageRange = ageRange,
                 onAgeChange = { ageRange = it },
             )
+        }
+    }
+}
+
+/** Round toolbar button: 44dp visual (inside a 48dp target), optional count badge for an active state. */
+@Composable
+private fun ToolbarIcon(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    badge: Int = 0,
+    bordered: Boolean = true,
+) {
+    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(if (badge > 0) d2m.accentSoft else if (bordered) MaterialTheme.colorScheme.surface else Color.Transparent)
+                .then(if (bordered) Modifier.border(BorderStroke(1.dp, if (badge > 0) d2m.accent else d2m.border), CircleShape) else Modifier)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = description },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (badge > 0) d2m.accentStrong else d2m.textPrimary, modifier = Modifier.size(22.dp))
+        }
+        if (badge > 0) {
+            Box(
+                Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(d2m.accent),
+                contentAlignment = Alignment.Center,
+            ) { Text(badge.toString(), style = MaterialTheme.typography.labelSmall, color = d2m.accentOn, fontWeight = FontWeight.Bold) }
         }
     }
 }

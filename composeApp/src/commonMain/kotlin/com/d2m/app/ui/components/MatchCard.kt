@@ -17,8 +17,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -511,7 +511,7 @@ fun ShortlistHeart(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (shortlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                 contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
                 tint = if (shortlisted) d2m.accent else Color(0xFF4A3A2C),
                 modifier = Modifier.size(20.dp),

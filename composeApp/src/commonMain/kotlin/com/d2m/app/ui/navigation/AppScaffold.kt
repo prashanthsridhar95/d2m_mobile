@@ -12,7 +12,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
@@ -102,7 +102,7 @@ import com.d2m.app.ui.theme.d2m
 enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
     // Parent tabs
     ParentDashboard("Dashboard", Icons.Filled.Home, Routes.PARENT_HOME),
-    ParentSearch("Search", Icons.Filled.Search, Routes.PARENT_BROWSE),
+    ParentSearch("Browse", Icons.Filled.GridView, Routes.PARENT_BROWSE),
     ParentSharing("Sharing", Icons.Filled.Share, Routes.SHARE_LINKS),
     ParentSettings("Settings", Icons.Filled.Settings, Routes.SETTINGS),
 
