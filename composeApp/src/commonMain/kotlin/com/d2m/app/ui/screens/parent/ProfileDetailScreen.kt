@@ -1,6 +1,31 @@
 package com.d2m.app.ui.screens.parent
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.d2m.app.ui.components.D2MButtonSize
+import com.d2m.app.ui.components.DataRow
+import com.d2m.app.ui.theme.d2m
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -220,181 +245,264 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
         }
     }
 
+    // Optimistic shortlist toggle for the sticky bar's heart. Seeded from the
+    // fetched candidate; rolls back if the call fails.
+    var shortlistedOverride by remember(candidateId) { mutableStateOf<Boolean?>(null) }
+    fun toggleShortlist(current: Boolean) {
+        val pid = identity.childPrimaryId ?: viewerPrimaryId ?: return
+        val now = !current
+        shortlistedOverride = now
+        scope.launch {
+            try {
+                if (now) suggestionsRepo.addToShortlist(pid, candidateId) else suggestionsRepo.removeFromShortlist(pid, candidateId)
+            } catch (_: Exception) {
+                shortlistedOverride = current
+            }
+        }
+    }
+    var suggestedDone by remember(candidateId) { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    val haptic = LocalHapticFeedback.current
+    val shared = LocalStrings.current.sharedComponents
+
     D2MTheme(flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT) {
-        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            // A quiet text link, not a maroon GHOST button -- the comps
-            // open this screen on a breadcrumb row, and the first thing on
-            // the page should be the person, not a control.
-            LinkText(strings.back, onClick = onBack, modifier = Modifier.padding(bottom = 4.dp))
-
-            when {
-                // The shape of what's coming, not a word -- the header
-                // block, then the photograph, then the panel.
-                loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    D2MSkeleton(width = 110.dp, height = 11.dp)
-                    D2MSkeleton(width = 220.dp, height = 26.dp)
-                    D2MSkeleton(width = 160.dp, height = 14.dp)
-                    D2MSkeleton(height = 260.dp, modifier = Modifier.padding(top = 6.dp))
-                }
-                error != null -> D2MErrorBanner(error!!)
-                candidate != null -> {
-                    val c = candidate!!
-                    /*
-                     * Header, per the Profile-detail comp: the registration
-                     * id in tracked small caps, the name in the display
-                     * serif on its own line, then one meta line.
-                     *
-                     * Name + age fold into one line -- "Ramesh, 34" --
-                     * mirroring both web's port target and the pattern
-                     * DiscoveryScreen.kt already uses for the same pairing;
-                     * age used to sit in the meta line below instead
-                     * (redundant with itself once folded in here, so it's
-                     * dropped from that line, not duplicated).
-                     *
-                     * ScoreBadge (a raw "x/10" numeric tag) is gone from the
-                     * header entirely, replaced by CompatibilityCard below
-                     * the photo -- see that composable's own doc comment
-                     * for why a word beats a fraction here.
-                     */
-                    c.shortId?.let { RefNoText(it) }      // registration number, never the internal id
-                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        PersonName(c.candidateName + (c.age?.let { ", $it" } ?: ""))
-                        if (c.isFoundingMember) {
-                            FeaturedBadge(modifier = Modifier.padding(start = 8.dp))
-                        }
-                        if (c.isVerified) {
-                            VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
-                        }
-                    }
-                    val meta = listOfNotNull(
-                        c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") }
-                            ?: c.gothram,
-                        c.nativity ?: c.city,
-                    )
-                    if (meta.isNotEmpty()) {
-                        MetaText(meta.joinToString(" · "), Modifier.padding(top = 5.dp))
-                    }
-
-                    ProfilePhoto(
-                        photoUrl = c.photoUrl?.let(apiClient::resolveMediaUrl),
-                        contentDescription = strings.photographOf(c.candidateName),
-                        ratio = 1f,
-                        caption = if (c.photoUrl == null) strings.noPhotographOnFile else null,
-                        glyphSize = 52.dp,
-                        shape = RoundedCornerShape(D2MRadius.lg),
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-
-                    // A self-pair still gets a real, non-null `scores`
-                    // object back from the backend (no MatchScore row ever
-                    // exists for it, so every field defaults to 0 rather
-                    // than being omitted) -- `!isSelf` keeps this on the
-                    // same "not yet compared" fallback a genuinely
-                    // unscored pair already shows, instead of a real-
-                    // looking "Low compatibility" badge against yourself.
-                    CompatibilityCard(
-                        level = if (!isSelf) c.compositeScore?.let { overallRating(it) } else null,
-                        breakdown = if (!isSelf) listOf(
-                            strings.astrology to astrologicalCompatibility(c.scores),
-                            strings.preferences to preferenceCompatibility(c.scores),
-                        ) else emptyList(),
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    )
-
-                    if (c.doshaFlags.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                        ) {
-                            c.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
+        Box(Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll)) {
+                when {
+                    // Same silhouette as the loaded page: full-bleed photo block,
+                    // then the cards.
+                    loading -> Column {
+                        Box(Modifier.fillMaxWidth().aspectRatio(4f / 5f).background(d2m.surfaceSunken))
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            D2MSkeleton(height = 110.dp, radius = D2MRadius.lg)
+                            D2MSkeleton(height = 140.dp, radius = D2MRadius.lg)
                         }
                     }
 
-                    trustSummary?.badgeExplanations?.takeIf { it.isNotEmpty() }?.let { badges ->
-                        Column(modifier = Modifier.padding(top = 14.dp)) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                badges.forEach { D2MBadge(it.badge, D2MBadgeTone.NEUTRAL) }
+                    error != null -> Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 64.dp)) { D2MErrorBanner(error!!) }
+
+                    candidate != null -> {
+                        val c = candidate!!
+                        // ---- full-bleed collapsing hero --------------------
+                        Box(Modifier.fillMaxWidth().clipToBounds()) {
+                            ProfilePhoto(
+                                photoUrl = c.photoUrl?.let(apiClient::resolveMediaUrl),
+                                contentDescription = strings.photographOf(c.candidateName),
+                                ratio = 4f / 5f,
+                                caption = if (c.photoUrl == null) strings.noPhotographOnFile else null,
+                                glyphSize = 64.dp,
+                                // parallax + fade as the sheet of cards scrolls over it; the
+                                // scroll offset is read in the layer block, not in composition
+                                modifier = Modifier.graphicsLayer {
+                                    translationY = scroll.value * 0.5f
+                                    alpha = (1f - scroll.value / (size.height * 1.2f)).coerceIn(0f, 1f)
+                                },
+                            )
+                            Column(
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xD91A120C))))
+                                    .padding(start = 16.dp, end = 16.dp, top = 56.dp, bottom = 16.dp),
+                            ) {
+                                c.shortId?.let { RefNoText(it) }      // registration number, never the internal id
+                                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        c.candidateName + (c.age?.let { ", $it" } ?: ""),
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 2,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    if (c.isFoundingMember) FeaturedBadge(modifier = Modifier.padding(start = 8.dp))
+                                    if (c.isVerified) VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
+                                }
+                                val meta = listOfNotNull(
+                                    c.sect?.let { s -> listOfNotNull(c.gothram, s).joinToString(", ") } ?: c.gothram,
+                                    c.nativity ?: c.city,
+                                )
+                                if (meta.isNotEmpty()) {
+                                    Text(
+                                        meta.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White.copy(alpha = 0.88f),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
                             }
-                            // Only when the badge set actually includes a
-                            // real, match-visible vouch (familyVouched) --
-                            // the other badges (verification, endorsements)
-                            // have no individual-identity click-through at
-                            // all, and listPublicVouches would just come
-                            // back empty for them.
-                            if (trustSummary?.familyVouched == true) {
-                                LinkText(
-                                    strings.seeWhoVouched,
-                                    onClick = {
-                                        vouchersDialogOpen = true
-                                        if (vouchers == null) {
-                                            vouchersError = null
+                        }
+
+                        Column(
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (isSelf) 24.dp else 112.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            // A self-pair still gets a real, non-null `scores`
+                            // object back (every field 0) -- `!isSelf` keeps it on
+                            // the "not yet compared" fallback instead of a real-
+                            // looking "Low compatibility" against yourself.
+                            CompatibilityCard(
+                                level = if (!isSelf) c.compositeScore?.let { overallRating(it) } else null,
+                                breakdown = if (!isSelf) listOf(
+                                    strings.astrology to astrologicalCompatibility(c.scores),
+                                    strings.preferences to preferenceCompatibility(c.scores),
+                                ) else emptyList(),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            val badges = trustSummary?.badgeExplanations?.takeIf { it.isNotEmpty() }
+                            if (c.doshaFlags.isNotEmpty() || badges != null) {
+                                D2MCard(Modifier.fillMaxWidth()) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        if (c.doshaFlags.isNotEmpty()) {
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                c.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
+                                            }
                                         }
+                                        if (badges != null) {
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                badges.forEach { D2MBadge(it.badge, D2MBadgeTone.NEUTRAL) }
+                                            }
+                                            // Only when the badge set includes a real, match-visible
+                                            // vouch (familyVouched); other badges have no
+                                            // individual-identity click-through.
+                                            if (trustSummary?.familyVouched == true) {
+                                                LinkText(
+                                                    strings.seeWhoVouched,
+                                                    onClick = {
+                                                        vouchersDialogOpen = true
+                                                        if (vouchers == null) vouchersError = null
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            val facts = buildList {
+                                listOfNotNull(c.gothram, c.sect).joinToString(", ")
+                                    .takeIf { it.isNotEmpty() }?.let { add(shared.matchRowGothram to it) }
+                                c.moonNakshatra?.let { n -> add(shared.matchRowStar to (c.moonPada?.let { "$n, pada $it" } ?: n)) }
+                                c.occupationTitle?.let { add(shared.matchRowWork to it) }
+                                c.employer?.takeIf { it.isNotBlank() }?.let { add(shared.matchRowOrganisation to it) }
+                            }
+                            if (facts.isNotEmpty()) {
+                                D2MCard(Modifier.fillMaxWidth()) {
+                                    Column(Modifier.padding(16.dp)) { facts.forEach { (l, v) -> DataRow(l, v) } }
+                                }
+                            }
+
+                            D2MProfileTabsPanel(
+                                candidateId = candidateId,
+                                modifier = Modifier.fillMaxWidth(),
+                                showAboutMe = identity.role == D2MRole.CHILD,
+                                viewerPrimaryId = viewerPrimaryId,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ---- floating back / share over the photo ----------------------
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                FloatingCircleButton(Icons.AutoMirrored.Filled.ArrowBack, strings.back, onClick = onBack)
+                // Share is parent-only and meaningless pointed at your own profile
+                // (same "Share my profile" row exists in Settings).
+                if (candidate != null && !isSelf && identity.role == D2MRole.PARENT) {
+                    FloatingCircleButton(
+                        icon = if (shareState == "copied") Icons.Filled.Check else Icons.Filled.Share,
+                        contentDescription = when (shareState) {
+                            "busy" -> strings.creatingLink
+                            "copied" -> strings.linkCopied
+                            else -> strings.shareThisProfile
+                        },
+                        enabled = shareState != "busy",
+                        onClick = { shareProfile() },
+                    )
+                }
+            }
+
+            // ---- sticky action bar -----------------------------------------
+            // Suggest to child / Message their parent / Share, or Accept /
+            // Snooze / Pass -- none mean anything pointed at your own
+            // profile, so hidden entirely for a self-preview.
+            val cand = candidate
+            if (cand != null && !isSelf) {
+                val shortlisted = shortlistedOverride ?: cand.isShortlisted
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(BorderStroke(1.dp, d2m.border))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    messageParentError?.let { D2MErrorBanner(it) }
+                    shareError?.let { D2MErrorBanner(it) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (identity.role == D2MRole.PARENT) {
+                            Box(
+                                Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(D2MRadius.md))
+                                    .border(BorderStroke(1.5.dp, d2m.gold), RoundedCornerShape(D2MRadius.md))
+                                    .background(if (shortlisted) d2m.gold.copy(alpha = 0.15f) else Color.Transparent)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        toggleShortlist(shortlisted)
                                     },
-                                    modifier = Modifier.padding(top = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    if (shortlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
+                                    tint = if (shortlisted) d2m.accent else d2m.goldStrong,
                                 )
                             }
-                        }
-                    }
-
-                    D2MProfileTabsPanel(
-                        candidateId = candidateId,
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        showAboutMe = identity.role == D2MRole.CHILD,
-                        viewerPrimaryId = viewerPrimaryId,
-                    )
-
-                    // Suggest to child/Message their parent/Share, or
-                    // Accept/Snooze/Pass -- none of these mean anything
-                    // pointed at your own profile, hidden entirely for a
-                    // self-preview (same "Share this profile" is still
-                    // reachable the normal way, via Settings' own "Share
-                    // my profile" row).
-                    if (!isSelf) {
-                    messageParentError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
-                    shareError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
-
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (identity.role == D2MRole.PARENT) {
+                            // Parent-to-parent only (no request/accept gate, see
+                            // messageParent()'s doc comment). Parent-to-child messaging
+                            // deliberately isn't offered here yet -- it needs the
+                            // consent-unlock gate, which isn't built on mobile.
                             D2MButton(
-                                text = if (actionInFlight) strings.suggesting else strings.suggestToChild,
-                                enabled = !actionInFlight,
+                                text = if (messageParentBusy) strings.opening else strings.messageTheirParent,
+                                variant = D2MButtonVariant.OUTLINE,
+                                size = D2MButtonSize.LG,
+                                enabled = !messageParentBusy,
+                                modifier = Modifier.weight(1f),
+                                onClick = { messageParent() },
+                            )
+                            D2MButton(
+                                text = when {
+                                    actionInFlight -> strings.suggesting
+                                    suggestedDone -> strings.suggested
+                                    else -> strings.suggestToChild
+                                },
+                                size = D2MButtonSize.LG,
+                                enabled = !actionInFlight && !suggestedDone,
+                                modifier = Modifier.weight(1f),
                                 onClick = {
                                     val sponsorId = identity.sponsorId ?: return@D2MButton
                                     scope.launch {
                                         actionInFlight = true
                                         runCatching { suggestionsRepo.suggestToChild(sponsorId, candidateId) }
+                                            .onSuccess { suggestedDone = true }
                                         actionInFlight = false
                                     }
                                 },
-                            )
-                            // Parent-to-parent only (no request/accept gate, see
-                            // messageParent()'s own doc comment above). Parent-to-
-                            // child messaging deliberately isn't offered here yet --
-                            // it needs the consent-unlock gate, which isn't built on
-                            // mobile (see ParentMessagesScreen.kt's doc comment).
-                            D2MButton(
-                                text = if (messageParentBusy) strings.opening else strings.messageTheirParent,
-                                variant = D2MButtonVariant.OUTLINE,
-                                enabled = !messageParentBusy,
-                                onClick = { messageParent() },
-                            )
-                            D2MButton(
-                                text = when (shareState) {
-                                    "busy" -> strings.creatingLink
-                                    "copied" -> strings.linkCopied
-                                    else -> strings.shareThisProfile
-                                },
-                                variant = D2MButtonVariant.OUTLINE,
-                                enabled = shareState != "busy",
-                                onClick = { shareProfile() },
                             )
                         } else {
                             listOf("accept" to strings.sendRequest, "snooze" to strings.snooze, "reject" to strings.pass).forEach { (action, label) ->
                                 D2MButton(
                                     text = label,
                                     variant = if (action == "accept") D2MButtonVariant.SOLID else D2MButtonVariant.OUTLINE,
+                                    size = D2MButtonSize.LG,
                                     enabled = !actionInFlight,
+                                    modifier = Modifier.weight(1f),
                                     onClick = {
                                         val pid = viewerPrimaryId ?: return@D2MButton
                                         scope.launch {
@@ -407,7 +515,6 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 )
                             }
                         }
-                    }
                     }
                 }
             }
@@ -454,6 +561,26 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Round, scrim-backed icon button that stays legible over any photograph; 48dp touch target. */
+@Composable
+private fun FloatingCircleButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(percent = 50)).background(Color.Black.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                Icon(icon, contentDescription = contentDescription, tint = Color.White)
             }
         }
     }

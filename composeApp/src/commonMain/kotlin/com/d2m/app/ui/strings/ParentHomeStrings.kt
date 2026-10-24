@@ -30,6 +30,27 @@ interface ParentHomeStrings {
     val consentNoSeriousExplorationTitle: String
     val consentNoSeriousExplorationDesc: String
 
+    // Parent home redesign: next-best-action card, carousel, disclosure rows.
+    fun nextReviewTitle(count: Int): String
+    val nextReviewBody: String
+    val nextProfileTitle: String
+    val nextProfileBody: String
+    val nextMessageTitle: String
+    val nextMessageBody: String
+    val allCaughtUpTitle: String
+    val allCaughtUpBody: String
+    val topPicks: String
+    val noTopPicks: String
+    fun shortlistedCount(count: Int): String
+    val shortlistEmpty: String
+    val seriousModeRow: String
+    val activityRow: String
+    val statSuggestionsSent: String
+    val statUnreadAlerts: String
+    val statPendingRequests: String
+    val statProfile: String
+    val refreshFailed: String
+
     val waitingOnChildTitle: String
     val waitingOnChildBody: String
 }
@@ -63,6 +84,26 @@ object ParentHomeStringsEn : ParentHomeStrings {
 
     override val waitingOnChildTitle = "Waiting on your child"
     override val waitingOnChildBody = "Once they claim your invite, their matches and activity will show up here."
+
+    override fun nextReviewTitle(count: Int) = if (count == 1) "Review 1 new suggestion" else "Review $count new suggestions"
+    override val nextReviewBody = "Start with the best match for your child"
+    override val nextProfileTitle = "Finish your child's profile"
+    override val nextProfileBody = "A complete profile gets better matches"
+    override val nextMessageTitle = "Continue the conversation"
+    override val nextMessageBody = "Their family has full access to talk with you"
+    override val allCaughtUpTitle = "You're all caught up"
+    override val allCaughtUpBody = "New suggestions will appear here as they are found"
+    override val topPicks = "Top picks"
+    override val noTopPicks = "No suggestions yet"
+    override fun shortlistedCount(count: Int) = "Shortlisted · $count"
+    override val shortlistEmpty = "Tap the heart on any profile to shortlist it."
+    override val seriousModeRow = "Serious mode"
+    override val activityRow = "Activity"
+    override val statSuggestionsSent = "Suggestions sent"
+    override val statUnreadAlerts = "Unread alerts"
+    override val statPendingRequests = "Pending requests"
+    override val statProfile = "Profile"
+    override val refreshFailed = "Couldn't refresh. Pull down to try again."
 }
 
 object ParentHomeStringsHi : ParentHomeStrings {
@@ -94,6 +135,26 @@ object ParentHomeStringsHi : ParentHomeStrings {
 
     override val waitingOnChildTitle = "आपके बच्चे की प्रतीक्षा है"
     override val waitingOnChildBody = "एक बार वे आपका इनवाइट स्वीकार कर लें, तो उनके मैच और गतिविधि यहां दिखाई देंगे।"
+
+    override fun nextReviewTitle(count: Int) = "$count नए सुझाव देखें"
+    override val nextReviewBody = "अपने बच्चे के लिए सबसे अच्छे मैच से शुरू करें"
+    override val nextProfileTitle = "अपने बच्चे की प्रोफ़ाइल पूरी करें"
+    override val nextProfileBody = "पूरी प्रोफ़ाइल से बेहतर मैच मिलते हैं"
+    override val nextMessageTitle = "बातचीत जारी रखें"
+    override val nextMessageBody = "उनके परिवार को आपसे बात करने की पूरी पहुंच है"
+    override val allCaughtUpTitle = "सब कुछ देख लिया गया है"
+    override val allCaughtUpBody = "नए सुझाव मिलते ही यहां दिखेंगे"
+    override val topPicks = "शीर्ष चयन"
+    override val noTopPicks = "अभी कोई सुझाव नहीं"
+    override fun shortlistedCount(count: Int) = "शॉर्टलिस्ट · $count"
+    override val shortlistEmpty = "किसी भी प्रोफ़ाइल पर दिल दबाकर उसे शॉर्टलिस्ट करें।"
+    override val seriousModeRow = "सीरियस मोड"
+    override val activityRow = "गतिविधि"
+    override val statSuggestionsSent = "भेजे गए सुझाव"
+    override val statUnreadAlerts = "अपठित सूचनाएं"
+    override val statPendingRequests = "लंबित अनुरोध"
+    override val statProfile = "प्रोफ़ाइल"
+    override val refreshFailed = "रिफ्रेश नहीं हो सका। दोबारा नीचे खींचें।"
 }
 
 object ParentHomeStringsTa : ParentHomeStrings {
@@ -125,4 +186,24 @@ object ParentHomeStringsTa : ParentHomeStrings {
 
     override val waitingOnChildTitle = "உங்கள் குழந்தைக்காக காத்திருக்கிறோம்"
     override val waitingOnChildBody = "அவர்கள் உங்கள் அழைப்பை ஏற்றவுடன், அவர்களின் பொருத்தங்களும் செயல்பாடும் இங்கே தெரியும்."
+
+    override fun nextReviewTitle(count: Int) = "$count புதிய பரிந்துரைகளைப் பார்க்கவும்"
+    override val nextReviewBody = "உங்கள் குழந்தைக்கான சிறந்த பொருத்தத்திலிருந்து தொடங்குங்கள்"
+    override val nextProfileTitle = "உங்கள் குழந்தையின் சுயவிவரத்தை முடிக்கவும்"
+    override val nextProfileBody = "முழுமையான சுயவிவரம் சிறந்த பொருத்தங்களைத் தரும்"
+    override val nextMessageTitle = "உரையாடலைத் தொடருங்கள்"
+    override val nextMessageBody = "அவர்களின் குடும்பத்திற்கு உங்களுடன் பேச முழு அணுகல் உள்ளது"
+    override val allCaughtUpTitle = "அனைத்தும் பார்க்கப்பட்டன"
+    override val allCaughtUpBody = "புதிய பரிந்துரைகள் கிடைத்ததும் இங்கே தோன்றும்"
+    override val topPicks = "சிறந்த தேர்வுகள்"
+    override val noTopPicks = "இன்னும் பரிந்துரைகள் இல்லை"
+    override fun shortlistedCount(count: Int) = "ஷார்ட்லிஸ்ட் · $count"
+    override val shortlistEmpty = "எந்த சுயவிவரத்திலும் இதயத்தைத் தட்டி ஷார்ட்லிஸ்ட் செய்யுங்கள்."
+    override val seriousModeRow = "சீரியஸ் மோட்"
+    override val activityRow = "செயல்பாடு"
+    override val statSuggestionsSent = "அனுப்பிய பரிந்துரைகள்"
+    override val statUnreadAlerts = "படிக்காத அறிவிப்புகள்"
+    override val statPendingRequests = "நிலுவையில் உள்ள கோரிக்கைகள்"
+    override val statProfile = "சுயவிவரம்"
+    override val refreshFailed = "புதுப்பிக்க முடியவில்லை. மீண்டும் கீழே இழுக்கவும்."
 }

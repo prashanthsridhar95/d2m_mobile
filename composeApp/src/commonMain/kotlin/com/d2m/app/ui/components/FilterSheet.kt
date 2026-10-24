@@ -154,7 +154,8 @@ fun D2MFilterSheet(
 ) {
     val strings = LocalStrings.current.sharedComponents
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val anyActive = groups.any { it.state.isActive } || ageRange != null
+    val activeCount = groups.count { it.state.isActive } + (if (ageRange != null) 1 else 0)
+    val anyActive = activeCount > 0
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -168,7 +169,7 @@ fun D2MFilterSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SectionHeading(strings.filtersTitle)
+                SectionHeading(if (activeCount > 0) "${strings.filtersTitle} · $activeCount" else strings.filtersTitle)
                 if (anyActive) LinkText(strings.clearAll, onClearAll)
             }
             // The live readout the comps put under the rail heading. On a
@@ -177,7 +178,7 @@ fun D2MFilterSheet(
             // a tap did anything.
             MetaText(strings.resultsMatch(resultCount, totalCount), Modifier.padding(bottom = 6.dp))
 
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 groups.forEachIndexed { i, g -> FacetGroupBlock(g, first = i == 0) }
 
                 if (ageBounds != null && onAgeChange != null && ageBounds.start < ageBounds.endInclusive) {

@@ -27,6 +27,7 @@ interface ProfileDetailStrings {
     val sendRequest: String
     val snooze: String
     val pass: String
+    val suggested: String
 }
 
 object ProfileDetailStringsEn : ProfileDetailStrings {
@@ -55,6 +56,7 @@ object ProfileDetailStringsEn : ProfileDetailStrings {
     override val sendRequest = "Send request"
     override val snooze = "Snooze"
     override val pass = "Pass"
+    override val suggested = "Suggested"
 }
 
 object ProfileDetailStringsHi : ProfileDetailStrings {
@@ -83,6 +85,7 @@ object ProfileDetailStringsHi : ProfileDetailStrings {
     override val sendRequest = "रिक्वेस्ट भेजें"
     override val snooze = "स्नूज़ करें"
     override val pass = "छोड़ें"
+    override val suggested = "सुझाया गया"
 }
 
 object ProfileDetailStringsTa : ProfileDetailStrings {
@@ -111,4 +114,5 @@ object ProfileDetailStringsTa : ProfileDetailStrings {
     override val sendRequest = "கோரிக்கை அனுப்பு"
     override val snooze = "ஸ்னூஸ் செய்"
     override val pass = "தவிர்"
+    override val suggested = "பரிந்துரைக்கப்பட்டது"
 }
