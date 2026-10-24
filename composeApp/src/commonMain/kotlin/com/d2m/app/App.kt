@@ -211,6 +211,11 @@ fun App() {
         requestBatteryOptimizationExemption()
     }
 
+    // Warms suggestions/dashboard/notifications and the first photos as soon
+    // as an identity exists, so the first tab opens on cached data.
+    val prefetcher: com.d2m.app.domain.repository.Prefetcher = koinInject()
+    LaunchedEffect(Unit) { prefetcher.start() }
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route

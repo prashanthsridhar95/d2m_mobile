@@ -120,13 +120,19 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
     val dashboardRepo: DashboardRepository = koinInject()
 
     var tab by remember(candidateId, showAboutMe) { mutableStateOf(0) }
-    var bio by remember(candidateId) { mutableStateOf<ExtendedBioDataOut?>(null) }
-    var bioLoaded by remember(candidateId) { mutableStateOf(false) }
-    var aboutMe by remember(candidateId) { mutableStateOf<AboutMeDataOut?>(null) }
-    var aboutMeLoaded by remember(candidateId) { mutableStateOf(false) }
-    var chart by remember(candidateId) { mutableStateOf<ChartOut?>(null) }
+    // Seeded from the cache so a prefetched profile paints on the first
+    // frame instead of flashing "Loading"; the effects below still
+    // revalidate through the same cache.
+    val cachedBio = remember(candidateId) { identityRepo.peekExtendedBio(candidateId) }
+    val cachedAboutMe = remember(candidateId, showAboutMe) { if (showAboutMe) identityRepo.peekAboutMe(candidateId) else null }
+    val cachedChart = remember(candidateId) { dashboardRepo.peekChart(candidateId) }
+    var bio by remember(candidateId) { mutableStateOf(cachedBio) }
+    var bioLoaded by remember(candidateId) { mutableStateOf(cachedBio != null) }
+    var aboutMe by remember(candidateId) { mutableStateOf(cachedAboutMe) }
+    var aboutMeLoaded by remember(candidateId) { mutableStateOf(cachedAboutMe != null) }
+    var chart by remember(candidateId) { mutableStateOf(cachedChart) }
     var chartNotComputed by remember(candidateId) { mutableStateOf(false) }
-    var chartLoaded by remember(candidateId) { mutableStateOf(false) }
+    var chartLoaded by remember(candidateId) { mutableStateOf(cachedChart != null) }
 
     // The viewer's own About Me/Bio data -- About Me's Lifestyle/Life &
     // future plans/Quick facts bubbles have no saved preference to check
