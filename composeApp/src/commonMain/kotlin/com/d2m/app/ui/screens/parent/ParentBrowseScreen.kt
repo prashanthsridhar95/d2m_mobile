@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -29,7 +32,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.TableRows
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.shape.CircleShape
@@ -116,7 +120,7 @@ private const val PAGE_SIZE = 24
  * - Items have stable keys + contentType; the visible window grows by
  *   PAGE_SIZE as the user nears the end (pagination-ready for a paged API).
  * - The photos of the next few rows are prefetched while scrolling.
- * - Table view (parity feature) lives in the overflow menu.
+ * - A Grid | Table toggle (both modes) swaps the tiles for a sortable sheet view over the same filtered pool.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,7 +141,6 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
 
     var mode by remember { mutableStateOf(0) } // 0 = matching, 1 = all
     var tableView by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var matching by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
     var all by remember { mutableStateOf<List<BrowseCandidateOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -200,6 +203,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 age = c.age, city = c.city, nativity = c.nativity,
                 occupationTitle = c.occupationTitle, gothram = c.gothram, sect = c.sect,
                 moonNakshatra = c.moonNakshatra, moonPada = c.moonPada, employer = c.employer,
+                heightCm = c.heightCm, financialStatus = c.financialStatus, complexion = c.complexion,
                 photoUrl = c.photoUrl, scores = c.scores ?: SubScoreBreakdown(),
                 doshaFlags = c.doshaFlags, isShortlisted = c.isShortlisted,
                 isFoundingMember = c.isFoundingMember, isVerified = c.isVerified,
@@ -358,36 +362,30 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                 onClick = { sheetOpen = true },
                                 badge = activeFacetCount,
                             )
-                            if (mode == 1) {
-                                Box {
-                                    ToolbarIcon(Icons.Filled.MoreVert, strings.moreOptions, onClick = { menuOpen = true })
-                                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                        DropdownMenuItem(
-                                            text = { Text(strings.grid, fontWeight = if (!tableView) FontWeight.Bold else FontWeight.Normal) },
-                                            onClick = { tableView = false; menuOpen = false },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(strings.table, fontWeight = if (tableView) FontWeight.Bold else FontWeight.Normal) },
-                                            onClick = { tableView = true; menuOpen = false },
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }
                 shortIdError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 6.dp)) }
 
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
-                    BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
-                    if (activeFacetCount > 0) {
-                        BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
+                        BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
+                        if (activeFacetCount > 0) {
+                            BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
+                        }
                     }
+                    ViewToggle(
+                        table = tableView,
+                        onChange = { tableView = it },
+                        gridLabel = strings.grid,
+                        tableLabel = strings.table,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
             }
 
@@ -400,8 +398,6 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
 
                     error != null -> D2MErrorBanner(error!!, onRetry = { refreshTick++ }, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    mode == 1 && tableView -> BrowseTable(rows = all, onOpenProfile = onOpenProfile)
-
                     filtered.isEmpty() && pool.isNotEmpty() -> D2MEmptyState(
                         title = strings.nothingMatchesFiltersTitle,
                         subtitle = strings.nothingMatchesFiltersBody,
@@ -413,6 +409,16 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                     filtered.isEmpty() -> D2MEmptyState(
                         title = strings.noProfilesYetTitle,
                         subtitle = if (mode == 0) strings.noProfilesMatchingBody else strings.noProfilesAllBody,
+                    )
+
+                    tableView -> BrowseTable(
+                        rows = filtered,
+                        onOpenProfile = onOpenProfile,
+                        shortlistOverrides = shortlistOverrides,
+                        onToggleShortlist = ::toggleShortlist,
+                        resolvePhotoUrl = apiClient::resolveMediaUrl,
+                        refreshing = refreshing,
+                        onRefresh = { refreshing = true; refreshTick++ },
                     )
 
                     else -> {
@@ -567,6 +573,36 @@ private fun BrowseSkeleton() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 D2MSkeleton(modifier = Modifier.weight(1f), height = 220.dp, radius = 14.dp)
                 D2MSkeleton(modifier = Modifier.weight(1f), height = 220.dp, radius = 14.dp)
+            }
+        }
+    }
+}
+
+/** Compact two-segment Grid | Table switch: icon-only segments (labels are the accessibility text), 48dp tall touch targets. */
+@Composable
+private fun ViewToggle(
+    table: Boolean,
+    onChange: (Boolean) -> Unit,
+    gridLabel: String,
+    tableLabel: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(percent = 50)
+    Row(
+        modifier.height(36.dp).clip(shape).border(BorderStroke(1.dp, d2m.border), shape).background(MaterialTheme.colorScheme.surface),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(false to (Icons.Filled.GridView to gridLabel), true to (Icons.Filled.TableRows to tableLabel)).forEach { (isTable, pair) ->
+            val selected = table == isTable
+            Box(
+                Modifier
+                    .width(44.dp).fillMaxHeight()
+                    .background(if (selected) d2m.accent else Color.Transparent)
+                    .clickable(role = Role.RadioButton, onClick = { onChange(isTable) })
+                    .semantics { contentDescription = pair.second },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(pair.first, contentDescription = null, tint = if (selected) d2m.accentOn else d2m.textPrimary, modifier = Modifier.size(20.dp))
             }
         }
     }

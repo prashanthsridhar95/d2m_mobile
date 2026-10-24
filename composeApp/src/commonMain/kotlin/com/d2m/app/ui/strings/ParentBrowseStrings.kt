@@ -12,6 +12,10 @@ interface ParentBrowseStrings {
     val matching: String
     val allProfiles: String
     val grid: String
+    val colMatch: String
+    val sortedAscending: String
+    val sortedDescending: String
+    val viewAs: String
     val table: String
     fun filtersWithCount(count: Int): String
     val filters: String
@@ -46,6 +50,10 @@ object ParentBrowseStringsEn : ParentBrowseStrings {
     override val matching = "Matching"
     override val allProfiles = "All profiles"
     override val grid = "Grid"
+    override val colMatch = "Match"
+    override val sortedAscending = "Sorted ascending"
+    override val sortedDescending = "Sorted descending"
+    override val viewAs = "View as"
     override val table = "Table"
     override fun filtersWithCount(count: Int) = "Filters ($count)"
     override val filters = "Filters"
@@ -79,6 +87,10 @@ object ParentBrowseStringsHi : ParentBrowseStrings {
     override val matching = "मेल खाती"
     override val allProfiles = "सभी प्रोफ़ाइलें"
     override val grid = "ग्रिड"
+    override val colMatch = "मिलान"
+    override val sortedAscending = "आरोही क्रम"
+    override val sortedDescending = "अवरोही क्रम"
+    override val viewAs = "दृश्य"
     override val table = "तालिका"
     override fun filtersWithCount(count: Int) = "फ़िल्टर ($count)"
     override val filters = "फ़िल्टर"
@@ -112,6 +124,10 @@ object ParentBrowseStringsTa : ParentBrowseStrings {
     override val matching = "பொருந்தும்"
     override val allProfiles = "அனைத்து சுயவிவரங்கள்"
     override val grid = "கட்டம்"
+    override val colMatch = "பொருத்தம்"
+    override val sortedAscending = "ஏறுவரிசை"
+    override val sortedDescending = "இறங்குவரிசை"
+    override val viewAs = "காட்சி"
     override val table = "அட்டவணை"
     override fun filtersWithCount(count: Int) = "வடிகட்டிகள் ($count)"
     override val filters = "வடிகட்டிகள்"
