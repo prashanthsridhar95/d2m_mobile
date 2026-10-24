@@ -23,6 +23,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import com.d2m.app.ui.components.D2MActionBar
+import com.d2m.app.ui.components.D2MActionButton
+import com.d2m.app.ui.components.D2MActionEmphasis
+import com.d2m.app.ui.components.D2MToggleIconButton
 import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.DataRow
 import com.d2m.app.ui.theme.d2m
@@ -266,7 +276,26 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     val shared = LocalStrings.current.sharedComponents
 
     D2MTheme(flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT) {
-        Box(Modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val topInsetPx = androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(density)
+        val bottomInsetPx = androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(density)
+        val topInset = with(density) { topInsetPx.toDp() }
+        val bottomInset = with(density) { bottomInsetPx.toDp() }
+        var barHeight by remember { mutableStateOf(0.dp) }
+        // The Scaffold in App.kt pads this route (no bottom bar here) by systemBars; grow the box
+        // up and down by those insets so the hero runs under the status bar and the action bar
+        // sits flush with the real screen bottom. Reported layout size is unchanged.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layout { measurable, c ->
+                    val extra = if (c.hasBoundedHeight) topInsetPx + bottomInsetPx else 0
+                    val h = if (c.hasBoundedHeight) c.maxHeight + extra else c.maxHeight
+                    val pl = measurable.measure(c.copy(minHeight = if (c.hasBoundedHeight) h else 0, maxHeight = h))
+                    val top = if (c.hasBoundedHeight) topInsetPx else 0
+                    layout(pl.width, pl.height - extra) { pl.place(0, -top) }
+                },
+        ) {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll)) {
                 when {
                     // Same silhouette as the loaded page: full-bleed photo block,
@@ -279,7 +308,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         }
                     }
 
-                    error != null -> Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 64.dp)) { D2MErrorBanner(error!!) }
+                    error != null -> Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 64.dp + topInset)) { D2MErrorBanner(error!!) }
 
                     candidate != null -> {
                         val c = candidate!!
@@ -298,15 +327,31 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                     alpha = (1f - scroll.value / (size.height * 1.2f)).coerceIn(0f, 1f)
                                 },
                             )
+                            Box(
+                                Modifier.align(Alignment.TopStart).fillMaxWidth().height(topInset + 72.dp)
+                                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.40f), Color.Transparent))),
+                            )
                             Column(
                                 Modifier
                                     .align(Alignment.BottomStart)
                                     .fillMaxWidth()
-                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xD91A120C))))
-                                    .padding(start = 16.dp, end = 16.dp, top = 56.dp, bottom = 16.dp),
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xB31A120C), Color(0xF21A120C))))
+                                    .padding(start = 16.dp, end = 16.dp, top = 88.dp, bottom = 16.dp),
                             ) {
-                                c.shortId?.let { RefNoText(it) }      // registration number, never the internal id
-                                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                // registration number, never the internal id; white on a dark chip so it
+                                // stays legible over any photograph
+                                c.shortId?.let {
+                                    Text(
+                                        it.uppercase(),
+                                        style = com.d2m.app.ui.theme.D2MRefNoStyle,
+                                        color = Color.White,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(D2MRadius.pill))
+                                            .background(Color.Black.copy(alpha = 0.45f))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    )
+                                }
+                                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         c.candidateName + (c.age?.let { ", $it" } ?: ""),
                                         style = MaterialTheme.typography.headlineMedium,
@@ -334,7 +379,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         }
 
                         Column(
-                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (isSelf) 24.dp else 112.dp),
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (isSelf) 24.dp + bottomInset else barHeight + 24.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             // A self-pair still gets a real, non-null `scores`
@@ -406,7 +451,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
 
             // ---- floating back / share over the photo ----------------------
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = topInset + 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 FloatingCircleButton(Icons.AutoMirrored.Filled.ArrowBack, strings.back, onClick = onBack)
@@ -433,60 +478,46 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
             val cand = candidate
             if (cand != null && !isSelf) {
                 val shortlisted = shortlistedOverride ?: cand.isShortlisted
-                Column(
+                D2MActionBar(
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(BorderStroke(1.dp, d2m.border))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                        .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
                 ) {
                     messageParentError?.let { D2MErrorBanner(it) }
                     shareError?.let { D2MErrorBanner(it) }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (identity.role == D2MRole.PARENT) {
-                            Box(
-                                Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(D2MRadius.md))
-                                    .border(BorderStroke(1.5.dp, d2m.gold), RoundedCornerShape(D2MRadius.md))
-                                    .background(if (shortlisted) d2m.gold.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        toggleShortlist(shortlisted)
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    if (shortlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
-                                    tint = if (shortlisted) d2m.accent else d2m.goldStrong,
-                                )
-                            }
+                            D2MToggleIconButton(
+                                selected = shortlisted,
+                                onToggle = { toggleShortlist(shortlisted) },
+                                selectedIcon = Icons.Filled.Favorite,
+                                unselectedIcon = Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
+                            )
                             // Parent-to-parent only (no request/accept gate, see
                             // messageParent()'s doc comment). Parent-to-child messaging
                             // deliberately isn't offered here yet -- it needs the
                             // consent-unlock gate, which isn't built on mobile.
-                            D2MButton(
+                            D2MActionButton(
                                 text = if (messageParentBusy) strings.opening else strings.messageTheirParent,
-                                variant = D2MButtonVariant.OUTLINE,
-                                size = D2MButtonSize.LG,
-                                enabled = !messageParentBusy,
+                                emphasis = D2MActionEmphasis.SECONDARY,
+                                leadingIcon = Icons.Outlined.ChatBubbleOutline,
+                                loading = messageParentBusy,
                                 modifier = Modifier.weight(1f),
                                 onClick = { messageParent() },
                             )
-                            D2MButton(
+                            D2MActionButton(
                                 text = when {
                                     actionInFlight -> strings.suggesting
                                     suggestedDone -> strings.suggested
                                     else -> strings.suggestToChild
                                 },
-                                size = D2MButtonSize.LG,
-                                enabled = !actionInFlight && !suggestedDone,
+                                leadingIcon = if (suggestedDone) Icons.Filled.Check else null,
+                                loading = actionInFlight,
+                                done = suggestedDone,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
-                                    val sponsorId = identity.sponsorId ?: return@D2MButton
+                                    val sponsorId = identity.sponsorId ?: return@D2MActionButton
                                     scope.launch {
                                         actionInFlight = true
                                         runCatching { suggestionsRepo.suggestToChild(sponsorId, candidateId) }
@@ -497,14 +528,17 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             )
                         } else {
                             listOf("accept" to strings.sendRequest, "snooze" to strings.snooze, "reject" to strings.pass).forEach { (action, label) ->
-                                D2MButton(
+                                D2MActionButton(
                                     text = label,
-                                    variant = if (action == "accept") D2MButtonVariant.SOLID else D2MButtonVariant.OUTLINE,
-                                    size = D2MButtonSize.LG,
+                                    emphasis = when (action) {
+                                        "accept" -> D2MActionEmphasis.PRIMARY
+                                        "snooze" -> D2MActionEmphasis.SECONDARY
+                                        else -> D2MActionEmphasis.TERTIARY
+                                    },
                                     enabled = !actionInFlight,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(if (action == "accept") 1.4f else 1f),
                                     onClick = {
-                                        val pid = viewerPrimaryId ?: return@D2MButton
+                                        val pid = viewerPrimaryId ?: return@D2MActionButton
                                         scope.launch {
                                             actionInFlight = true
                                             runCatching { suggestionsRepo.act(pid, candidateId, action) }

@@ -1,5 +1,7 @@
 package com.d2m.app.ui.components
 
+
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -170,7 +172,7 @@ fun D2MFilterSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SectionHeading(if (activeCount > 0) "${strings.filtersTitle} · $activeCount" else strings.filtersTitle)
-                if (anyActive) LinkText(strings.clearAll, onClearAll)
+                if (anyActive) LinkText(strings.clearAll, onClearAll, modifier = Modifier.heightIn(min = 48.dp))
             }
             // The live readout the comps put under the rail heading. On a
             // phone it earns its place twice over: while the sheet is open
@@ -206,7 +208,7 @@ fun D2MFilterSheet(
                 }
             }
 
-            D2MButton(
+            D2MActionButton(
                 text = strings.showResultCount(resultCount),
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth().padding(top = 20.dp),

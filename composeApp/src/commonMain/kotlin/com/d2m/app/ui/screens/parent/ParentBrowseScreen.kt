@@ -1,5 +1,7 @@
 package com.d2m.app.ui.screens.parent
 
+import com.d2m.app.ui.components.D2MActionButton
+import com.d2m.app.ui.components.D2MActionEmphasis
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -371,7 +373,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                         title = strings.nothingMatchesFiltersTitle,
                         subtitle = strings.nothingMatchesFiltersBody,
                         action = {
-                            D2MButton(strings.clearFilters, variant = D2MButtonVariant.ACCENT_OUTLINE, size = D2MButtonSize.SM, onClick = ::clearFacets)
+                            D2MActionButton(strings.clearFilters, onClick = ::clearFacets, emphasis = D2MActionEmphasis.SECONDARY, height = 48.dp, modifier = Modifier.padding(horizontal = 24.dp))
                         },
                     )
 
