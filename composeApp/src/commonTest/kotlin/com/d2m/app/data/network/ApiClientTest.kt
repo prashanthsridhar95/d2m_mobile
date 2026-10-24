@@ -6,6 +6,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
@@ -84,5 +85,48 @@ class ApiClientTest {
         assertEquals(1, callCount) // only 429s get the retry
         assertEquals(404, error.status)
         assertEquals("Not found", error.detail)
+    }
+
+    // ---- session expiry --------------------------------------------------------------------------------------------
+
+    private fun unauthorizedEngine() = MockEngine {
+        respond(
+            content = """{"detail":"invalid or expired token"}""",
+            status = HttpStatusCode.Unauthorized,
+            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+        )
+    }
+
+    @Test
+    fun get_on401WithToken_signalsSessionExpired() = runTest {
+        val store = com.d2m.app.data.session.IdentityStore(com.russhwolf.settings.MapSettings())
+        store.setChild("child-1")
+        store.setWedlockAccessToken("stale-token")
+        val client = ApiClient(engine = HttpClient(unauthorizedEngine()), baseUrl = "https://example.test", identityStore = store)
+
+        var signalled = false
+        val job = launch(kotlinx.coroutines.Dispatchers.Unconfined) {
+            client.sessionExpired.collect { signalled = true }
+        }
+        assertFailsWith<ApiError> { client.get<Ping>("/ping") }
+        job.cancel()
+
+        assertEquals(true, signalled)
+    }
+
+    @Test
+    fun get_on401WithoutToken_doesNotSignal() = runTest {
+        // e.g. a wrong password on the login screen: no token was sent, so it is an ordinary error, not an expiry.
+        val store = com.d2m.app.data.session.IdentityStore(com.russhwolf.settings.MapSettings())
+        val client = ApiClient(engine = HttpClient(unauthorizedEngine()), baseUrl = "https://example.test", identityStore = store)
+
+        var signalled = false
+        val job = launch(kotlinx.coroutines.Dispatchers.Unconfined) {
+            client.sessionExpired.collect { signalled = true }
+        }
+        assertFailsWith<ApiError> { client.get<Ping>("/ping") }
+        job.cancel()
+
+        assertEquals(false, signalled)
     }
 }

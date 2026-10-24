@@ -218,6 +218,17 @@ fun App() {
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
+
+    // Session expired/revoked (the server answered 401 to a request that carried our token): clear the stored session
+    // and go back to Login, discarding the back stack, rather than leaving screens stuck on an error.
+    LaunchedEffect(apiClient) {
+        apiClient.sessionExpired.collect {
+            if (identityStore.identity.value.role != null) {
+                identityStore.clear()
+                navController.navigate(Routes.LOGIN) { popUpTo(0) }
+            }
+        }
+    }
     val currentRoute = backStackEntry?.destination?.route
 
     // Screenshot/recording hardening (security/ScreenCapture.kt) -- both

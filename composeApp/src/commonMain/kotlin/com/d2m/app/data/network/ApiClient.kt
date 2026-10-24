@@ -200,6 +200,7 @@ class ApiClient(
                 if (body != null) setBody(body)
             }
             if (!response.status.isSuccess()) {
+                notifySessionExpiredIfAuthenticated(response.status.value)
                 val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
                 throw ApiError(status = response.status.value, detail = detail, message = detail ?: friendlyStatusMessage(response.status))
             }
@@ -276,8 +277,21 @@ class ApiClient(
             )
         }
 
+    /**
+     * Emits once whenever the server rejects a request that carried our login token (HTTP 401): the session has expired
+     * or been revoked. App.kt collects it on the main thread, clears the stored session and returns to the login
+     * screen, instead of leaving every screen stuck on "invalid or expired token" with a Retry that can never work.
+     * Not emitted when no token was sent, so a wrong password on the login screen is still an ordinary error there.
+     */
+    val sessionExpired = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun notifySessionExpiredIfAuthenticated(status: Int) {
+        if (status == 401 && identityStore?.identity?.value?.wedlockAccessToken != null) sessionExpired.tryEmit(Unit)
+    }
+
     suspend inline fun <reified T> unwrap(response: HttpResponse): T {
         if (!response.status.isSuccess()) {
+            notifySessionExpiredIfAuthenticated(response.status.value)
             val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
             throw ApiError(
                 status = response.status.value,
