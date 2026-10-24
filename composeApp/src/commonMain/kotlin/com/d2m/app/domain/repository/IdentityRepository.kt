@@ -111,6 +111,9 @@ class IdentityRepository(
         return cache.get(key) { api.getExtendedBio(primaryId) }.value
     }
 
+    /** Cached extended bio, if any, without suspending -- safe to call in composition for a no-flash first frame. */
+    fun peekExtendedBio(primaryId: String): ExtendedBioDataOut? = cache.peekNow<ExtendedBioDataOut>("extended-bio:$primaryId")?.value
+
     suspend fun updateExtendedBio(primaryId: String, body: ExtendedBioDataIn): ExtendedBioDataOut {
         val result = api.updateExtendedBio(primaryId, body)
         cache.setCached("extended-bio:$primaryId", result)
@@ -122,6 +125,8 @@ class IdentityRepository(
         if (forceRefresh) cache.invalidateKey(key)
         return cache.get(key) { api.getAboutMe(primaryId) }.value
     }
+
+    fun peekAboutMe(primaryId: String): AboutMeDataOut? = cache.peekNow<AboutMeDataOut>("about-me:$primaryId")?.value
 
     suspend fun updateAboutMe(primaryId: String, body: AboutMeDataIn): AboutMeDataOut {
         val result = api.updateAboutMe(primaryId, body)

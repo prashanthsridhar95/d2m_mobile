@@ -12,6 +12,8 @@ class DashboardRepository(
     suspend fun getChart(primaryId: String): ChartOut =
         cache.get("chart:$primaryId", ttlMillis = 10 * 60_000) { api.getChart(primaryId) }.value
 
+    fun peekChart(primaryId: String): ChartOut? = cache.peekNow<ChartOut>("chart:$primaryId")?.value
+
     suspend fun getSponsorChild(sponsorId: String, forceRefresh: Boolean = false): SponsorChildOut {
         val key = "sponsor-child:$sponsorId"
         if (forceRefresh) cache.invalidateKey(key)

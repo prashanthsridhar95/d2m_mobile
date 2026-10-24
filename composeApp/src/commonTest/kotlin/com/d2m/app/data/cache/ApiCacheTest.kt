@@ -1,6 +1,10 @@
 package com.d2m.app.data.cache
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
@@ -121,5 +125,80 @@ class ApiCacheTest {
         var fetches = 0
         cache.get("a") { fetches++; 99 }
         assertEquals(1, fetches)
+    }
+
+    @Test
+    fun staleRefresh_isCoalesced_manyStaleReadsTriggerOneRefetch() = runTest {
+        var clock = 0L
+        val cache = ApiCache(defaultTtlMillis = 1_000, nowMillis = { clock })
+        var fetchCount = 0
+        val gate = CompletableDeferred<Unit>()
+        val fetch: suspend () -> String = { fetchCount++; if (fetchCount > 1) gate.await(); "value-$fetchCount" }
+
+        cache.get("k", fetch = fetch)
+        clock += 5_000
+        repeat(5) { assertEquals("value-1", cache.get("k", fetch = fetch).value) }
+        withContext(Dispatchers.Default) { delay(100) }
+        assertEquals(2, fetchCount) // 1 initial + exactly 1 shared refresh, not 5
+        gate.complete(Unit)
+    }
+
+    @Test
+    fun invalidateDuringFetch_discardsTheStaleResult() = runTest {
+        val cache = ApiCache()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val first = async { cache.get("k") { started.complete(Unit); release.await(); "pre-mutation" } }
+        started.await()
+        cache.invalidateKey("k") // a mutation lands while the GET is in flight
+        release.complete(Unit)
+        assertEquals("pre-mutation", first.await().value) // the caller that asked still gets its answer
+
+        var fetches = 0
+        val next = cache.get("k") { fetches++; "post-mutation" }
+        assertEquals(1, fetches) // the old response must NOT have been written into the cache
+        assertEquals("post-mutation", next.value)
+    }
+
+    @Test
+    fun cancellingOneWaiter_doesNotCancelTheSharedFetch() = runTest {
+        val cache = ApiCache()
+        val release = CompletableDeferred<Unit>()
+        var fetchCount = 0
+        val fetch: suspend () -> String = { fetchCount++; release.await(); "v" }
+        val a = async { cache.get("k", fetch = fetch) }
+        val b = async { cache.get("k", fetch = fetch) }
+        withContext(Dispatchers.Default) { delay(50) }
+        a.cancel()
+        release.complete(Unit)
+        assertEquals("v", b.await().value)
+        assertEquals(1, fetchCount)
+    }
+
+    @Test
+    fun patchStale_servesPatchedValueInstantly_thenRevalidates() = runTest {
+        val cache = ApiCache()
+        var fetchCount = 0
+        cache.get("k") { fetchCount++; listOf(1, 2, 3) }
+        assertTrue(cache.patchStale<List<Int>>("k") { it.filter { n -> n != 2 } })
+        val r = cache.get("k") { fetchCount++; listOf(1, 3, 4) }
+        assertEquals(listOf(1, 3), r.value)
+        assertTrue(r.stale)
+        withContext(Dispatchers.Default) { withTimeout(5_000) { while (fetchCount < 2) delay(10) } }
+        withContext(Dispatchers.Default) { delay(50) }
+        assertEquals(listOf(1, 3, 4), cache.get("k") { listOf(9) }.value)
+    }
+
+    @Test
+    fun peekNow_returnsCachedValueSynchronously_andHardExpires() = runTest {
+        var clock = 0L
+        val cache = ApiCache(defaultTtlMillis = 1_000, nowMillis = { clock })
+        assertEquals(null, cache.peekNow<String>("k"))
+        cache.setCached("k", "v")
+        assertEquals("v", cache.peekNow<String>("k")?.value)
+        clock += 2_000
+        assertTrue(cache.peekNow<String>("k")!!.stale)
+        clock += ApiCache.DEFAULT_MAX_STALE_MILLIS
+        assertEquals(null, cache.peekNow<String>("k"))
     }
 }

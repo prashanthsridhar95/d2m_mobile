@@ -63,7 +63,8 @@ val appModule = module {
     single { BlockingApi(get()) }
 
     single { IdentityRepository(get(), get()) }
-    single { SuggestionsRepository(get(), get(), get()) }
+    single { SuggestionsRepository(get(), get(), get(), get(), get()) }
+    single { DelayedActionCommitter(get()) }
     single { SeriousModeRepository(get(), get()) }
     single { ConsentRepository(get(), get()) }
     single { NotificationsRepository(get(), get()) }
@@ -143,4 +144,8 @@ val appModule = module {
     // app-wide Coil default (GifPicker.kt's Giphy fetches, chat media) rather
     // than a global singleton swap.
     single { createPhotoImageLoader(get()) }
+    // Warms the photo loader's memory cache for upcoming cards -- see PhotoPrefetcher / rememberPhotoPrefetch.
+    single { PhotoPrefetcher(get(), photoPlatformContext(), get<ApiClient>()::resolveMediaUrl) }
+    // Login/app-start cache warm-up -- see domain/repository/Prefetcher.kt.
+    single { Prefetcher(get(), get(), get(), get(), get(), get(), get(), get()) }
 }

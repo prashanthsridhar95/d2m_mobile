@@ -10,7 +10,11 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -78,7 +82,7 @@ class SuggestionsRepositoryTest {
             when {
                 request.url.encodedPath == "/primaries/$primaryId/suggestions" -> {
                     suggestionsRequests++
-                    respond("[]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    respond(SUGGESTIONS_JSON, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
                 }
                 request.url.encodedPath == "/primaries/$primaryId/suggestions/cand-1/action" -> {
                     actRequests++
@@ -106,7 +110,40 @@ class SuggestionsRepositoryTest {
         repo.act(primaryId, "cand-1", "accept") // should invalidate "suggestions:$primaryId"
         assertEquals(1, actRequests)
 
-        repo.getSuggestions(primaryId) // must refetch since act() invalidated it
+        // The acted-on card is dropped from the cached feed in place: served instantly, no blocking refetch...
+        val afterAct = repo.getSuggestions(primaryId)
+        assertEquals(listOf("cand-2"), afterAct.map { it.candidateId })
+        // ...while a background revalidation brings the authoritative list.
+        withContext(Dispatchers.Default) { withTimeout(5_000) { while (suggestionsRequests < 2) delay(10) } }
         assertEquals(2, suggestionsRequests)
+    }
+
+    @Test
+    fun delayedCommitter_undoPreventsTheSend_andFlushSendsPending() = runTest {
+        var actRequests = 0
+        val engine = MockEngine { request ->
+            if (request.url.encodedPath.endsWith("/action")) actRequests++
+            respond(
+                """{"primary_id":"$primaryId","candidate_id":"cand-1","status":"accepted","snooze_count":0,"mutual_match":false}""",
+                HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val apiClient = ApiClient(engine = HttpClient(engine), baseUrl = "https://example.test")
+        val repo = SuggestionsRepository(SuggestionsApi(apiClient), BufferApi(apiClient), ApiCache())
+        val committer = DelayedActionCommitter(repo, delayMillis = 60_000)
+
+        committer.schedule(primaryId, "cand-1", "accept")
+        assertEquals(true, committer.undo(primaryId, "cand-1"))
+        assertEquals(false, committer.hasPending())
+        committer.flush()
+        assertEquals(0, actRequests) // undone before the delay elapsed: never reached the server
+
+        committer.schedule(primaryId, "cand-1", "accept")
+        committer.flush()
+        assertEquals(1, actRequests)
+    }
+
+    private companion object {
+        val SUGGESTIONS_JSON = """[{"candidate_id":"cand-1","candidate_name":"A"},{"candidate_id":"cand-2","candidate_name":"B"}]"""
     }
 }

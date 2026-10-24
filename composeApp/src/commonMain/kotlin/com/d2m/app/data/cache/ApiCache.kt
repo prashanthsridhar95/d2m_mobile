@@ -1,6 +1,12 @@
 package com.d2m.app.data.cache
 
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,16 +56,26 @@ class ApiCache(
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
 
-    private data class Entry<T>(val value: T, val fetchedAt: Long)
+    private data class Entry<T>(val value: T, val fetchedAt: Long, val forceStale: Boolean = false)
 
     private val mutex = Mutex()
     private val entries = mutableMapOf<String, Entry<Any?>>()
-    private val inFlight = mutableMapOf<String, CompletableDeferred<Any?>>()
 
-    // Owns background SWR refreshes -- lives as long as the ApiCache singleton
-    // itself (app process lifetime), so there's no dangling-scope leak to
-    // manage. SupervisorJob so one failed background refresh can't cancel
-    // any other in-flight refresh.
+    // One shared fetch per key, cold OR background refresh. Everyone who
+    // wants key K while a fetch for K is running awaits this same Deferred.
+    private val inFlight = mutableMapOf<String, Deferred<Any?>>()
+
+    // Bumped by every invalidate*/clear. A fetch remembers the epoch it
+    // started under and refuses to write its (now possibly pre-mutation)
+    // result into the cache if the epoch moved -- otherwise an act() that
+    // invalidates "suggestions:" while a GET is in flight would have the old
+    // response repopulate the cache right behind it.
+    private var epoch = 0L
+
+    // Owns every fetch -- lives as long as the ApiCache singleton (app
+    // process lifetime). Running fetches here, not in the caller's scope,
+    // means a screen leaving composition cancels only ITS await, never the
+    // shared network call other waiters (or the cache warm-up) still need.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private fun now(): Long = nowMillis()
@@ -68,85 +84,135 @@ class ApiCache(
     data class CachedResult<T>(val value: T, val stale: Boolean)
 
     /**
-     * Returns the cached value immediately if fresh, kicks off a background
-     * refresh if stale-but-present (stale-while-revalidate), or awaits (and
-     * dedupes concurrent callers of) a cold fetch if nothing is cached yet.
+     * Returns the cached value immediately if fresh, kicks off a (coalesced)
+     * background refresh if stale-but-present (stale-while-revalidate), or
+     * awaits a coalesced cold fetch if nothing usable is cached.
+     *
+     * [maxStaleMillis]: an entry older than this is too old to show even
+     * while revalidating and is treated as a cold miss.
      */
     @Suppress("UNCHECKED_CAST")
     suspend fun <T> get(
         key: String,
         ttlMillis: Long = defaultTtlMillis,
+        maxStaleMillis: Long = DEFAULT_MAX_STALE_MILLIS,
         fetch: suspend () -> T,
     ): CachedResult<T> {
-        val cached = mutex.withLock { entries[key] as? Entry<T> }
-        val isFresh = cached != null && (now() - cached.fetchedAt) < ttlMillis
-
-        if (cached != null && isFresh) {
-            return CachedResult(cached.value, stale = false)
-        }
-
-        if (cached != null && !isFresh) {
-            // Stale-while-revalidate: return what we have *immediately*, refresh
-            // in the background via `scope.launch` (this must not be a plain
-            // suspend call -- awaiting it here would block the caller until the
-            // refetch completes, defeating the entire point of SWR). Callers
-            // that want to know a refresh landed should re-observe via a
-            // Flow-backed repository layer (see domain/repository) rather than
-            // awaiting this call a second time.
-            triggerBackgroundRefresh(key, ttlMillis, fetch)
-            return CachedResult(cached.value, stale = true)
-        }
-
-        // Cold miss: dedupe concurrent callers onto one in-flight fetch.
-        val deferred = mutex.withLock {
-            inFlight[key]?.let { return@withLock it as CompletableDeferred<T> }
-            val d = CompletableDeferred<Any?>()
-            inFlight[key] = d
-            null
-        }
-        if (deferred != null) {
-            return CachedResult(deferred.await() as T, stale = false)
-        }
-
-        return try {
-            val value = fetch()
-            mutex.withLock {
-                entries[key] = Entry(value, now())
-                (inFlight.remove(key) as? CompletableDeferred<Any?>)?.complete(value)
+        var join: Deferred<Any?>? = null
+        var staleValue: Entry<T>? = null
+        mutex.withLock {
+            val cached = entries[key] as? Entry<T>
+            val age = if (cached != null) now() - cached.fetchedAt else 0L
+            if (cached != null && !cached.forceStale && age < ttlMillis) return CachedResult(cached.value, stale = false)
+            if (cached != null && age < maxStaleMillis) {
+                staleValue = cached
+                if (inFlight[key] == null) inFlight[key] = startFetch(key, fetch)
+            } else {
+                join = inFlight[key] ?: startFetch(key, fetch).also { inFlight[key] = it }
             }
-            CachedResult(value, stale = false)
-        } catch (t: Throwable) {
-            mutex.withLock { (inFlight.remove(key) as? CompletableDeferred<Any?>)?.completeExceptionally(t) }
-            throw t
+        }
+        staleValue?.let { return CachedResult(it.value, stale = true) }
+        return CachedResult(join!!.await() as T, stale = false)
+    }
+
+    /** Must be called with [mutex] held. Lazy start so the Deferred is registered before the fetch can finish. */
+    private fun <T> startFetch(key: String, fetch: suspend () -> T): Deferred<Any?> {
+        val startedEpoch = epoch
+        val d = scope.async(start = CoroutineStart.LAZY) {
+            try {
+                val value = fetch()
+                mutex.withLock { if (epoch == startedEpoch) entries[key] = Entry(value, now()) }
+                value
+            } finally {
+                // Only clear OUR registration: an invalidate may already have replaced it with a newer fetch.
+                val me = currentCoroutineContext()[Job]
+                withContext(NonCancellable) { mutex.withLock { if (inFlight[key] === me) inFlight.remove(key) } }
+            }
+        }
+        d.start()
+        return d
+    }
+
+    /**
+     * Cached value for [key] regardless of age (null if absent or hard-expired). For cached-first UIs
+     * that paint immediately and then call [get] to revalidate.
+     */
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> peek(key: String, maxStaleMillis: Long = DEFAULT_MAX_STALE_MILLIS): CachedResult<T>? = mutex.withLock {
+        val e = entries[key] as? Entry<T> ?: return@withLock null
+        val age = now() - e.fetchedAt
+        if (age >= maxStaleMillis) null else CachedResult(e.value, stale = e.forceStale || age >= defaultTtlMillis)
+    }
+
+    /**
+     * Non-suspending [peek] for use directly in composition (`remember { cache.peekNow(key) }`) so a screen
+     * can paint cached data on its very first frame instead of flashing a loader. Returns null if the
+     * cache lock is momentarily held (the caller just falls back to the normal async path).
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> peekNow(key: String, maxStaleMillis: Long = DEFAULT_MAX_STALE_MILLIS): CachedResult<T>? {
+        if (!mutex.tryLock()) return null
+        try {
+            val e = entries[key] as? Entry<T> ?: return null
+            val age = now() - e.fetchedAt
+            return if (age >= maxStaleMillis) null else CachedResult(e.value, stale = e.forceStale || age >= defaultTtlMillis)
+        } finally {
+            mutex.unlock()
         }
     }
 
-    private fun <T> triggerBackgroundRefresh(key: String, ttlMillis: Long, fetch: suspend () -> T) {
-        scope.launch {
-            runCatching {
-                val value = fetch()
-                mutex.withLock { entries[key] = Entry(value, now()) }
-            }
+    /**
+     * Rewrites a cached value in place (e.g. drop the candidate just acted on from the cached suggestion list)
+     * and marks it stale so the next [get] returns the patched value instantly AND revalidates in the background.
+     * No-op if nothing is cached. Returns whether an entry was patched.
+     */
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> patchStale(key: String, transform: (T) -> T): Boolean = mutex.withLock {
+        val e = entries[key] as? Entry<T> ?: return@withLock false
+        epoch++
+        inFlight.remove(key)
+        entries[key] = Entry(transform(e.value), e.fetchedAt, forceStale = true)
+        true
+    }
+
+    /** Like [invalidate] but keeps the values: entries under [prefix] are served once more (stale) while a refresh runs. */
+    suspend fun softInvalidate(prefix: String) {
+        mutex.withLock {
+            epoch++
+            inFlight.keys.filter { it.startsWith(prefix) }.forEach { inFlight.remove(it) }
+            entries.keys.filter { it.startsWith(prefix) }.forEach { k -> entries[k]?.let { entries[k] = it.copy(forceStale = true) } }
         }
+    }
+
+    /** Fire-and-forget warm-up: fetches [key] in the cache's own scope unless fresh or already in flight. Never throws. */
+    fun <T> prefetch(key: String, ttlMillis: Long = defaultTtlMillis, fetch: suspend () -> T) {
+        scope.launch { runCatching { get(key, ttlMillis, fetch = fetch) } }
     }
 
     /** Optimistic write -- e.g. after a mutation, seed the cache with the known-good result instead of waiting on a refetch. */
     suspend fun <T> setCached(key: String, value: T) {
-        mutex.withLock { entries[key] = Entry(value, now()) }
+        mutex.withLock { epoch++; entries[key] = Entry(value, now()); inFlight.remove(key) }
     }
 
     /** Prefix-based bulk invalidation, e.g. invalidate("suggestions:") after accept/reject/snooze. */
     suspend fun invalidate(prefix: String) {
         mutex.withLock {
+            epoch++
             entries.keys.filter { it.startsWith(prefix) }.forEach { entries.remove(it) }
+            inFlight.keys.filter { it.startsWith(prefix) }.forEach { inFlight.remove(it) }
         }
     }
 
     suspend fun invalidateKey(key: String) {
-        mutex.withLock { entries.remove(key) }
+        mutex.withLock { epoch++; entries.remove(key); inFlight.remove(key) }
     }
 
     suspend fun clear() {
-        mutex.withLock { entries.clear() }
+        mutex.withLock { epoch++; entries.clear(); inFlight.clear() }
+    }
+
+    companion object {
+        /** Beyond this age a cached value is not worth flashing even while revalidating. */
+        const val DEFAULT_MAX_STALE_MILLIS = 30 * 60 * 1000L
     }
 }

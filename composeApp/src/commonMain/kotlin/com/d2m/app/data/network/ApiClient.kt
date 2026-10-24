@@ -76,7 +76,9 @@ class ApiClient(
         install(Logging) { level = LogLevel.INFO }
         install(HttpTimeout) {
             requestTimeoutMillis = 20_000
-            connectTimeoutMillis = 10_000
+            connectTimeoutMillis = 8_000
+            // A stalled socket now fails (and gets the GET retry) after 12s of silence instead of waiting out the whole 20s.
+            socketTimeoutMillis = 12_000
         }
         // Installed here (rather than a second client) so MessagingWsClient
         // (Phase 6) can reuse this same client instance -- one HTTP engine
@@ -118,6 +120,28 @@ class ApiClient(
             }
         }
 
+    /**
+     * One quick retry for idempotent GETs on a transient failure (dropped
+     * connection / timeout on a flaky mobile link, or a gateway 502-504 from the
+     * tunnel). Never used for POST/PUT/DELETE, never retries a real API error
+     * (4xx/500), a decode failure, or cancellation.
+     */
+    @PublishedApi
+    internal suspend inline fun <T> withTransientRetry(block: () -> T): T =
+        try {
+            block()
+        } catch (e: Throwable) {
+            val retryable = when (e) {
+                is kotlinx.coroutines.CancellationException -> false
+                is ApiError -> e.status == 502 || e.status == 503 || e.status == 504
+                is kotlinx.serialization.SerializationException -> false
+                else -> true
+            }
+            if (!retryable) throw e
+            kotlinx.coroutines.delay(250)
+            block()
+        }
+
     /** Resolves the backend's relative /media/photos/... URLs against the configured base, same as resolveMediaUrl() on web. */
     fun resolveMediaUrl(path: String): String {
         if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("blob:") || path.startsWith("data:")) {
@@ -133,11 +157,13 @@ class ApiClient(
     // applyAuthHeader() already attaches unconditionally.
     suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap(), extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
-            unwrap(client.get(url(path)) {
-                applyAuthHeader()
-                extraHeaders.forEach { (k, v) -> header(k, v) }
-                params.forEach { (k, v) -> if (v != null) parameter(k, v) }
-            })
+            withTransientRetry {
+                unwrap(client.get(url(path)) {
+                    applyAuthHeader()
+                    extraHeaders.forEach { (k, v) -> header(k, v) }
+                    params.forEach { (k, v) -> if (v != null) parameter(k, v) }
+                })
+            }
         }
 
     // extraHeaders defaults to empty so every existing call site (none of
@@ -259,7 +285,10 @@ class ApiClient(
                 message = detail ?: friendlyStatusMessage(response.status),
             )
         }
-        return response.body()
+        // Decode the body off the caller's dispatcher: repositories are routinely
+        // called from LaunchedEffect (Main), and kotlinx.serialization of a
+        // 100-card suggestions list is tens of ms of pure CPU.
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { response.body() }
     }
 
     fun friendlyStatusMessage(status: HttpStatusCode): String = when (status.value) {

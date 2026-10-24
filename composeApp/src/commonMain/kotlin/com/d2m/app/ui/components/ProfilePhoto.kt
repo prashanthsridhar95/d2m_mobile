@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,8 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
+import com.d2m.app.data.network.PhotoPrefetcher
+import org.koin.compose.koinInject
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.d2m
 
@@ -51,6 +54,21 @@ val LocalPhotoImageLoader = compositionLocalOf<ImageLoader?> { null }
 @Composable
 fun rememberPhotoImageLoader(): ImageLoader =
     LocalPhotoImageLoader.current ?: SingletonImageLoader.get(LocalPlatformContext.current)
+
+/**
+ * Warms the photo cache for [urls] (the next few cards in a deck / rows below
+ * the fold) as soon as they are known and again whenever the list changes.
+ * Pass the same strings you hand to [ProfilePhoto] (relative backend paths
+ * and absolute URLs both work). Cheap and idempotent: already-warm or
+ * already-in-flight photos are skipped. No-op outside a Koin context.
+ *
+ *     rememberPhotoPrefetch(suggestions.drop(index + 1).take(3).map { it.photoUrl })
+ */
+@Composable
+fun rememberPhotoPrefetch(urls: List<String?>, limit: Int = 4) {
+    val prefetcher = koinInject<PhotoPrefetcher>()
+    LaunchedEffect(urls, limit) { prefetcher.prefetch(urls, limit) }
+}
 
 /*
  * Profile photograph, with the comps' treatment for not having one.
