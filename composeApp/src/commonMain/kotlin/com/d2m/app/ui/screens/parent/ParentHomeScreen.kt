@@ -242,7 +242,7 @@ fun ParentHomeScreen(
                     loading -> item(key = "skeleton", contentType = "skeleton") { HomeSkeleton() }
 
                     error != null -> item(key = "error", contentType = "state") {
-                        D2MErrorBanner(error!!, onRetry = { refresh() })
+                        D2MErrorBanner(error!!, onRetry = { refresh() }, modifier = Modifier.fillParentMaxSize())
                     }
 
                     else -> {

@@ -332,7 +332,7 @@ fun ChildHomeScreen(
 
                 error?.let { msg ->
                     item(key = "error", contentType = "banner") {
-                        D2MErrorBanner(msg, onRetry = { scope.launch { loadAll(force = true) } })
+                        D2MErrorBanner(msg, onRetry = { scope.launch { loadAll(force = true) } }, modifier = Modifier.fillParentMaxHeight(0.8f))
                     }
                 }
                 // A failed load shows only the message and its Retry: the Discover CTA, request actions and summary rows

@@ -89,6 +89,12 @@ fun D2MEmptyState(
  */
 @Composable
 fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+    // A failure that offers Retry is a whole-screen failure (the content never loaded): show the full-screen state,
+    // not a small red card. Inline banners without a retry -- form and action errors -- keep the compact look below.
+    if (onRetry != null) {
+        SomethingWentWrong(onRetry, modifier)
+        return
+    }
     val danger = LocalD2MStatusPalette.current.danger
     val shape = RoundedCornerShape(D2MRadius.md)
     Row(
@@ -130,22 +136,8 @@ fun D2MErrorState(
     message: String,
     onRetry: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    title: String = LocalStrings.current.common.errorGeneric,
+    title: String = LocalStrings.current.common.errorTitle,
 ) {
-    D2MEmptyState(
-        title = title,
-        // The generic message is already the title; don't say it twice.
-        subtitle = if (message == com.d2m.app.data.network.ErrorCopy.somethingWentWrong || message == title) "" else message,
-        modifier = modifier,
-        icon = {
-            androidx.compose.material3.Icon(
-                androidx.compose.material.icons.Icons.Filled.ErrorOutline,
-                contentDescription = null,
-                tint = LocalD2MStatusPalette.current.danger.fg,
-            )
-        },
-        action = if (onRetry != null) {
-            { D2MButton(LocalStrings.current.common.retry, onClick = onRetry, variant = D2MButtonVariant.OUTLINE) }
-        } else null,
-    )
+    // [message] and [title] are kept so call sites compile unchanged; the screen shows the one standard state.
+    SomethingWentWrong(onRetry, modifier)
 }

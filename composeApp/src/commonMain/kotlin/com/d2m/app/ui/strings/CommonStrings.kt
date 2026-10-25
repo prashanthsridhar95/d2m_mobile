@@ -43,6 +43,9 @@ interface CommonStrings {
     val tabSettings: String
     val tabHome: String
     val errorGeneric: String
+    val errorTitle: String
+    val errorBody: String
+    val tryAgain: String
     val tabDiscover: String
     val tabMatches: String
     val tabNotifications: String
@@ -82,6 +85,9 @@ object CommonStringsEn : CommonStrings {
     override val tabSettings = "Settings"
     override val tabHome = "Home"
     override val errorGeneric = "Something went wrong"
+    override val errorTitle = "Looks like something's gone wrong"
+    override val errorBody = "Please try again. If the problem continues, contact our Support Team."
+    override val tryAgain = "Try again"
     override val tabDiscover = "Discover"
     override val tabMatches = "Matches"
     override val tabNotifications = "Notifications"
@@ -121,6 +127,9 @@ object CommonStringsHi : CommonStrings {
     override val tabSettings = "सेटिंग्स"
     override val tabHome = "होम"
     override val errorGeneric = "कुछ गलत हो गया"
+    override val errorTitle = "लगता है कुछ गड़बड़ हो गई"
+    override val errorBody = "कृपया फिर से प्रयास करें। समस्या बनी रहे तो हमारी सहायता टीम से संपर्क करें।"
+    override val tryAgain = "फिर से प्रयास करें"
     override val tabDiscover = "डिस्कवर"
     override val tabMatches = "मैचेस"
     override val tabNotifications = "सूचनाएं"
@@ -160,6 +169,9 @@ object CommonStringsTa : CommonStrings {
     override val tabSettings = "அமைப்புகள்"
     override val tabHome = "முகப்பு"
     override val errorGeneric = "ஏதோ தவறு நடந்தது"
+    override val errorTitle = "ஏதோ தவறு நடந்திருக்கிறது"
+    override val errorBody = "மீண்டும் முயலவும். சிக்கல் தொடர்ந்தால் எங்கள் ஆதரவுக் குழுவைத் தொடர்பு கொள்ளவும்."
+    override val tryAgain = "மீண்டும் முயலவும்"
     override val tabDiscover = "டிஸ்கவர்"
     override val tabMatches = "மேட்சஸ்"
     override val tabNotifications = "அறிவிப்புகள்"

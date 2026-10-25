@@ -186,7 +186,7 @@ fun ShareLinksScreen() {
                     item(key = "sk-create") { D2MSkeleton(height = 190.dp, radius = 14.dp) }
                     items(2, key = { "sk-$it" }) { D2MSkeleton(height = 130.dp, radius = 14.dp) }
                 }
-                loadFailed -> item(key = "load-error") { D2MErrorBanner(error ?: ErrorCopy.somethingWentWrong, onRetry = { retryTick++ }) }
+                loadFailed -> item(key = "load-error") { D2MErrorBanner(error ?: ErrorCopy.somethingWentWrong, onRetry = { retryTick++ }, modifier = Modifier.fillParentMaxHeight(0.8f)) }
                 else -> {
                     item(key = "create") {
                         D2MCard(modifier = Modifier.fillMaxWidth()) {
