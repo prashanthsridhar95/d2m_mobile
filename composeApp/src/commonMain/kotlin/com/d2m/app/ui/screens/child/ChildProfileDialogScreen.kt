@@ -222,7 +222,7 @@ fun ChildProfileDialogScreen(onClose: () -> Unit) {
             // TopAppBar -- see navigation/AppScaffold.kt's ScreenHeader
             // note on why that bar is the wrong shape for this design.
             PageTitle(strings.myProfile, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp))
-            D2MTabs(tabLabels, tab, { tab = it })
+            D2MTabs(tabLabels, tab, { tab = it }, scrollable = true)
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (tabKeys[tab]) {

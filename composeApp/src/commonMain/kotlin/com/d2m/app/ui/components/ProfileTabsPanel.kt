@@ -293,6 +293,7 @@ private fun AboutMeTab(
     hidePrompts: Boolean = false,
 ) {
     val strings = LocalStrings.current.sharedComponents
+    val cpd = LocalStrings.current.childProfileDialog
     val locale = LocalAppLocale.current
     when {
         !loaded -> Text(strings.loading, color = mutedText(0.45f))
@@ -305,10 +306,10 @@ private fun AboutMeTab(
                 CasualCard {
                     Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("🏃", aboutMe.fitnessRoutine, traitMatch(ownAboutMe?.fitnessRoutine, aboutMe.fitnessRoutine))
-                        IconBubble("🌙", aboutMe.sleepSchedule, traitMatch(ownAboutMe?.sleepSchedule, aboutMe.sleepSchedule))
-                        IconBubble("🐾", aboutMe.pets, traitMatch(ownAboutMe?.pets, aboutMe.pets))
-                        IconBubble("🔋", aboutMe.socialEnergy, traitMatch(ownAboutMe?.socialEnergy, aboutMe.socialEnergy))
+                        IconBubble("🏃", cpd.fitnessRoutine, aboutMe.fitnessRoutine, traitMatch(ownAboutMe?.fitnessRoutine, aboutMe.fitnessRoutine))
+                        IconBubble("🌙", cpd.sleepSchedule, aboutMe.sleepSchedule, traitMatch(ownAboutMe?.sleepSchedule, aboutMe.sleepSchedule))
+                        IconBubble("🐾", cpd.pets, aboutMe.pets, traitMatch(ownAboutMe?.pets, aboutMe.pets))
+                        IconBubble("🔋", cpd.socialEnergy, aboutMe.socialEnergy, traitMatch(ownAboutMe?.socialEnergy, aboutMe.socialEnergy))
                     }
                 }
             }
@@ -336,10 +337,10 @@ private fun AboutMeTab(
                 CasualCard {
                     Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("💼", aboutMe.careerAfterMarriage, traitMatch(ownAboutMe?.careerAfterMarriage, aboutMe.careerAfterMarriage))
-                        IconBubble("🏠", aboutMe.livingArrangement, traitMatch(ownAboutMe?.livingArrangement, aboutMe.livingArrangement))
-                        IconBubble("🧳", aboutMe.openToRelocation, traitMatch(ownAboutMe?.openToRelocation, aboutMe.openToRelocation))
-                        IconBubble("👶", bio?.childrenPreference?.let { Taxonomy.toLabel(it, locale) }, traitMatch(ownChildrenPreference, bio?.childrenPreference))
+                        IconBubble("💼", cpd.careerAfterMarriage, aboutMe.careerAfterMarriage, traitMatch(ownAboutMe?.careerAfterMarriage, aboutMe.careerAfterMarriage))
+                        IconBubble("🏠", cpd.livingArrangement, aboutMe.livingArrangement, traitMatch(ownAboutMe?.livingArrangement, aboutMe.livingArrangement))
+                        IconBubble("🧳", cpd.openToRelocation, aboutMe.openToRelocation, traitMatch(ownAboutMe?.openToRelocation, aboutMe.openToRelocation))
+                        IconBubble("👶", cpd.childrenPreference, bio?.childrenPreference?.let { Taxonomy.toLabel(it, locale) }, traitMatch(ownChildrenPreference, bio?.childrenPreference))
                     }
                 }
             }
@@ -348,9 +349,9 @@ private fun AboutMeTab(
                 CasualCard {
                     Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
-                        IconBubble("🍽️", aboutMe.favoriteCuisine, traitMatch(ownAboutMe?.favoriteCuisine, aboutMe.favoriteCuisine))
-                        IconBubble("✈️", aboutMe.dreamDestination, traitMatch(ownAboutMe?.dreamDestination, aboutMe.dreamDestination))
-                        IconBubble("💌", aboutMe.loveLanguage, traitMatch(ownAboutMe?.loveLanguage, aboutMe.loveLanguage))
+                        IconBubble("🍽️", cpd.favoriteCuisine, aboutMe.favoriteCuisine, traitMatch(ownAboutMe?.favoriteCuisine, aboutMe.favoriteCuisine))
+                        IconBubble("✈️", cpd.dreamDestination, aboutMe.dreamDestination, traitMatch(ownAboutMe?.dreamDestination, aboutMe.dreamDestination))
+                        IconBubble("💌", cpd.loveLanguage, aboutMe.loveLanguage, traitMatch(ownAboutMe?.loveLanguage, aboutMe.loveLanguage))
                     }
                 }
             }
@@ -395,8 +396,10 @@ private fun CasualCard(content: @Composable ColumnScope.() -> Unit) {
 // category marker, not as the "childish" full-size emoji sticker the
 // very first cut of this tab used).
 @Composable
-private fun IconBubble(icon: String, value: String?, match: Boolean? = null) {
+private fun IconBubble(icon: String, label: String, value: String?, match: Boolean? = null) {
     if (value == null) return
+    // Tapping the pill says which field it is ("Fitness routine"), like the web's hover bubble.
+    TapTip(text = label, minTarget = 36.dp) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -407,6 +410,7 @@ private fun IconBubble(icon: String, value: String?, match: Boolean? = null) {
         Text(icon, fontSize = 13.sp)
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
         MatchIndicator(match, value)
+    }
     }
 }
 
@@ -425,11 +429,8 @@ private fun MatchIndicator(match: Boolean?, label: String, size: Dp = 13.dp) {
     val strokeColor = if (match) palette.success.fg else palette.danger.fg
     val strings = LocalStrings.current.sharedComponents
     val tooltipText = if (match) strings.matchTooltipYesShared(label) else strings.matchTooltipNoShared(label)
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(tooltipText) } },
-        state = rememberTooltipState(),
-    ) {
+    // Bubble in the verdict's own colour (solid fg with the page colour as text), like the web's colour-coded tooltip.
+    TapTip(text = tooltipText, container = strokeColor, content = MaterialTheme.colorScheme.background, minTarget = 40.dp) {
         Canvas(modifier = Modifier.size(size)) {
             drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
             val w = this.size.width

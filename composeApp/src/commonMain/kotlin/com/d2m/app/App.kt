@@ -71,6 +71,8 @@ import com.d2m.app.ui.components.LocalD2MSnackbar
 import com.d2m.app.ui.components.rememberD2MSnackbarState
 import com.d2m.app.ui.navigation.D2MNavGraph
 import com.d2m.app.ui.navigation.ParentTabs
+import com.d2m.app.ui.navigation.BackBarRoutes
+import com.d2m.app.ui.navigation.D2MBackBar
 import com.d2m.app.ui.navigation.Routes
 import com.d2m.app.ui.strings.LocalAppLocale
 import com.d2m.app.ui.strings.LocalStrings
@@ -329,8 +331,15 @@ fun App() {
                     }
                 },
             ) { innerPadding ->
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    D2MNavGraph(navController = navController, startDestination = startDestination, tabRoutes = tabRoutes)
+                Column(modifier = Modifier.padding(innerPadding)) {
+                    // Pushed screens without a header of their own (settings, profile editor, trust, verification, gallery,
+                    // sharing, parent messages, parent notifications) get one slim back bar; tabs never do.
+                    if (currentRoute in BackBarRoutes && currentRoute !in tabRoutes && !conversationOpen) {
+                        D2MBackBar(onBack = { navController.popBackStack() })
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        D2MNavGraph(navController = navController, startDestination = startDestination, tabRoutes = tabRoutes)
+                    }
                 }
             }
 

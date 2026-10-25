@@ -102,12 +102,7 @@ fun FeaturedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
     val rocketColor = Color(0xFFFFFDF8)
     val label = LocalStrings.current.sharedComponents.foundingMember
     val tooltipText = LocalStrings.current.sharedComponents.foundingMemberTooltip
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(tooltipText) } },
-        state = rememberTooltipState(),
-        modifier = modifier,
-    ) {
+    TapTip(text = tooltipText, modifier = modifier) {
         Canvas(modifier = Modifier.size(size)) {
             drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
             val w = this.size.width
@@ -171,12 +166,7 @@ fun VerifiedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
     val circleColor = d2m.accent
     val checkColor = d2m.accentOn
     val tooltipText = LocalStrings.current.sharedComponents.verifiedTooltip
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(tooltipText) } },
-        state = rememberTooltipState(),
-        modifier = modifier,
-    ) {
+    TapTip(text = tooltipText, modifier = modifier) {
         Canvas(modifier = Modifier.size(size)) {
             drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
             val w = this.size.width

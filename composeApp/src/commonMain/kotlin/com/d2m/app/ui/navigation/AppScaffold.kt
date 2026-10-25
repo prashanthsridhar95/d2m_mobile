@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
@@ -349,5 +350,24 @@ fun ScreenHeader(
             }
         }
         if (trailing != null) Box(Modifier.padding(start = 12.dp)) { trailing() }
+    }
+}
+
+
+/** Pushed screens that have no header of their own: the shell gives them one slim bar with a back arrow. */
+val BackBarRoutes: Set<String> = setOf(
+    Routes.SETTINGS, Routes.TRUST, Routes.IDENTITY_VERIFICATION, Routes.CHILD_PROFILE_DIALOG,
+    Routes.SUCCESS_GALLERY, Routes.ADMIN_GALLERY_MODERATION, Routes.PANCHANGAM_CALENDAR,
+    Routes.SHARE_LINKS, Routes.PARENT_MESSAGES, Routes.NOTIFICATIONS,
+)
+
+/** A 56dp bar holding one 48dp back button (arrow mirrors for RTL). Sits on the page ground, no divider, so the screen's own title follows naturally. */
+@Composable
+fun D2MBackBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val label = LocalStrings.current.common.back
+    Row(modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = label, tint = d2m.textPrimary)
+        }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabPosition
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.theme.D2MStroke
 import com.d2m.app.ui.theme.d2m
@@ -40,26 +42,25 @@ fun D2MTabs(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Single-line tabs at their natural width in a horizontally scrolling row (the selected tab is scrolled into view),
+     * instead of equal-width tabs that wrap a long label onto a second line. Use for strips with more or longer titles
+     * than fit a phone width; short two-or-three-tab strips keep the equal-width look.
+     */
+    scrollable: Boolean = false,
 ) {
-    TabRow(
-        selectedTabIndex = selectedIndex,
-        modifier = modifier,
-        // Transparent, not `surface`: a strip inside a card should take
-        // the card, and a strip on the page should take the page. Filling
-        // it painted a white band across the cream login screen.
-        containerColor = Color.Transparent,
-        contentColor = d2m.accent,
-        indicator = { positions: List<TabPosition> ->
-            val pos = positions.getOrNull(selectedIndex) ?: return@TabRow
+    val indicator: @Composable (List<TabPosition>) -> Unit = { positions ->
+        val pos = positions.getOrNull(selectedIndex)
+        if (pos != null) {
             Box(
                 Modifier
                     .tabIndicatorOffsetCompat(pos)
                     .height(D2MStroke.emphasis)
                     .background(d2m.accent),
             )
-        },
-        divider = { D2MDivider(soft = false) },
-    ) {
+        }
+    }
+    val tabs: @Composable () -> Unit = {
         titles.forEachIndexed { i, title ->
             val active = i == selectedIndex
             Tab(
@@ -72,10 +73,36 @@ fun D2MTabs(
                         text = title,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
             )
         }
+    }
+    // Transparent, not `surface`: a strip inside a card should take the card, and a strip on the page should take the page.
+    if (scrollable) {
+        ScrollableTabRow(
+            selectedTabIndex = selectedIndex,
+            modifier = modifier,
+            containerColor = Color.Transparent,
+            contentColor = d2m.accent,
+            edgePadding = 12.dp,
+            indicator = indicator,
+            divider = { D2MDivider(soft = false) },
+            tabs = tabs,
+        )
+    } else {
+        TabRow(
+            selectedTabIndex = selectedIndex,
+            modifier = modifier,
+            containerColor = Color.Transparent,
+            contentColor = d2m.accent,
+            indicator = indicator,
+            divider = { D2MDivider(soft = false) },
+            tabs = tabs,
+        )
     }
 }
 

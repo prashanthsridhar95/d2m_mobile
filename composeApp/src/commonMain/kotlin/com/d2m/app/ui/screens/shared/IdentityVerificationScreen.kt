@@ -127,7 +127,6 @@ fun IdentityVerificationScreen(onBack: () -> Unit) {
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            LinkText(strings.back, onClick = onBack, modifier = Modifier.padding(bottom = 4.dp))
             PageTitle(strings.pageTitle)
 
             when {
