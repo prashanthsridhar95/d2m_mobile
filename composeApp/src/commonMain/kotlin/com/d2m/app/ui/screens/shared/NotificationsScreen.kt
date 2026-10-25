@@ -1,6 +1,25 @@
 package com.d2m.app.ui.screens.shared
 
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import com.d2m.app.ui.components.D2MButtonVariant
+import com.d2m.app.ui.navigation.Routes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,15 +131,18 @@ private fun dayLabel(date: LocalDate, today: LocalDate, strings: NotificationsSt
 /**
  * Mirrors screens/shared/NotificationsScreen.jsx -- one component mounted
  * for both roles (GET /accounts/{id}/notifications is generic over
- * sponsor/primary). Grouped by day, unread dot, pull-to-refresh, shimmer
- * skeleton on first load, and an error state with retry. Reading a
- * notification updates the list and the tab badge immediately (optimistic),
- * then confirms with the server. Deep-linking a tapped notification into
- * the relevant screen is still a follow-up.
+ * sponsor/primary). Same per-type title/body/CTA as web (NotificationsLogic.kt),
+ * grouped by day with relative stamps, unread styling, pull-to-refresh,
+ * shimmer skeleton, and the full-screen error state. Tapping a row marks it
+ * read (optimistic, rolled back if the server refuses) and follows its CTA:
+ * [onNavigate] for a tab/route, [onOpenProfile] for a profile detail.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationsScreen() {
+fun NotificationsScreen(
+    onNavigate: (route: String) -> Unit = {},
+    onOpenProfile: (candidateId: String) -> Unit = {},
+) {
     val identityStore: IdentityStore = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
@@ -134,11 +156,24 @@ fun NotificationsScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var markingAll by remember { mutableStateOf(false) }
 
-    val accountId = identity.sponsorId ?: identity.primaryId
+    val accountId = if (identity.role == D2MRole.PARENT) identity.sponsorId else identity.primaryId
     val unreadCount = remember(notifications) { notifications.count { it.readAt == null } }
     val rows = remember(notifications) { buildRows(notifications) }
+    val nowMs = remember(notifications, refreshing) { Clock.System.now().toEpochMilliseconds() }
     val today = remember(notifications) {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    }
+
+    fun markReadLocally(nid: String, id: String) {
+        // Optimistic: flip locally + badge first, then tell the server; roll back if it refuses.
+        notifications = notifications.map { if (it.notificationId == nid) it.copy(readAt = "now") else it }
+        UnreadBadges.notifications.value = (UnreadBadges.notifications.value - 1).coerceAtLeast(0)
+        scope.launch {
+            runCatching { notificationsRepo.markRead(id, nid) }.onFailure {
+                notifications = notifications.map { n -> if (n.notificationId == nid) n.copy(readAt = null) else n }
+                UnreadBadges.notifications.value = notifications.count { n -> n.readAt == null }
+            }
+        }
     }
 
     suspend fun load(force: Boolean) {
@@ -211,7 +246,18 @@ fun NotificationsScreen() {
                             D2MErrorState(error!!, onRetry = { scope.launch { loading = true; load(force = true); loading = false } })
                         }
                         rows.isEmpty() -> item(key = "empty", contentType = "state") {
-                            D2MEmptyState(strings.emptyTitle, strings.emptyDescription)
+                            val isChild = identity.role == D2MRole.CHILD
+                            D2MEmptyState(
+                                strings.emptyTitle,
+                                strings.emptyDescription,
+                                action = {
+                                    D2MButton(
+                                        text = if (isChild) strings.browseSuggestions else strings.browseProfiles,
+                                        variant = D2MButtonVariant.ACCENT_OUTLINE,
+                                        onClick = { onNavigate(if (isChild) Routes.DISCOVERY else Routes.PARENT_BROWSE) },
+                                    )
+                                },
+                            )
                         }
                         else -> items(rows, key = { it.key }, contentType = { if (it is NotifRow.Header) "header" else "item" }) { row ->
                             when (row) {
@@ -222,20 +268,24 @@ fun NotificationsScreen() {
                                     color = d2m.label,
                                     modifier = Modifier.padding(top = 18.dp, bottom = 4.dp),
                                 )
-                                is NotifRow.Item -> NotificationRow(
-                                    ui = row.ui,
-                                    strings = strings,
-                                    onClick = {
-                                        val id = accountId ?: return@NotificationRow
-                                        if (row.ui.n.readAt == null) {
-                                            val nid = row.ui.n.notificationId
-                                            // Optimistic: flip locally + badge first, then tell the server.
-                                            notifications = notifications.map { if (it.notificationId == nid) it.copy(readAt = "now") else it }
-                                            UnreadBadges.notifications.value = (UnreadBadges.notifications.value - 1).coerceAtLeast(0)
-                                            scope.launch { runCatching { notificationsRepo.markRead(id, nid) } }
-                                        }
-                                    },
-                                )
+                                is NotifRow.Item -> {
+                                    val n = row.ui.n
+                                    val cta = remember(n, identity.role) { notificationCta(n, identity.role) }
+                                    NotificationRow(
+                                        ui = row.ui,
+                                        cta = cta,
+                                        relative = relativeTime(nowMs - row.ui.epochMs, row.ui.time, strings),
+                                        strings = strings,
+                                        onMarkRead = { accountId?.let { markReadLocally(n.notificationId, it) } },
+                                        onClick = {
+                                            if (n.readAt == null) accountId?.let { markReadLocally(n.notificationId, it) }
+                                            when {
+                                                cta?.profileId != null -> onOpenProfile(cta.profileId)
+                                                cta?.route != null -> onNavigate(cta.route)
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -274,17 +324,95 @@ private fun NotificationRow(ui: NotifUi, strings: NotificationsStrings, onClick:
     }
 }
 
-private fun notificationTitle(type: String, strings: NotificationsStrings): String = when (type) {
-    "new_suggestion" -> strings.typeNewSuggestion
-    "mutual_match" -> strings.typeMutualMatch
-    "serious_mode_request" -> strings.typeSeriousModeRequest
-    "serious_mode_accepted" -> strings.typeSeriousModeAccepted
-    "serious_mode_revoked" -> strings.typeSeriousModeRevoked
-    "consent_request" -> strings.typeConsentRequest
-    "consent_granted" -> strings.typeConsentGranted
-    "request_received" -> strings.typeRequestReceived
-    "share_link_viewed" -> strings.typeShareLinkViewed
-    "mutual_sponsor_interest" -> strings.typeMutualSponsorInterest
-    "shortlisted_profile_updated" -> strings.typeShortlistedProfileUpdated
-    else -> type
+private fun iconFor(type: String): ImageVector = when (type) {
+    "mutual_match" -> Icons.Filled.Favorite
+    "new_suggestion" -> Icons.Filled.Search
+    "request_received" -> Icons.Filled.Send
+    "serious_mode_request", "serious_mode_accepted" -> Icons.Filled.Verified
+    "serious_mode_revoked" -> Icons.Filled.LinkOff
+    "consent_request" -> Icons.Filled.Lock
+    "consent_granted" -> Icons.Filled.VerifiedUser
+    "share_link_viewed" -> Icons.Filled.Visibility
+    "mutual_sponsor_interest" -> Icons.Filled.Person
+    "shortlisted_profile_updated" -> Icons.Filled.Star
+    else -> Icons.Filled.Notifications
+}
+
+@Composable
+private fun NotificationRow(
+    ui: NotifUi,
+    cta: NotificationCta?,
+    relative: String,
+    strings: NotificationsStrings,
+    onClick: () -> Unit,
+    onMarkRead: () -> Unit,
+) {
+    val unread = ui.n.readAt == null
+    val body = notificationBody(ui.n, strings)
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bounceClickable(onClick = onClick, pressedScale = 0.985f, role = Role.Button)
+            .padding(vertical = 10.dp)
+            .semantics(mergeDescendants = true) { if (unread) stateDescription = strings.unreadLabel },
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .background(if (unread) d2m.accentSoft else d2m.surfaceSunken, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                iconFor(ui.n.type),
+                contentDescription = null,
+                tint = if (unread) d2m.accent else mutedText(0.55f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    notificationTitle(ui.n.type, strings),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
+                    color = if (unread) MaterialTheme.colorScheme.onSurface else mutedText(0.7f),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(relative, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
+                if (unread) Box(Modifier.size(8.dp).background(d2m.accent, CircleShape))
+            }
+            if (body.isNotEmpty()) {
+                Text(
+                    body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedText(if (unread) 0.7f else 0.55f),
+                )
+            }
+            if (cta != null || unread) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (cta != null) {
+                        Text(
+                            ctaLabel(cta.kind, strings),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = d2m.accent,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    if (unread) {
+                        Text(
+                            strings.markRead,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = mutedText(0.6f),
+                            modifier = Modifier
+                                .bounceClickable(onClick = onMarkRead, pressedScale = 0.95f, role = Role.Button)
+                                .padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
