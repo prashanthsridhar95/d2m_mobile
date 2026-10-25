@@ -194,7 +194,14 @@ fun D2MNavGraph(
             )
         }
 
-        d2mComposable(Routes.NOTIFICATIONS) { NotificationsScreen() }
+        d2mComposable(Routes.NOTIFICATIONS) {
+            NotificationsScreen(
+                onNavigate = { route ->
+                    if (route in tabRoutes) navController.navigateToTab(route) else navController.navigate(route)
+                },
+                onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
+            )
+        }
 
         d2mComposable(Routes.SHARE_LINKS) { ShareLinksScreen() }
 
