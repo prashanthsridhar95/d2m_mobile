@@ -61,6 +61,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.model.CustomFieldSelection
 import com.d2m.app.data.model.ShareLinkOut
 import com.d2m.app.data.network.ApiClient
+import com.d2m.app.data.network.ErrorCopy
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
@@ -117,6 +118,10 @@ fun ShareLinksScreen() {
     var creating by remember { mutableStateOf(false) }
     var busyLinkId by remember { mutableStateOf<String?>(null) }
     var viewersLink by remember { mutableStateOf<ShareLinkOut?>(null) }
+    // The list itself failed to load (as opposed to a create/extend that failed): the screen then offers only the message
+    // and Retry -- 'Create link' on top of a list we couldn't read would be acting blind.
+    var loadFailed by remember { mutableStateOf(false) }
+    var retryTick by remember { mutableStateOf(0) }
 
     // Child role already has its own primary_id directly on identity. The
     // parent role's linked child id lives under childPrimaryId instead --
@@ -132,7 +137,7 @@ fun ShareLinksScreen() {
     // all, not just to skip a section when one's missing.
     val primaryId = if (identity.role == D2MRole.CHILD) identity.primaryId else identity.childPrimaryId
 
-    LaunchedEffect(identity.role, identity.sponsorId, primaryId) {
+    LaunchedEffect(identity.role, identity.sponsorId, primaryId, retryTick) {
         if (identity.role == D2MRole.PARENT && primaryId == null) {
             val sponsorId = identity.sponsorId
             if (sponsorId != null) {
@@ -146,10 +151,12 @@ fun ShareLinksScreen() {
         notClaimed = false
         loading = true
         error = null
+        loadFailed = false
         try {
             links = shareLinksRepo.listShareLinks(primaryId)
         } catch (e: Exception) {
             error = friendlyError(e, strings.linksLoadError)
+            loadFailed = true
         } finally {
             loading = false
         }
@@ -179,6 +186,7 @@ fun ShareLinksScreen() {
                     item(key = "sk-create") { D2MSkeleton(height = 190.dp, radius = 14.dp) }
                     items(2, key = { "sk-$it" }) { D2MSkeleton(height = 130.dp, radius = 14.dp) }
                 }
+                loadFailed -> item(key = "load-error") { D2MErrorBanner(error ?: ErrorCopy.somethingWentWrong, onRetry = { retryTick++ }) }
                 else -> {
                     item(key = "create") {
                         D2MCard(modifier = Modifier.fillMaxWidth()) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.ui.components.D2MLevelPill
 import com.d2m.app.ui.components.PrefetchPhotos
+import com.d2m.app.ui.components.D2MSkeleton
 import com.d2m.app.ui.components.ProfileThumb
 import com.d2m.app.ui.components.ShortlistHeart
 import com.d2m.app.ui.components.overallRating
@@ -276,4 +278,44 @@ private fun CellText(value: String?) {
 @Composable
 private fun DashText() {
     Text("–", style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+}
+
+/**
+ * Table-view placeholder. Deliberately not the card grid's: a header bar, then rows on the real table geometry -- a round
+ * avatar and name bar in the frozen pane, then bookmark, pill and text bars across the data columns -- so the sheet looks
+ * like a sheet while it loads.
+ */
+@Composable
+fun BrowseTableSkeleton(modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().height(HEADER_HEIGHT).background(d2m.surfaceSunken).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            D2MSkeleton(width = 44.dp, height = 12.dp)
+            Spacer(Modifier.width(FROZEN_WIDTH - 12.dp - 44.dp + SAVE_COL_WIDTH))
+            D2MSkeleton(width = 52.dp, height = 12.dp)
+            Spacer(Modifier.width(60.dp))
+            D2MSkeleton(width = 40.dp, height = 12.dp)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.borderStrong))
+        repeat(9) { i ->
+            Row(
+                Modifier.fillMaxWidth().height(ROW_HEIGHT)
+                    .background(if (i % 2 == 0) MaterialTheme.colorScheme.surface else d2m.surfaceSunken.copy(alpha = 0.45f)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(Modifier.width(FROZEN_WIDTH).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    D2MSkeleton(width = 40.dp, height = 40.dp, radius = 20.dp)
+                    D2MSkeleton(width = 64.dp, height = 14.dp)
+                }
+                Box(Modifier.width(SAVE_COL_WIDTH), contentAlignment = Alignment.Center) {
+                    D2MSkeleton(width = 16.dp, height = 20.dp, radius = 3.dp)
+                }
+                D2MSkeleton(width = 76.dp, height = 24.dp, radius = 6.dp)
+                Spacer(Modifier.width(28.dp))
+                D2MSkeleton(width = 72.dp, height = 14.dp)
+            }
+        }
+    }
 }

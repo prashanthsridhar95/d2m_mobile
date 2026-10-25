@@ -335,6 +335,9 @@ fun ChildHomeScreen(
                         D2MErrorBanner(msg, onRetry = { scope.launch { loadAll(force = true) } })
                     }
                 }
+                // A failed load shows only the message and its Retry: the Discover CTA, request actions and summary rows
+                // below would act on data that isn't there.
+                if (error != null) return@LazyColumn
 
                 item(key = "cta", contentType = "cta") {
                     PrimaryCta(

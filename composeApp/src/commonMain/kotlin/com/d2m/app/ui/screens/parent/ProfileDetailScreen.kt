@@ -487,7 +487,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                 FloatingCircleButton(Icons.AutoMirrored.Filled.ArrowBack, strings.back, onClick = onBack, onBar = barShown)
                 // Share is parent-only and meaningless pointed at your own profile
                 // (same "Share my profile" row exists in Settings).
-                if (candidate != null && !isSelf && identity.role == D2MRole.PARENT) {
+                if (candidate != null && !isSelf && error == null && identity.role == D2MRole.PARENT) {
                     FloatingCircleButton(
                         icon = if (shareState == "copied") Icons.Filled.Check else Icons.Filled.Share,
                         contentDescription = when (shareState) {
@@ -507,7 +507,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
             // Snooze / Pass -- none mean anything pointed at your own
             // profile, so hidden entirely for a self-preview.
             val cand = candidate
-            if (cand != null && !isSelf) {
+            if (cand != null && !isSelf && error == null) {
                 val shortlisted = shortlistedOverride ?: cand.isShortlisted
                 D2MActionBar(
                     Modifier

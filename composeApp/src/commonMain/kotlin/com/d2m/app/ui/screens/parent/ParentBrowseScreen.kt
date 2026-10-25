@@ -10,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -98,6 +99,7 @@ import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.PrefetchPhotos
 import com.d2m.app.ui.screens.parity.BrowseTable
+import com.d2m.app.ui.screens.parity.BrowseTableSkeleton
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
@@ -311,11 +313,15 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     }
     LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
 
+    // While a load error (or the 'waiting on your child' state) is showing, the screen offers only that message and its Retry:
+    // search, filters, mode chips and the view toggle would act on data that isn't there.
+    val showChrome = error == null && !notClaimed
+
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(Modifier.fillMaxSize()) {
             // ---- sticky chrome -------------------------------------------
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                Crossfade(targetState = searchOpen, label = "browse-header") { searching ->
+                Crossfade(targetState = searchOpen && showChrome, label = "browse-header") { searching ->
                     if (searching) {
                         // Search by profile ID, only while asked for: it replaces the title row instead of
                         // permanently taking a third of the screen above the results.
@@ -355,37 +361,41 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                     MetaText(strings.filteredOfPool(filtered.size, pool.size), Modifier.padding(top = 2.dp))
                                 }
                             }
-                            ToolbarIcon(Icons.Filled.Search, strings.searchById, onClick = { searchOpen = true })
-                            ToolbarIcon(
-                                Icons.Filled.FilterList,
-                                if (activeFacetCount > 0) strings.filtersWithCount(activeFacetCount) else strings.filters,
-                                onClick = { sheetOpen = true },
-                                badge = activeFacetCount,
-                            )
+                            if (showChrome) {
+                                ToolbarIcon(Icons.Filled.Search, strings.searchById, onClick = { searchOpen = true })
+                                ToolbarIcon(
+                                    Icons.Filled.FilterList,
+                                    if (activeFacetCount > 0) strings.filtersWithCount(activeFacetCount) else strings.filters,
+                                    onClick = { sheetOpen = true },
+                                    badge = activeFacetCount,
+                                )
+                            }
                         }
                     }
                 }
                 shortIdError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 6.dp)) }
 
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Row(
-                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
-                        BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
-                        if (activeFacetCount > 0) {
-                            BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
+                if (showChrome) {
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
+                            BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
+                            if (activeFacetCount > 0) {
+                                BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
+                            }
                         }
+                        ViewToggle(
+                            table = tableView,
+                            onChange = { tableView = it },
+                            gridLabel = strings.grid,
+                            tableLabel = strings.table,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
                     }
-                    ViewToggle(
-                        table = tableView,
-                        onChange = { tableView = it },
-                        gridLabel = strings.grid,
-                        tableLabel = strings.table,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
                 }
             }
 
@@ -394,7 +404,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 when {
                     notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
 
-                    loading -> BrowseSkeleton()
+                    loading -> if (tableView) BrowseTableSkeleton() else BrowseSkeleton()
 
                     error != null -> D2MErrorBanner(error!!, onRetry = { refreshTick++ }, modifier = Modifier.padding(horizontal = 16.dp))
 
@@ -562,7 +572,11 @@ private fun BrowseChip(
     }
 }
 
-/** Same two-column silhouette as the loaded grid so tiles don't jump when data lands. */
+/**
+ * Card-view placeholder: the loaded grid's portrait tiles (same 3:4 ratio and two-across layout), each with a match-pill
+ * bar at the top-left and name + place bars at the bottom -- so tiles don't jump when data lands. The table view has its
+ * own, different placeholder (BrowseTableSkeleton).
+ */
 @Composable
 private fun BrowseSkeleton() {
     Column(
@@ -571,8 +585,16 @@ private fun BrowseSkeleton() {
     ) {
         repeat(3) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                D2MSkeleton(modifier = Modifier.weight(1f), height = 220.dp, radius = 14.dp)
-                D2MSkeleton(modifier = Modifier.weight(1f), height = 220.dp, radius = 14.dp)
+                repeat(2) {
+                    BoxWithConstraints(Modifier.weight(1f)) {
+                        D2MSkeleton(height = maxWidth * 4f / 3f, radius = 14.dp)
+                        D2MSkeleton(width = 48.dp, height = 22.dp, radius = 6.dp, modifier = Modifier.align(Alignment.TopStart).padding(12.dp))
+                        Column(Modifier.align(Alignment.BottomStart).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            D2MSkeleton(width = 96.dp, height = 16.dp)
+                            D2MSkeleton(width = 64.dp, height = 12.dp)
+                        }
+                    }
+                }
             }
         }
     }

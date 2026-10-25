@@ -169,7 +169,7 @@ fun NotificationsScreen() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) { PageTitle(strings.pageTitle) }
-                if (unreadCount > 0 && accountId != null) {
+                if (unreadCount > 0 && accountId != null && error == null) {
                     D2MButton(
                         text = if (markingAll) strings.marking else strings.markAllRead,
                         enabled = !markingAll,
