@@ -461,7 +461,7 @@ class MessagingRepository(
         } catch (e: Throwable) {
             val message = "Messaging couldn't start: ${e.message ?: e::class.simpleName}"
             println("MessagingRepository.start: $message")
-            _startupError.value = message
+            _startupError.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         }
     }
 

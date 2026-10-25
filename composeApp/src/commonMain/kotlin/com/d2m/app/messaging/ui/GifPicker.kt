@@ -113,7 +113,7 @@ fun GifPickerPanel(client: HttpClient, onPick: (GifResult) -> Unit, modifier: Mo
         try {
             results = searchGifs(client, apiKey, query)
         } catch (e: Exception) {
-            error = e.message ?: "Could not load GIFs"
+            error = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         } finally {
             loading = false
         }

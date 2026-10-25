@@ -130,11 +130,12 @@ fun D2MErrorState(
     message: String,
     onRetry: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    title: String = LocalStrings.current.common.somethingWentWrong,
+    title: String = LocalStrings.current.common.errorGeneric,
 ) {
     D2MEmptyState(
         title = title,
-        subtitle = message,
+        // The generic message is already the title; don't say it twice.
+        subtitle = if (message == com.d2m.app.data.network.ErrorCopy.somethingWentWrong || message == title) "" else message,
         modifier = modifier,
         icon = {
             androidx.compose.material3.Icon(

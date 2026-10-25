@@ -319,7 +319,7 @@ class CallManager(
             emit()
         } catch (e: Throwable) {
             println("CallManager.startCall: failed to start call to $peerUsername: ${e.message ?: e::class.simpleName}")
-            _errors.value = "Could not start call: ${e.message}"
+            _errors.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
             endFailed = true
             teardown()
         }
@@ -351,7 +351,7 @@ class CallManager(
             pendingOfferSdp = null
         } catch (e: Throwable) {
             println("CallManager.accept: failed to accept call from $peer: ${e.message ?: e::class.simpleName}")
-            _errors.value = "Could not answer call: ${e.message}"
+            _errors.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
             endFailed = true
             teardown()
         }
@@ -411,7 +411,7 @@ class CallManager(
             renegotiate("upgrade")
             emit()
         } catch (e: Throwable) {
-            _errors.value = "Could not start video: ${e.message}"
+            _errors.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         }
     }
 
@@ -428,7 +428,7 @@ class CallManager(
             sendMediaState()
             emit()
         } catch (e: Throwable) {
-            _errors.value = "Could not switch camera: ${e.message}"
+            _errors.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         }
     }
 

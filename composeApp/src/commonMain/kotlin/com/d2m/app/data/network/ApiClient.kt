@@ -331,6 +331,18 @@ expect fun resolveDefaultBaseUrl(): String
 /** Platform HTTP engine -- Android engine on Android, Darwin (NSURLSession-backed) on iOS. */
 expect fun httpEngine(): HttpClient
 
-/** friendlyError(e, fallback) equivalent -- the shared unwrap-to-display-string helper used in every screen's catch block. */
-fun friendlyError(e: Throwable, fallback: String = "Something went wrong."): String =
-    (e as? ApiError)?.detail ?: e.message ?: fallback
+/**
+ * The one line of error copy a user ever sees. App.kt keeps it in the active language (CommonStrings.somethingWentWrong).
+ * Raw server details ("invalid or expired token"), exception messages and status text are for logs, never for the screen.
+ */
+object ErrorCopy {
+    var somethingWentWrong: String = "Something went wrong"
+}
+
+/**
+ * The shared "error -> display string" helper used in every screen's catch block. Always the generic message: the
+ * [fallback] parameter is kept so call sites compile unchanged, but what reaches the user no longer varies with
+ * whatever the server or the exception happened to say.
+ */
+@Suppress("UNUSED_PARAMETER")
+fun friendlyError(e: Throwable, fallback: String = ErrorCopy.somethingWentWrong): String = ErrorCopy.somethingWentWrong

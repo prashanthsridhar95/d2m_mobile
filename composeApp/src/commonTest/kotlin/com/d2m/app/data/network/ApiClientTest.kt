@@ -129,4 +129,14 @@ class ApiClientTest {
 
         assertEquals(false, signalled)
     }
+
+    // ---- error copy ------------------------------------------------------------------------------------------------
+
+    @Test
+    fun friendlyError_neverExposesServerDetailOrExceptionMessage() {
+        ErrorCopy.somethingWentWrong = "Something went wrong"
+        assertEquals("Something went wrong", friendlyError(ApiError(401, "invalid or expired token", "invalid or expired token")))
+        assertEquals("Something went wrong", friendlyError(ApiError(500, null, "Request failed (500).")))
+        assertEquals("Something went wrong", friendlyError(RuntimeException("java.net.UnknownHostException: api.example"), "Couldn't load candidates."))
+    }
 }

@@ -189,7 +189,7 @@ class ArchiveManager(
             myKeypair = generated
             _archivePrompt.value = null
         } catch (e: Throwable) {
-            _archiveError.value = e.message ?: "couldn't set up backup right now"
+            _archiveError.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         } finally {
             _archiveBusy.value = false
         }
@@ -229,7 +229,7 @@ class ArchiveManager(
             _archivePrompt.value = null
             restoreFromArchive(privateKeyPkcs8)
         } catch (e: Throwable) {
-            _archiveError.value = "Your PIN was right, but restoring your history hit a problem${e.message?.let { " ($it)" } ?: ""}. Try again in a moment."
+            _archiveError.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         } finally {
             _archiveBusy.value = false
         }

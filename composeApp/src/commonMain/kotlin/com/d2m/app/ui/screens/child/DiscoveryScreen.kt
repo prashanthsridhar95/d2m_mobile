@@ -155,7 +155,7 @@ fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
                 likeTarget = null
                 deckState.swipe(SwipeDirection.Accept)
             } catch (e: Exception) {
-                likeError = if (e is ApiError && !e.detail.isNullOrBlank()) e.detail else strings.likeFailed
+                likeError = friendlyError(e, strings.likeFailed)
             } finally {
                 likeBusy = false
             }

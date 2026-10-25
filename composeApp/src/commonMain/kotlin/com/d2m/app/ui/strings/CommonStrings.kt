@@ -42,6 +42,7 @@ interface CommonStrings {
     val tabSharing: String
     val tabSettings: String
     val tabHome: String
+    val errorGeneric: String
     val tabDiscover: String
     val tabMatches: String
     val tabNotifications: String
@@ -80,6 +81,7 @@ object CommonStringsEn : CommonStrings {
     override val tabSharing = "Sharing"
     override val tabSettings = "Settings"
     override val tabHome = "Home"
+    override val errorGeneric = "Something went wrong"
     override val tabDiscover = "Discover"
     override val tabMatches = "Matches"
     override val tabNotifications = "Notifications"
@@ -118,6 +120,7 @@ object CommonStringsHi : CommonStrings {
     override val tabSharing = "शेयरिंग"
     override val tabSettings = "सेटिंग्स"
     override val tabHome = "होम"
+    override val errorGeneric = "कुछ गलत हो गया"
     override val tabDiscover = "डिस्कवर"
     override val tabMatches = "मैचेस"
     override val tabNotifications = "सूचनाएं"
@@ -156,6 +159,7 @@ object CommonStringsTa : CommonStrings {
     override val tabSharing = "பகிர்வு"
     override val tabSettings = "அமைப்புகள்"
     override val tabHome = "முகப்பு"
+    override val errorGeneric = "ஏதோ தவறு நடந்தது"
     override val tabDiscover = "டிஸ்கவர்"
     override val tabMatches = "மேட்சஸ்"
     override val tabNotifications = "அறிவிப்புகள்"

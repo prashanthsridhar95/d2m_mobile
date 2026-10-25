@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -213,6 +214,9 @@ fun App() {
 
     // Warms suggestions/dashboard/notifications and the first photos as soon
     // as an identity exists, so the first tab opens on cached data.
+    val genericError = LocalStrings.current.common.errorGeneric
+    SideEffect { com.d2m.app.data.network.ErrorCopy.somethingWentWrong = genericError }
+
     val prefetcher: com.d2m.app.domain.repository.Prefetcher = koinInject()
     LaunchedEffect(Unit) { prefetcher.start() }
 

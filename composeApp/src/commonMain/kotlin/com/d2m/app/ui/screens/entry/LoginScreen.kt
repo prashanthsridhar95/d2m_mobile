@@ -491,7 +491,7 @@ private fun GoogleAuthButton(
             // Not an error -- the user dismissed Google's own account
             // chooser/consent sheet, nothing to surface.
             is GoogleSignInResult.Cancelled -> Unit
-            is GoogleSignInResult.Error -> onError(result.message)
+            is GoogleSignInResult.Error -> onError(com.d2m.app.data.network.ErrorCopy.somethingWentWrong)
         }
     }
 
