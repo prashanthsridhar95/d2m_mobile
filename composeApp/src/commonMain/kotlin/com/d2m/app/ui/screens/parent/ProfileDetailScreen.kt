@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -521,8 +521,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                             D2MToggleIconButton(
                                 selected = shortlisted,
                                 onToggle = { toggleShortlist(shortlisted) },
-                                selectedIcon = Icons.Filled.Bookmark,
-                                unselectedIcon = Icons.Outlined.BookmarkBorder,
+                                selectedIcon = Icons.Filled.Star,
+                                unselectedIcon = Icons.Outlined.StarBorder,
                                 contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
                             )
                             // Parent-to-parent only (no request/accept gate, see

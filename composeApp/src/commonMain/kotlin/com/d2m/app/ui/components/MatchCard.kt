@@ -17,8 +17,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -250,30 +250,34 @@ fun MatchCard(
                     .clickable(onClick = onClick)
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ProfileThumb(
-                    photoUrl = photo,
-                    contentDescription = strings.photographOf(suggestion.candidateName),
-                    size = 68.dp,
-                    shape = RoundedCornerShape(percent = 50),
-                    overlay = {
-                        if (onToggleShortlist != null) {
-                            ShortlistStar(
-                                shortlisted = isShortlisted,
-                                onToggle = onToggleShortlist,
-                                onPhoto = true,
-                                modifier = Modifier.align(Alignment.BottomEnd),
-                            )
-                        }
-                    },
-                )
+                // The avatar is clipped to a circle, so the shortlist badge cannot live inside it: it sits in this unclipped
+                // box, centred on the avatar's lower-right rim (as on web), half on the photo and half off it.
+                Box(Modifier.size(76.dp)) {
+                    ProfileThumb(
+                        photoUrl = photo,
+                        contentDescription = strings.photographOf(suggestion.candidateName),
+                        size = 68.dp,
+                        shape = RoundedCornerShape(percent = 50),
+                    )
+                    if (onToggleShortlist != null) {
+                        ShortlistStar(
+                            shortlisted = isShortlisted,
+                            onToggle = onToggleShortlist,
+                            onPhoto = true,
+                            modifier = Modifier.align(Alignment.TopStart).padding(start = 40.dp, top = 40.dp),
+                        )
+                    }
+                }
                 Column(Modifier.weight(1f)) {
                     SubHeading(
                         suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: ""),
                         maxLines = 2,
                     )
                     if (place != null) MetaText(place, Modifier.padding(top = 2.dp))
+                    // the registration number, never the internal id (same line the web's shortlist rows carry)
+                    suggestion.shortId?.let { MetaText(it, Modifier.padding(top = 2.dp)) }
                     if (suggestion.doshaFlags.isNotEmpty()) {
                         Text(
                             text = strings.doshaFlags(suggestion.doshaFlags.size),
@@ -315,26 +319,26 @@ fun ShortlistStar(
     val strings = LocalStrings.current.sharedComponents
     val label = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist
     if (onPhoto) {
-        // A status badge, not a control-sized disc: a 22dp chip with a 13dp bookmark in the photo's corner (it used to be a
-        // 40dp gold disc that covered half of a 68dp avatar). The tap target is still 48dp.
+        // The web's badge: a small cream disc with a gold ring and a gold star, 28dp (a 36dp touch target around it).
         Box(
             modifier
-                .size(48.dp)
+                .size(36.dp)
                 .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onToggle)
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 Modifier
-                    .size(22.dp)
-                    .background(if (shortlisted) Color.White.copy(alpha = 0.95f) else Color.Black.copy(alpha = 0.32f), RoundedCornerShape(percent = 50)),
+                    .size(28.dp)
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(percent = 50))
+                    .border(1.5.dp, d2m.gold, RoundedCornerShape(percent = 50)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = null,
-                    tint = if (shortlisted) d2m.accent else Color.White,
-                    modifier = Modifier.size(13.dp),
+                    tint = if (shortlisted) d2m.goldStrong else d2m.gold,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -345,15 +349,15 @@ fun ShortlistStar(
             modifier
                 .size(40.dp)
                 .clip(shape)
-                .background(if (shortlisted) d2m.accentSoft else MaterialTheme.colorScheme.surface, shape)
-                .border(1.5.dp, if (shortlisted) d2m.accent else d2m.borderStrong, shape),
+                .background(if (shortlisted) d2m.goldSoft else MaterialTheme.colorScheme.surface, shape)
+                .border(1.5.dp, d2m.gold, shape),
             contentAlignment = Alignment.Center,
         ) {
             IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
                 Icon(
-                    imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = label,
-                    tint = if (shortlisted) d2m.accent else d2m.meta,
+                    tint = if (shortlisted) d2m.goldStrong else d2m.gold,
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -534,8 +538,8 @@ fun ShortlistHeart(
             else -> Color.Black.copy(alpha = 0.32f)
         }
         val tint = when {
-            shortlisted -> d2m.accent
-            flat -> Color(0xFF4A3A2C)
+            shortlisted -> d2m.goldStrong
+            flat -> d2m.gold
             else -> Color.White
         }
         Box(
@@ -546,7 +550,7 @@ fun ShortlistHeart(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (shortlisted) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
                 contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
                 tint = tint,
                 modifier = Modifier.size(if (flat) 20.dp else 16.dp),
