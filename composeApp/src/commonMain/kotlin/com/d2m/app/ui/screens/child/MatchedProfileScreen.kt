@@ -41,7 +41,9 @@ fun MatchedProfileScreen(candidateId: String, onBack: () -> Unit) {
     val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
     val identity by identityStore.identity.collectAsState()
     val strings = LocalStrings.current.discovery
-    val primaryId = identity.primaryId
+    val primaryId = identity.primaryId ?: identity.childPrimaryId
+    // "Preview profile" from Settings opens your own profile in this same layout (web: isSelf).
+    val isSelf = candidateId == primaryId
 
     var candidate by remember(candidateId) { mutableStateOf<SuggestionOut?>(null) }
     var failed by remember(candidateId) { mutableStateOf(false) }
@@ -72,6 +74,7 @@ fun MatchedProfileScreen(candidateId: String, onBack: () -> Unit) {
                         bottomClearance = 16.dp,
                         onLike = {},
                         readOnly = true,
+                        isSelf = isSelf,
                     )
                     failed -> {
                         Text(
@@ -88,7 +91,7 @@ fun MatchedProfileScreen(candidateId: String, onBack: () -> Unit) {
             }
             Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
                 D2MButton(
-                    strings.backToMessages,
+                    if (isSelf) strings.backFromPreview else strings.backToMessages,
                     onClick = onBack,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 )

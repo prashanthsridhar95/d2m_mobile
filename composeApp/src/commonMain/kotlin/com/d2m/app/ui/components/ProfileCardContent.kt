@@ -100,6 +100,8 @@ fun ProfileCardContent(
     modifier: Modifier = Modifier,
     /** Matched-profile view: no hearts, no deck sizing / bottom clearance for the floating pass button. */
     readOnly: Boolean = false,
+    /** Your own profile (Settings > Preview): no compatibility card or dosha tags -- you cannot match with yourself. */
+    isSelf: Boolean = false,
 ) {
     val strings = LocalStrings.current.discovery
     val sharedStrings = LocalStrings.current.sharedComponents
@@ -200,14 +202,19 @@ fun ProfileCardContent(
                         .padding(start = 20.dp, end = 20.dp, top = 72.dp, bottom = if (readOnly) 20.dp else bottomClearance),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        "${card.candidateName}${card.age?.let { ", $it" } ?: ""}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "${card.candidateName}${card.age?.let { ", $it" } ?: ""}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (card.isFoundingMember) FeaturedBadge(size = 22.dp)
+                        if (card.isVerified) VerifiedBadge(size = 22.dp)
+                    }
                     val subline = card.city.orEmpty()
                     if (subline.isNotEmpty()) {
                         Text(subline, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -244,7 +251,7 @@ fun ProfileCardContent(
                             }
                         }
                     }
-                    CompatibilityCard(
+                    if (!isSelf) CompatibilityCard(
                         level = rating,
                         breakdown = listOf(
                             strings.yourPreferences to levelForScore(card.scores.childScore),
@@ -253,7 +260,7 @@ fun ProfileCardContent(
                         size = CompatibilityCardSize.Small,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (card.doshaFlags.isNotEmpty()) {
+                    if (!isSelf && card.doshaFlags.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             card.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
                         }

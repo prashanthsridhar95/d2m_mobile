@@ -72,6 +72,7 @@ import com.d2m.app.ui.components.SettingsDivider
 import com.d2m.app.ui.components.SettingsRow
 import com.d2m.app.ui.components.SettingsSection
 import com.d2m.app.ui.components.SettingsSwitchRow
+import com.d2m.app.ui.components.FeaturedBadge
 import com.d2m.app.ui.components.VerifiedBadge
 import com.d2m.app.ui.components.bounceClickable
 import com.d2m.app.ui.components.rememberHaptics
@@ -417,6 +418,7 @@ private fun AccountHeader(identity: Identity, accountId: String?, verified: Bool
     var name by remember { mutableStateOf<String?>(null) }
     var contactInfo by remember { mutableStateOf<String?>(null) }
     var photoUrl by remember { mutableStateOf<String?>(null) }
+    var founding by remember { mutableStateOf(false) }
 
     // Name/contact aren't part of IdentityStore's Identity (role + raw ids only), so fetch once per open.
     // Sponsors have no photo of their own; the child role uses its first photo.
@@ -431,6 +433,7 @@ private fun AccountHeader(identity: Identity, accountId: String?, verified: Bool
             runCatching { identityRepo.getPrimaryProfile(pid) }.onSuccess {
                 name = it.name
                 contactInfo = it.contactInfo
+                founding = it.isFoundingMember
             }
             runCatching { identityRepo.getPhotos(pid) }.onSuccess { photos ->
                 photoUrl = photos.firstOrNull()?.url
@@ -464,6 +467,7 @@ private fun AccountHeader(identity: Identity, accountId: String?, verified: Bool
                 Text(displayName, style = MaterialTheme.typography.titleLarge, color = d2m.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
                     Text(roleLabel, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+                    if (founding) FeaturedBadge(size = 16.dp)
                     if (verified) VerifiedBadge(size = 16.dp)
                 }
                 val contact = contactInfo

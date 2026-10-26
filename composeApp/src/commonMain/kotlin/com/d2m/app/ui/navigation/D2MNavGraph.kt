@@ -239,7 +239,7 @@ fun D2MNavGraph(
                 // ProfileDetailScreen hides the handful of actions that
                 // don't make sense pointed at yourself once it detects
                 // viewerPrimaryId == candidateId -- see its own `isSelf`.
-                onOpenProfilePreview = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
+                onOpenProfilePreview = { candidateId -> navController.navigate(Routes.matchedProfile(candidateId)) },
             )
         }
 

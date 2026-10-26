@@ -55,9 +55,6 @@ import cocoapods.webrtc.RTCSdpType
 import cocoapods.webrtc.RTCSessionDescription
 import cocoapods.webrtc.RTCSignalingState
 import cocoapods.webrtc.RTCVideoTrack
-// senderWithKind is likewise a package-level cinterop extension function on
-// RTCPeerConnection, not a true class member -- same import-scoping issue.
-import cocoapods.webrtc.senderWithKind
 import cocoapods.webrtc.RTCInitializeSSL
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -214,8 +211,10 @@ object IosWebRtcEngine : WebRtcEngine {
     }
 
     override fun addAudioTrack(pc: Any, track: Any, streamId: String): Any {
-        val sender = (pc as RTCPeerConnection).senderWithKind("audio", streamId = streamId)
-        sender.track = track as RTCAudioTrack
+        // addTrack, not senderWithKind: the config uses Unified Plan, where
+        // libwebrtc's CreateSender is unsupported and aborts the signaling thread.
+        val sender = (pc as RTCPeerConnection).addTrack(track as RTCAudioTrack, streamIds = listOf(streamId))
+            ?: error("addTrack(audio) returned null")
         runCatching {
             val params = sender.parameters
             params.encodings.filterIsInstance<cocoapods.webrtc.RTCRtpEncodingParameters>().forEach { it.maxBitrateBps = platform.Foundation.NSNumber(int = AUDIO_MAX_BITRATE_BPS) }
@@ -225,8 +224,8 @@ object IosWebRtcEngine : WebRtcEngine {
     }
 
     override fun addVideoTrack(pc: Any, track: Any, streamId: String): Any {
-        val sender = (pc as RTCPeerConnection).senderWithKind("video", streamId = streamId)
-        sender.track = track as RTCVideoTrack
+        val sender = (pc as RTCPeerConnection).addTrack(track as RTCVideoTrack, streamIds = listOf(streamId))
+            ?: error("addTrack(video) returned null")
         runCatching {
             val params = sender.parameters
             params.encodings.filterIsInstance<cocoapods.webrtc.RTCRtpEncodingParameters>().forEach {

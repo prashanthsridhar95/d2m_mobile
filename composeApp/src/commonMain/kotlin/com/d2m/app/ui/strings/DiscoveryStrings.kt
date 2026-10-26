@@ -73,6 +73,7 @@ interface DiscoveryStrings {
     val goToMatches: String
     val errOpenProfile: String
     val backToMessages: String
+    val backFromPreview: String
 }
 
 object DiscoveryStringsEn : DiscoveryStrings {
@@ -147,6 +148,7 @@ object DiscoveryStringsEn : DiscoveryStrings {
     override val goToMatches = "Go to Matches"
     override val errOpenProfile = "Couldn't open that profile right now."
     override val backToMessages = "Back to messages"
+    override val backFromPreview = "Back"
 }
 
 object DiscoveryStringsHi : DiscoveryStrings {
@@ -221,6 +223,7 @@ object DiscoveryStringsHi : DiscoveryStrings {
     override val goToMatches = "Matches पर जाएं"
     override val errOpenProfile = "अभी वह प्रोफ़ाइल नहीं खोली जा सकी।"
     override val backToMessages = "संदेशों पर वापस"
+    override val backFromPreview = "वापस"
 }
 
 object DiscoveryStringsTa : DiscoveryStrings {
@@ -295,4 +298,5 @@ object DiscoveryStringsTa : DiscoveryStrings {
     override val goToMatches = "Matches-க்குச் செல்லுங்கள்"
     override val errOpenProfile = "இப்போது அந்த சுயவிவரத்தைத் திறக்க முடியவில்லை."
     override val backToMessages = "செய்திகளுக்குத் திரும்பு"
+    override val backFromPreview = "திரும்பு"
 }
