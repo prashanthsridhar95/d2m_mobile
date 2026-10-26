@@ -180,7 +180,12 @@ private fun fmtThreadListTime(epochMillis: Long, yesterdayLabel: String): String
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Unit = {}) {
+fun MatchesScreen(
+    onOpenProfile: (String) -> Unit = {},
+    onOpenGallery: () -> Unit = {},
+    /** A matched thread's header opens the read-only matched profile (falls back to [onOpenProfile]). */
+    onOpenMatchedProfile: (String) -> Unit = onOpenProfile,
+) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
@@ -621,7 +626,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 ConversationHeader(
                     thread = t,
                     onBack = { chatUiState.setActiveThreadId(null) },
-                    onOpenProfile = { onOpenProfile(t.otherParticipantId) },
+                    onOpenProfile = { onOpenMatchedProfile(t.otherParticipantId) },
                     onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
                     onStartVideoCall = { scope.launch { callManager.startCall(peerUsername, "video") } },
                     menuContent = {

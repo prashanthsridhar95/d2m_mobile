@@ -29,6 +29,7 @@ import com.d2m.app.ui.screens.child.ChildHomeScreen
 import com.d2m.app.ui.screens.child.ChildProfileDialogScreen
 import com.d2m.app.ui.screens.child.ClaimFlowScreen
 import com.d2m.app.ui.screens.child.DiscoveryScreen
+import com.d2m.app.ui.screens.child.MatchedProfileScreen
 import com.d2m.app.ui.screens.child.MatchesScreen
 import com.d2m.app.ui.screens.entry.LoginScreen
 import com.d2m.app.ui.screens.entry.RolePickerScreen
@@ -178,8 +179,17 @@ fun D2MNavGraph(
         d2mComposable(Routes.MATCHES) {
             MatchesScreen(
                 onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
+                onOpenMatchedProfile = { candidateId -> navController.navigate(Routes.matchedProfile(candidateId)) },
                 onOpenGallery = { navController.navigate(Routes.SUCCESS_GALLERY) },
             )
+        }
+
+        d2mComposable(
+            route = Routes.MATCHED_PROFILE,
+            arguments = listOf(navArgument(Routes.PROFILE_ARG_CANDIDATE_ID) { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val candidateId = backStackEntry.arguments?.read { getStringOrNull(Routes.PROFILE_ARG_CANDIDATE_ID) }.orEmpty()
+            MatchedProfileScreen(candidateId = candidateId, onBack = { navController.popBackStack() })
         }
 
         d2mComposable(

@@ -29,6 +29,10 @@ object Routes {
     const val DISCOVERY = "child/discover"
     const val MATCHES = "child/matches"
 
+    /** A matched thread's profile: Discover's layout, read-only (web: MatchedProfileScreen). */
+    const val MATCHED_PROFILE = "child/matched/{candidateId}"
+    fun matchedProfile(candidateId: String) = "child/matched/$candidateId"
+
     const val PROFILE_DETAIL = "profile/{candidateId}"
     fun profileDetail(candidateId: String) = "profile/$candidateId"
     const val PROFILE_ARG_CANDIDATE_ID = "candidateId"
