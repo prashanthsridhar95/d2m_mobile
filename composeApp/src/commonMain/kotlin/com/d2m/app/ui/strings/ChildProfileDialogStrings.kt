@@ -100,7 +100,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
     override val tabProfile = "Profile"
     override val tabBio = "Bio data"
     override val tabPreferences = "Preferences"
-    override val basicDataNote = "Basic data and photos live in Settings today -- see plan §4 for the photo-picker follow-up."
+    override val basicDataNote = "Basic data and photos live in Settings today – see plan §4 for the photo-picker follow-up."
 
     override val sectionBasicPersonal = "Basic & personal details"
     override val sectionReligiousAstrological = "Religious & astrological information"
@@ -150,7 +150,7 @@ object ChildProfileDialogStringsEn : ChildProfileDialogStrings {
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$filled of $total filled in"
     override val aboutPromptsTitle = "About me prompts"
-    override fun aboutPromptsHint(max: Int) = "Candidates see these first -- pick up to $max and answer honestly."
+    override fun aboutPromptsHint(max: Int) = "Candidates see these first – pick up to $max and answer honestly."
     override val removePrompt = "Remove"
     override fun addAPrompt(count: Int, max: Int) = "+ Add a prompt ($count/$max)"
     override val cancel = "Cancel"
@@ -239,7 +239,7 @@ object ChildProfileDialogStringsHi : ChildProfileDialogStrings {
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$total में से $filled भरे गए"
     override val aboutPromptsTitle = "मेरे बारे में प्रश्न"
-    override fun aboutPromptsHint(max: Int) = "उम्मीदवार इन्हें सबसे पहले देखते हैं -- $max तक चुनें और ईमानदारी से जवाब दें।"
+    override fun aboutPromptsHint(max: Int) = "उम्मीदवार इन्हें सबसे पहले देखते हैं – $max तक चुनें और ईमानदारी से जवाब दें।"
     override val removePrompt = "हटाएं"
     override fun addAPrompt(count: Int, max: Int) = "+ एक प्रश्न जोड़ें ($count/$max)"
     override val cancel = "रद्द करें"
@@ -328,7 +328,7 @@ object ChildProfileDialogStringsTa : ChildProfileDialogStrings {
 
     override fun aboutMeFieldsProgress(filled: Int, total: Int) = "$total இல் $filled நிரப்பப்பட்டது"
     override val aboutPromptsTitle = "என்னைப் பற்றிய கேள்விகள்"
-    override fun aboutPromptsHint(max: Int) = "வேட்பாளர்கள் இவற்றை முதலில் பார்ப்பார்கள் -- $max வரை தேர்ந்தெடுத்து நேர்மையாக பதிலளிக்கவும்."
+    override fun aboutPromptsHint(max: Int) = "வேட்பாளர்கள் இவற்றை முதலில் பார்ப்பார்கள் – $max வரை தேர்ந்தெடுத்து நேர்மையாக பதிலளிக்கவும்."
     override val removePrompt = "அகற்று"
     override fun addAPrompt(count: Int, max: Int) = "+ ஒரு கேள்வியைச் சேர்க்கவும் ($count/$max)"
     override val cancel = "ரத்துசெய்"

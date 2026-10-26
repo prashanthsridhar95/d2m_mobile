@@ -45,6 +45,7 @@ import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
+import com.d2m.app.ui.strings.LocalStrings
 
 /*
  * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
@@ -157,7 +158,7 @@ fun InAppNotificationLayer(onOpenPeer: (String) -> Unit) {
                             )
                         }
                         IconButton(onClick = { current = null }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.messaging.dismiss, modifier = Modifier.size(16.dp))
                         }
                     }
                 }

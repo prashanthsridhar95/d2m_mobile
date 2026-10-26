@@ -107,7 +107,7 @@ class SignalCryptoProvider(
             store.saveSession(fromUsername, result.session)
             return@withLock result.plaintext.decodeToString()
         }
-        val session = store.getSession(fromUsername) ?: error("no session with $fromUsername -- cannot decrypt a non-prekey message with no established session")
+        val session = store.getSession(fromUsername) ?: error("no session with $fromUsername – cannot decrypt a non-prekey message with no established session")
         val plaintext = SignalProtocol.decryptWhisperMessage(primitives, session, myIdentity.publicKey.fromB64(), wireBytes)
         store.saveSession(fromUsername, session)
         plaintext.decodeToString()

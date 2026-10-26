@@ -269,8 +269,8 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean, accordion: Boo
                 strings.sectionFamilyBackground,
                 listOf(bio.fatherName, bio.motherName, bio.nativity, bio.familyType, bio.familyValues, bio.financialStatus),
             ) {
-                BioRow(strings.rowFather, listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" -- ").ifBlank { null })
-                BioRow(strings.rowMother, listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" -- ").ifBlank { null })
+                BioRow(strings.rowFather, listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" – ").ifBlank { null })
+                BioRow(strings.rowMother, listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" – ").ifBlank { null })
                 BioRow(strings.rowSiblings, siblingsSummary(bio, strings))
                 BioRow(strings.rowNativePlace, bio.nativity)
                 BioRow(strings.rowFamilyType, bio.familyType?.let { Taxonomy.toLabel(it, locale) })

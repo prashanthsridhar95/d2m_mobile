@@ -1,6 +1,8 @@
 package com.d2m.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import com.d2m.app.ui.strings.AppLocale
+import com.d2m.app.ui.strings.LocalAppLocale
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -150,24 +152,31 @@ fun AstrologyChartView(
 ) {
     val d1Data = remember(d1) { parseChartData(d1) }
     val d9Data = remember(d9) { parseChartData(d9) }
+    val l = LocalAppLocale.current
+    fun signText(i: Int) = AstroNames.sign(i, RASI_NAMES[i], l)
     val d1Lines = listOfNotNull(
-        d1Data.ascendantSign?.let { "Lagna: ${RASI_NAMES[it]}" },
-        d1Data.moonSign?.let { "Rasi: ${RASI_NAMES[it]}" },
-        nakshatra?.let { "Nakshatra: $it${pada?.let { p -> ", Pada $p" } ?: ""}" },
-        dashaLord?.let { "Dasha: $it${dashaRemaining?.let { r -> " — $r" } ?: ""}" },
+        d1Data.ascendantSign?.let { "${AstroNames.label(AstroNames.L.LAGNA, l)}: ${signText(it)}" },
+        d1Data.moonSign?.let { "${AstroNames.label(AstroNames.L.RASI, l)}: ${signText(it)}" },
+        nakshatra?.let { "${AstroNames.label(AstroNames.L.NAKSHATRA, l)}: ${AstroNames.nakshatra(it, l)}${pada?.let { p -> ", ${AstroNames.label(AstroNames.L.PADA, l)} $p" } ?: ""}" },
+        dashaLord?.let { "${AstroNames.label(AstroNames.L.DASHA, l)}: ${AstroNames.planet(it, l)}${dashaRemaining?.let { r -> " — ${AstroNames.duration(r, l)}" } ?: ""}" },
     )
-    val d9Lines = listOfNotNull(d9Data.ascendantSign?.let { "Lagna: ${RASI_NAMES[it]}" }, d9Data.moonSign?.let { "Rasi: ${RASI_NAMES[it]}" })
+    val d9Lines = listOfNotNull(
+        d9Data.ascendantSign?.let { "${AstroNames.label(AstroNames.L.LAGNA, l)}: ${signText(it)}" },
+        d9Data.moonSign?.let { "${AstroNames.label(AstroNames.L.RASI, l)}: ${signText(it)}" },
+    )
+    val d1Title = AstroNames.label(AstroNames.L.RASI_D1, l)
+    val d9Title = AstroNames.label(AstroNames.L.NAVAMSA_D9, l)
 
     if (stacked) {
         Column(modifier = modifier) {
-            SingleChartGrid("RASI (D1)", d1Data, d1Lines)
+            SingleChartGrid(d1Title, d1Data, d1Lines)
             Spacer(Modifier.padding(top = 20.dp))
-            SingleChartGrid("NAVAMSA (D9)", d9Data, d9Lines)
+            SingleChartGrid(d9Title, d9Data, d9Lines)
         }
     } else {
         Row(modifier = modifier) {
-            SingleChartGrid("RASI (D1)", d1Data, d1Lines, modifier = Modifier.weight(1f))
-            SingleChartGrid("NAVAMSA (D9)", d9Data, d9Lines, modifier = Modifier.weight(1f).padding(start = 12.dp))
+            SingleChartGrid(d1Title, d1Data, d1Lines, modifier = Modifier.weight(1f))
+            SingleChartGrid(d9Title, d9Data, d9Lines, modifier = Modifier.weight(1f).padding(start = 12.dp))
         }
     }
 }
@@ -184,6 +193,7 @@ private fun SingleChartGrid(title: String, data: ChartData, centerLines: List<St
         cellFill = MaterialTheme.colorScheme.surface,
     )
     val textMeasurer = rememberTextMeasurer()
+    val locale = LocalAppLocale.current
     Column(modifier = modifier) {
         Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = d2m.meta)
         Canvas(
@@ -192,7 +202,7 @@ private fun SingleChartGrid(title: String, data: ChartData, centerLines: List<St
                 .aspectRatio(1f)
                 .padding(top = 8.dp),
         ) {
-            drawChartGrid(this, textMeasurer, data, title, centerLines, palette)
+            drawChartGrid(this, textMeasurer, data, title, centerLines, palette, locale)
         }
     }
 }
@@ -213,6 +223,7 @@ private fun drawChartGrid(
     centerLabel: String,
     centerLines: List<String>,
     pal: ChartPalette,
+    locale: AppLocale,
 ) {
     with(scope) {
         val side = size.minDimension
@@ -259,7 +270,7 @@ private fun drawChartGrid(
 
             // Sign name, small, top-left (the slash corner is top-left too, so nudge it right on the lagna cell).
             val nameX = cellX + pad + if (signIndex == data.ascendantSign) cell * 0.2f else 0f
-            val signResult = textMeasurer.measure(RASI_NAMES[signIndex], signStyle)
+            val signResult = textMeasurer.measure(AstroNames.sign(signIndex, RASI_NAMES[signIndex], locale), signStyle)
             drawText(signResult, topLeft = Offset(nameX, cellY + pad - 1.dp.toPx()))
 
             // Planets: laid out as centred lines of abbreviations (wrapping when a cell holds several), the whole block
@@ -267,7 +278,7 @@ private fun drawChartGrid(
             val names = data.placementsBySign[signIndex].orEmpty()
             if (names.isNotEmpty()) {
                 val inner = cell - 2 * pad
-                val measured = names.map { it to textMeasurer.measure(it, if (it == "Asc") lagnaStyle else planetStyle) }
+                val measured = names.map { it to textMeasurer.measure(AstroNames.abbr(it, locale), if (it == "Asc") lagnaStyle else planetStyle) }
                 val lines = ArrayList<List<Pair<String, androidx.compose.ui.text.TextLayoutResult>>>()
                 var cur = ArrayList<Pair<String, androidx.compose.ui.text.TextLayoutResult>>()
                 var curW = 0f

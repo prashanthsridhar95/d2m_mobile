@@ -32,6 +32,7 @@ import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
+import com.d2m.app.ui.strings.LocalStrings
 
 /**
  * Cross-device history backup -- set up (first device ever) or restore (any
@@ -85,15 +86,15 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
         ) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    if (isSetup) "Back up your messages" else "Restore your messages",
+                    if (isSetup) LocalStrings.current.messaging.backUpMessages else LocalStrings.current.messaging.restoreMessages,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     if (isSetup) {
-                        "Choose a recovery PIN. It encrypts a backup of your conversations that only you can unlock -- not even Soul'd can read it. You'll need this PIN to see your message history if you ever log in from a new device."
+                        LocalStrings.current.messaging.archiveSetupDesc
                     } else {
-                        "This account already has a backup from another device. Enter your recovery PIN to restore your full message history here."
+                        LocalStrings.current.messaging.archiveRestoreDesc
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = mutedText(0.7f),
@@ -102,7 +103,7 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { pin = it },
-                    label = { Text(if (isSetup) "Choose a PIN (min. 4 digits)" else "Recovery PIN") },
+                    label = { Text(if (isSetup) LocalStrings.current.messaging.choosePin else LocalStrings.current.messaging.recoveryPin) },
                     singleLine = true,
                     enabled = !busy,
                     visualTransformation = PasswordVisualTransformation(),
@@ -113,7 +114,7 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
                     OutlinedTextField(
                         value = confirmPin,
                         onValueChange = { confirmPin = it },
-                        label = { Text("Confirm PIN") },
+                        label = { Text(LocalStrings.current.messaging.confirmPin) },
                         singleLine = true,
                         enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(),
@@ -121,7 +122,7 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (confirmPin.isNotEmpty() && pin != confirmPin) {
-                        Text("PINs don't match.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(LocalStrings.current.messaging.pinsDontMatch, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
                 if (error.isNotEmpty()) {
@@ -129,7 +130,7 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
                 }
                 if (!isSetup) {
                     Text(
-                        "This PIN is never sent anywhere -- if you don't remember it, your history on this device can't be recovered, but you can still send and receive new messages normally.",
+                        LocalStrings.current.messaging.pinNeverSent,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedText(0.55f),
                     )
@@ -137,14 +138,14 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                     D2MButton(
-                        text = if (isSetup) "Not now" else "I don't remember it",
+                        text = if (isSetup) LocalStrings.current.messaging.notNow else LocalStrings.current.messaging.iDontRememberIt,
                         onClick = { messagingRepo.dismissArchivePrompt() },
                         variant = D2MButtonVariant.OUTLINE,
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
                     )
                     D2MButton(
-                        text = if (busy) "Working…" else if (isSetup) "Set up backup" else "Restore",
+                        text = if (busy) LocalStrings.current.messaging.working else if (isSetup) LocalStrings.current.messaging.setUpBackup else LocalStrings.current.messaging.restore,
                         onClick = ::submit,
                         enabled = !busy && pin.isNotEmpty() && !(isSetup && setupInvalid),
                         modifier = Modifier.weight(1f),

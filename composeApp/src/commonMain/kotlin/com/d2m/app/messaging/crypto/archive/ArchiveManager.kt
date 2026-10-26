@@ -216,7 +216,7 @@ class ArchiveManager(
         val privateKeyPkcs8 = try {
             ArchiveCrypto.unwrapPrivateKeyWithPin(primitives, prompt.bundle, pin)
         } catch (e: Throwable) {
-            _archiveError.value = "That PIN didn't work -- double check it and try again."
+            _archiveError.value = "That PIN didn't work – double check it and try again."
             _archiveBusy.value = false
             return
         }

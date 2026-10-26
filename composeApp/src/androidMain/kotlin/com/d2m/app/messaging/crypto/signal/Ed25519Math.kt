@@ -135,7 +135,7 @@ internal object Ed25519Math {
 
     /** Every call site passes an already-non-negative, already-reduced value (< P or < L, both well under 2^255) -- this only has to handle BigInteger.toByteArray()'s occasional extra leading 0x00 sign-guard byte, then reverse to little-endian and left-pad to 32 bytes. */
     private fun BigInteger.toLittleEndian32(): ByteArray {
-        require(this.signum() >= 0) { "toLittleEndian32 called on a negative value -- caller must reduce mod P/L first" }
+        require(this.signum() >= 0) { "toLittleEndian32 called on a negative value – caller must reduce mod P/L first" }
         val be = this.toByteArray()
         val unsigned = if (be.size > 1 && be[0] == 0.toByte()) be.copyOfRange(1, be.size) else be
         require(unsigned.size <= 32) { "value too large for 32 bytes" }

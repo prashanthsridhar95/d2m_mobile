@@ -492,7 +492,7 @@ fun ChatPane(
             Box(modifier = Modifier.weight(1f)) {
                 if (messages.isEmpty() && !peerTyping) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+                        Text(messagingStrings.noMessagesYet, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
                     }
                 } else if (messages.isEmpty()) {
                     // No real messages yet, but the peer is already typing --
@@ -650,12 +650,12 @@ fun ChatPane(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        if (editingId != null) "Editing message" else "Replying to ${replyingTo?.let { if (it.isMine) "yourself" else peerName }}: ${replyingTo?.text.orEmpty().take(60)}",
+                        if (editingId != null) messagingStrings.editingMessage else replyingTo?.let { r -> if (r.isMine) messagingStrings.replyingToYourself(r.text.orEmpty().take(60)) else messagingStrings.replyingToName(peerName, r.text.orEmpty().take(60)) }.orEmpty(),
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = { replyingTo = null; editingId = null; draft = TextFieldValue("") }, modifier = Modifier.size(22.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.common.cancel, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -695,7 +695,7 @@ fun ChatPane(
                             // itself still handles its own failure (uploadFailed
                             // bubble) once bytes are actually in hand.
                             val bytes = runCatching { fetchGifBytes(apiClient.client, gif) }
-                                .onFailure { snackbarHostState.showSnackbar("Couldn't load that GIF -- try again") }
+                                .onFailure { snackbarHostState.showSnackbar("Couldn't load that GIF – try again") }
                                 .getOrNull()
                             if (bytes != null) {
                                 messagingRepo.sendMedia(peerId, bytes, "gif.gif", "image/gif", "image", gif.width, gif.height, reply)
@@ -714,7 +714,7 @@ fun ChatPane(
             ) {
                 if (editingId == null) {
                     IconButton(onClick = { emojiOpen = false; mediaLauncher() }, enabled = !attaching, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach a file", tint = mutedText(0.45f))
+                        Icon(Icons.Filled.AttachFile, contentDescription = messagingStrings.attachFile, tint = mutedText(0.45f))
                     }
                 }
                 OutlinedTextField(
@@ -739,7 +739,7 @@ fun ChatPane(
                         }
                     },
                     modifier = Modifier.weight(1f).focusRequester(composerFocusRequester),
-                    placeholder = { Text("Message…", color = mutedText(0.4f)) },
+                    placeholder = { Text(messagingStrings.messagePlaceholder, color = mutedText(0.4f)) },
                     shape = RoundedCornerShape(D2MRadius.pill),
                     textStyle = MaterialTheme.typography.bodyMedium,
                     // "based on user keyboard settings, first letter
@@ -755,7 +755,7 @@ fun ChatPane(
                             IconButton(onClick = { emojiOpen = !emojiOpen }) {
                                 Icon(
                                     Icons.Filled.EmojiEmotions,
-                                    contentDescription = "Emoji, stickers & GIFs",
+                                    contentDescription = messagingStrings.emojiStickersGifs,
                                     tint = if (emojiOpen) MaterialTheme.colorScheme.primary else mutedText(0.45f),
                                 )
                             }
@@ -783,7 +783,7 @@ fun ChatPane(
                 ) {
                     Icon(
                         if (editingId != null) Icons.Filled.Check else Icons.Filled.Send,
-                        contentDescription = if (editingId != null) "Save" else "Send",
+                        contentDescription = if (editingId != null) LocalStrings.current.common.save else LocalStrings.current.common.send,
                         tint = if (canSend) Color.White else mutedText(0.4f),
                         modifier = Modifier.size(20.dp),
                     )
@@ -987,7 +987,7 @@ private fun VideoBubblePlaceholder(durationSec: Int?, onClick: () -> Unit) {
             modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.25f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.PlayArrow, contentDescription = LocalStrings.current.messaging.playVideo, tint = Color.White, modifier = Modifier.size(28.dp))
         }
         if (durationSec != null && durationSec > 0) {
             Text(
@@ -1224,7 +1224,7 @@ private fun MessageRow(
                             }
 
                             when {
-                                message.deleted -> Text("This message was deleted", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
+                                message.deleted -> Text(messagingStrings.messageDeleted, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
                                 message.callLog != null -> {
                                     val info = message.callLog
                                     // "No answer"/declined/busy/failed all read as
@@ -1235,10 +1235,10 @@ private fun MessageRow(
                                     val noAnswer = info.reason == "declined" || info.reason == "busy" || info.reason == "failed" ||
                                         (info.durationSec == 0 && info.incoming && info.reason != "ended")
                                     val label = when (info.reason) {
-                                        "ended" -> "${if (info.media == "video") "Video" else "Voice"} call"
-                                        "busy", "failed" -> "Call failed"
-                                        "declined" -> "Call declined"
-                                        else -> if (info.incoming) "Missed call" else "No answer"
+                                        "ended" -> if (info.media == "video") messagingStrings.videoCall else messagingStrings.voiceCall
+                                        "busy", "failed" -> messagingStrings.callFailed
+                                        "declined" -> messagingStrings.callDeclined
+                                        else -> if (info.incoming) messagingStrings.missedCall else messagingStrings.noAnswer
                                     }
                                     val durationLabel = if (info.durationSec > 0) "${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}" else null
                                     // Circular icon badge, not a bare small icon -- matches
@@ -1318,11 +1318,11 @@ private fun MessageRow(
                                     }
                                     if (message.uploading) {
                                         Column(modifier = Modifier.width(160.dp).padding(top = 4.dp)) {
-                                            Text("Uploading…", style = MaterialTheme.typography.labelSmall)
+                                            Text(messagingStrings.uploading, style = MaterialTheme.typography.labelSmall)
                                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                         }
                                     }
-                                    if (message.uploadFailed) Text("Attachment failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    if (message.uploadFailed) Text(messagingStrings.attachmentFailed, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                     if (message.text.isNotBlank()) {
                                         if (emojiOnly) {
                                             // Matches web's emojiOnly text styling exactly: fontSize
@@ -1354,10 +1354,10 @@ private fun MessageRow(
                                     if (message.status == MessageStatus.FAILED) {
                                         Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
                                         Spacer(Modifier.width(3.dp))
-                                        Text("Failed -- tap to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                        Text(messagingStrings.failedTapToRetry, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                     } else {
                                         if (message.edited) {
-                                            Text("edited", style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.65f))
+                                            Text(messagingStrings.edited, style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.65f))
                                             Spacer(Modifier.width(4.dp))
                                         }
                                         Text(formatBubbleTime(message.sentAt), style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
@@ -1401,13 +1401,13 @@ private fun MessageRow(
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    DropdownMenuItem(text = { Text("Reply") }, onClick = onReply)
+                    DropdownMenuItem(text = { Text(messagingStrings.reply) }, onClick = onReply)
                     if (message.isMine && message.media == null) {
-                        DropdownMenuItem(text = { Text("Edit") }, onClick = onEdit)
+                        DropdownMenuItem(text = { Text(LocalStrings.current.common.edit) }, onClick = onEdit)
                     }
-                    DropdownMenuItem(text = { Text("Delete for me") }, onClick = onDeleteForMe)
+                    DropdownMenuItem(text = { Text(messagingStrings.deleteForMe) }, onClick = onDeleteForMe)
                     if (message.isMine) {
-                        DropdownMenuItem(text = { Text("Delete for everyone") }, onClick = onDeleteForEveryone)
+                        DropdownMenuItem(text = { Text(messagingStrings.deleteForEveryone) }, onClick = onDeleteForEveryone)
                     }
                     // Reporting your own message makes no sense -- only
                     // shown for the PEER's own messages, same `isMine` gate

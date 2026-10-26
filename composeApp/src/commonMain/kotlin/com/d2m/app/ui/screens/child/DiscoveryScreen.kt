@@ -165,7 +165,11 @@ fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
     }
 
     LaunchedEffect(queue.isNotEmpty()) {
-        if (queue.isNotEmpty() && !runCatching { settings.getBoolean(COACH_KEY, false) }.getOrDefault(false)) coach = true
+        if (queue.isNotEmpty() && !runCatching { settings.getBoolean(COACH_KEY, false) }.getOrDefault(false)) {
+            // Mark as seen as soon as it is shown so it never reappears on later visits.
+            coach = true
+            runCatching { settings.putBoolean(COACH_KEY, true) }
+        }
     }
     fun dismissCoach() {
         coach = false

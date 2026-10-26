@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import kotlin.math.roundToInt
+import com.d2m.app.ui.strings.LocalStrings
 
 /**
  * "always the media bubble size is a defined height & width. If required,
@@ -130,7 +131,7 @@ fun MediaViewerDialog(target: MediaViewerTarget?, onDismiss: () -> Unit) {
                     .background(Color.Black.copy(alpha = 0.4f), CircleShape)
                     .size(40.dp),
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.common.close, tint = Color.White)
             }
         }
     }

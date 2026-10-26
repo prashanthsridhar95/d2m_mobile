@@ -52,6 +52,7 @@ import com.d2m.app.messaging.call.CallView
 import com.d2m.app.messaging.call.VideoRendererView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.d2m.app.ui.strings.LocalStrings
 
 /**
  * Full-screen in-call UI -- mirrors d2m_web's CallOverlay.jsx (mute/camera/
@@ -106,7 +107,7 @@ fun CallOverlay(callManager: CallManager, view: CallView, streams: CallStreams, 
                 Text(statusLabel(view), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
             }
             IconButton(onClick = onMinimize) {
-                Icon(Icons.Filled.Close, contentDescription = "Minimize", tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.messaging.minimize, tint = Color.White)
             }
         }
 
@@ -132,20 +133,20 @@ fun CallOverlay(callManager: CallManager, view: CallView, streams: CallStreams, 
         ) {
             CallControlButton(
                 icon = if (view.micOn) Icons.Filled.Mic else Icons.Filled.MicOff,
-                label = if (view.micOn) "Mute" else "Unmute",
+                label = if (view.micOn) LocalStrings.current.messaging.mute else LocalStrings.current.messaging.unmute,
                 onClick = { callManager.toggleMic() },
             )
             CallControlButton(
                 icon = if (view.camOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                label = if (view.camOn) "Stop video" else "Start video",
+                label = if (view.camOn) LocalStrings.current.messaging.stopVideo else LocalStrings.current.messaging.startVideo,
                 onClick = { scope.launch { callManager.toggleCamera() } },
             )
             if (view.camOn) {
-                CallControlButton(icon = Icons.Filled.Cameraswitch, label = "Flip", onClick = { scope.launch { callManager.flipCamera() } })
+                CallControlButton(icon = Icons.Filled.Cameraswitch, label = LocalStrings.current.messaging.flip, onClick = { scope.launch { callManager.flipCamera() } })
             }
             CallControlButton(
                 icon = Icons.Filled.CallEnd,
-                label = "End",
+                label = LocalStrings.current.messaging.endCall,
                 background = Color(0xFFE53935),
                 onClick = { callManager.hangup() },
             )
@@ -155,9 +156,9 @@ fun CallOverlay(callManager: CallManager, view: CallView, streams: CallStreams, 
 
 @Composable
 private fun statusLabel(view: CallView): String = when (view.phase) {
-    CallPhase.CALLING -> if (view.ringing) "Ringing…" else "Calling…"
-    CallPhase.CONNECTING -> "Connecting…"
-    CallPhase.IN_CALL -> view.startedAt?.let { formatDuration(it) } ?: "In call"
+    CallPhase.CALLING -> if (view.ringing) LocalStrings.current.messaging.ringing else LocalStrings.current.messaging.calling
+    CallPhase.CONNECTING -> LocalStrings.current.messaging.connecting
+    CallPhase.IN_CALL -> view.startedAt?.let { formatDuration(it) } ?: LocalStrings.current.messaging.inCall
     else -> ""
 }
 

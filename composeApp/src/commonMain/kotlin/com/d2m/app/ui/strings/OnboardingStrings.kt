@@ -104,7 +104,7 @@ object OnboardingStringsEn : OnboardingStrings {
     override val dateLabel = "Date (YYYY-MM-DD)"
     override val timeLabel = "Time (HH:MM, 24h)"
     override val birthPlace = "Birth place"
-    override val noCoordinatesWarning = "No coordinates resolved yet for this place -- pick a suggestion from the list, or the chart can't be computed (\"Null Island\" guard)."
+    override val noCoordinatesWarning = "No coordinates resolved yet for this place – pick a suggestion from the list, or the chart can't be computed (\"Null Island\" guard)."
     override val moreDetailsHeading = "A few more details."
     override val religion = "Religion"
     override val yourCommunity = "Your community"
@@ -127,7 +127,7 @@ object OnboardingStringsEn : OnboardingStrings {
     override val noInviteTitle = "No invite to show"
     override val noInviteBody = "Start setup again to generate a new one."
     override fun sentTo(childName: String) = "Sent to $childName."
-    override fun claimLinkReady(expiresAt: String) = "A private claim link is ready to share -- theirs to open whenever they're ready. Expires $expiresAt."
+    override fun claimLinkReady(expiresAt: String) = "A private claim link is ready to share – theirs to open whenever they're ready. Expires $expiresAt."
     override val shareInvite = "Share invite"
     override val browseProfiles = "Browse profiles"
 
@@ -156,7 +156,7 @@ object OnboardingStringsEn : OnboardingStrings {
     override val errSendCodeFailed = "Couldn't send a code to that email."
     override val errOtpInvalid = "That code didn't check out."
     override val errCreateAccountFailed = "Couldn't create that account."
-    override val errBadClaimLink = "That link doesn't look right -- ask for a fresh one."
+    override val errBadClaimLink = "That link doesn't look right – ask for a fresh one."
     override val errSavePreferencesFailed = "Couldn't save your preferences."
 }
 
@@ -182,7 +182,7 @@ object OnboardingStringsHi : OnboardingStrings {
     override val dateLabel = "तारीख़ (YYYY-MM-DD)"
     override val timeLabel = "समय (HH:MM, 24 घंटे)"
     override val birthPlace = "जन्म स्थान"
-    override val noCoordinatesWarning = "इस स्थान के लिए अभी कोई निर्देशांक नहीं मिले -- सूची से एक सुझाव चुनें, वरना कुंडली नहीं बनाई जा सकती (\"Null Island\" सुरक्षा)।"
+    override val noCoordinatesWarning = "इस स्थान के लिए अभी कोई निर्देशांक नहीं मिले – सूची से एक सुझाव चुनें, वरना कुंडली नहीं बनाई जा सकती (\"Null Island\" सुरक्षा)।"
     override val moreDetailsHeading = "कुछ और विवरण।"
     override val religion = "धर्म"
     override val yourCommunity = "आपका समुदाय"
@@ -205,7 +205,7 @@ object OnboardingStringsHi : OnboardingStrings {
     override val noInviteTitle = "दिखाने के लिए कोई इनवाइट नहीं"
     override val noInviteBody = "नया बनाने के लिए फिर से सेटअप शुरू करें।"
     override fun sentTo(childName: String) = "$childName को भेजा गया।"
-    override fun claimLinkReady(expiresAt: String) = "एक निजी क्लेम लिंक शेयर करने के लिए तैयार है -- जब वे तैयार हों तब खोल सकते हैं। समाप्ति: $expiresAt।"
+    override fun claimLinkReady(expiresAt: String) = "एक निजी क्लेम लिंक शेयर करने के लिए तैयार है – जब वे तैयार हों तब खोल सकते हैं। समाप्ति: $expiresAt।"
     override val shareInvite = "इनवाइट शेयर करें"
     override val browseProfiles = "प्रोफ़ाइलें ब्राउज़ करें"
 
@@ -234,7 +234,7 @@ object OnboardingStringsHi : OnboardingStrings {
     override val errSendCodeFailed = "उस ईमेल पर कोड नहीं भेजा जा सका।"
     override val errOtpInvalid = "वह कोड सही नहीं निकला।"
     override val errCreateAccountFailed = "वह खाता नहीं बनाया जा सका।"
-    override val errBadClaimLink = "यह लिंक सही नहीं लगता -- एक नया लिंक मांगें।"
+    override val errBadClaimLink = "यह लिंक सही नहीं लगता – एक नया लिंक मांगें।"
     override val errSavePreferencesFailed = "आपकी प्राथमिकताएं सेव नहीं हो सकीं।"
 }
 
@@ -260,7 +260,7 @@ object OnboardingStringsTa : OnboardingStrings {
     override val dateLabel = "தேதி (YYYY-MM-DD)"
     override val timeLabel = "நேரம் (HH:MM, 24 மணி)"
     override val birthPlace = "பிறந்த இடம்"
-    override val noCoordinatesWarning = "இந்த இடத்திற்கு இன்னும் ஆயத்தொலைவுகள் கிடைக்கவில்லை -- பட்டியலில் இருந்து ஒரு பரிந்துரையைத் தேர்வு செய்யவும், இல்லையெனில் ஜாதகத்தைக் கணக்கிட முடியாது (\"Null Island\" பாதுகாப்பு)."
+    override val noCoordinatesWarning = "இந்த இடத்திற்கு இன்னும் ஆயத்தொலைவுகள் கிடைக்கவில்லை – பட்டியலில் இருந்து ஒரு பரிந்துரையைத் தேர்வு செய்யவும், இல்லையெனில் ஜாதகத்தைக் கணக்கிட முடியாது (\"Null Island\" பாதுகாப்பு)."
     override val moreDetailsHeading = "இன்னும் சில விவரங்கள்."
     override val religion = "மதம்"
     override val yourCommunity = "உங்கள் சமூகம்"
@@ -283,7 +283,7 @@ object OnboardingStringsTa : OnboardingStrings {
     override val noInviteTitle = "காட்ட அழைப்பு இல்லை"
     override val noInviteBody = "புதியதை உருவாக்க மீண்டும் அமைப்பைத் தொடங்கவும்."
     override fun sentTo(childName: String) = "$childName க்கு அனுப்பப்பட்டது."
-    override fun claimLinkReady(expiresAt: String) = "ஒரு தனிப்பட்ட கோரிக்கை இணைப்பு பகிர தயாராக உள்ளது -- அவர்கள் தயாரானதும் திறக்கலாம். காலாவதி: $expiresAt."
+    override fun claimLinkReady(expiresAt: String) = "ஒரு தனிப்பட்ட கோரிக்கை இணைப்பு பகிர தயாராக உள்ளது – அவர்கள் தயாரானதும் திறக்கலாம். காலாவதி: $expiresAt."
     override val shareInvite = "அழைப்பைப் பகிரவும்"
     override val browseProfiles = "சுயவிவரங்களை உலாவவும்"
 
@@ -312,6 +312,6 @@ object OnboardingStringsTa : OnboardingStrings {
     override val errSendCodeFailed = "அந்த மின்னஞ்சலுக்கு குறியீட்டை அனுப்ப முடியவில்லை."
     override val errOtpInvalid = "அந்தக் குறியீடு சரியில்லை."
     override val errCreateAccountFailed = "அந்தக் கணக்கை உருவாக்க முடியவில்லை."
-    override val errBadClaimLink = "அந்த இணைப்பு சரியாகத் தெரியவில்லை -- புதிய இணைப்பைக் கேளுங்கள்."
+    override val errBadClaimLink = "அந்த இணைப்பு சரியாகத் தெரியவில்லை – புதிய இணைப்பைக் கேளுங்கள்."
     override val errSavePreferencesFailed = "உங்கள் விருப்பங்களைச் சேமிக்க முடியவில்லை."
 }

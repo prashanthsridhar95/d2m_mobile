@@ -177,7 +177,7 @@ internal object SignalProtocol {
 
         // Look up which local signed prekey / one-time prekey THIS message actually references -- only knowable now that the message is decoded, not before.
         val signedPreKey = store.findSignedPreKey(fields.signedPreKeyId)
-            ?: error("no local signed prekey for id ${fields.signedPreKeyId} -- was it rotated out before this message arrived?")
+            ?: error("no local signed prekey for id ${fields.signedPreKeyId} – was it rotated out before this message arrived?")
         val oneTimePreKey = fields.preKeyId?.let { store.consumeOneTimePreKey(it) } // single-use: consumed here so it's never reused
 
         val myIdentityPriv = myIdentity.privateKey.fromB64()
@@ -274,7 +274,7 @@ internal object SignalProtocol {
     /** Returns (ciphertextType, wireBytes) -- ciphertextType is 3 ("prekey") while `session.pendingPreKey` is still set, else 1 ("signal"), exactly mirroring the reference implementation's `msg.type`. `myRegistrationId` is OUR OWN registration id (standard Signal Protocol convention: `PreKeyWhisperMessage.registrationId` identifies the message's SENDER, letting the recipient detect if the sender's identity was reinstalled -- see this file's top doc comment for why this specific field is flagged as not 100%-source-confirmed). */
     fun encrypt(primitives: CryptoPrimitives, session: SessionRecord, myIdentityPub: ByteArray, myRegistrationId: Int, plaintext: ByteArray): Pair<Int, ByteArray> {
         val sendingKeyB64 = session.ratchet.ourPublicKey
-        val chain = session.chains[sendingKeyB64] ?: error("no sending chain -- session not established")
+        val chain = session.chains[sendingKeyB64] ?: error("no sending chain – session not established")
         fillMessageKeys(primitives, chain, chain.counter + 1)
         val counter = chain.counter
         val seed = chain.messageKeys.remove(counter.toString())?.fromB64() ?: error("missing message key seed for counter $counter")
@@ -330,7 +330,7 @@ internal object SignalProtocol {
         val (aesKey, macKey, iv) = deriveMessageKeys(primitives, macKeySeed)
         val expectedMac = primitives.hmacSha256(macKey, macInput).copyOf(8)
         val actualMac = wireBytes.copyOfRange(wireBytes.size - 8, wireBytes.size)
-        check(expectedMac.contentEquals(actualMac)) { "MAC verification failed -- ciphertext rejected" }
+        check(expectedMac.contentEquals(actualMac)) { "MAC verification failed – ciphertext rejected" }
 
         val plaintext = primitives.aesCbcDecrypt(aesKey, iv, inner.ciphertext)
         session.pendingPreKey = null // any successful decrypt proves the peer has this session; stop wrapping our own outgoing messages in PreKeyWhisperMessage.

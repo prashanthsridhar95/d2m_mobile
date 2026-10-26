@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
+import com.d2m.app.ui.strings.LocalStrings
 
 /**
  * Global call dispatcher -- mounted once at the App.kt shell level (mirrors
@@ -213,11 +214,11 @@ private fun IncomingCallToast(peerName: String, isVideo: Boolean, onAccept: () -
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 PulsingAvatar(initial = peerName.take(1).uppercase(), size = 88.dp)
                 Text(peerName, style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(top = 16.dp))
-                Text(if (isVideo) "Incoming video call" else "Incoming audio call", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
+                Text(if (isVideo) LocalStrings.current.messaging.incomingVideoCall else LocalStrings.current.messaging.incomingAudioCall, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
 
                 Row(modifier = Modifier.padding(top = 48.dp), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                    RoundActionButton(icon = Icons.Filled.CallEnd, background = Color(0xFFE53935), onClick = onDecline, label = "Decline")
-                    RoundActionButton(icon = if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call, background = Color(0xFF43A047), onClick = onAccept, label = "Accept")
+                    RoundActionButton(icon = Icons.Filled.CallEnd, background = Color(0xFFE53935), onClick = onDecline, label = LocalStrings.current.common.decline)
+                    RoundActionButton(icon = if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call, background = Color(0xFF43A047), onClick = onAccept, label = LocalStrings.current.common.accept)
                 }
             }
         }
@@ -281,8 +282,8 @@ private fun MinimizedCallBar(peerName: String, onExpand: () -> Unit, onHangup: (
             modifier = Modifier.fillMaxWidth().clickable(onClick = onExpand),
         ) {
             Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("In call with $peerName", style = MaterialTheme.typography.labelLarge, color = Color.White, modifier = Modifier.weight(1f))
-                IconButton(onClick = onHangup) { Icon(Icons.Filled.CallEnd, contentDescription = "Hang up", tint = Color.White) }
+                Text(LocalStrings.current.messaging.inCallWith(peerName), style = MaterialTheme.typography.labelLarge, color = Color.White, modifier = Modifier.weight(1f))
+                IconButton(onClick = onHangup) { Icon(Icons.Filled.CallEnd, contentDescription = LocalStrings.current.messaging.hangUp, tint = Color.White) }
             }
         }
     }

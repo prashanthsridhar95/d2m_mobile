@@ -306,7 +306,7 @@ class CallManager(
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: offer
             val sent = messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn))
-            if (!sent) error("couldn't reach $peer -- check your connection")
+            if (!sent) error("couldn't reach $peer – check your connection")
             println("CallManager.startCall: invite sent to $peer (callId=$callId)")
 
             ringJob = scope.launch {
@@ -346,7 +346,7 @@ class CallManager(
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: answer
             val sent = messagingRepository.sendCallSignal(peer, CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
-            if (!sent) error("couldn't reach $peer -- check your connection")
+            if (!sent) error("couldn't reach $peer – check your connection")
             println("CallManager.accept: accept sent to $peer (callId=$callId)")
             pendingOfferSdp = null
         } catch (e: Throwable) {
@@ -575,7 +575,7 @@ class CallManager(
 
     private fun teardown(reasonOverride: CallEndReason? = null) {
         if (!tearDownGate.tryLock()) {
-            println("CallManager.teardown: dropped reentrant call (callId=$callId, peer=$peer, phase=$phase) -- a teardown is already in progress")
+            println("CallManager.teardown: dropped reentrant call (callId=$callId, peer=$peer, phase=$phase) – a teardown is already in progress")
             return
         }
         println("CallManager.teardown: callId=$callId, peer=$peer, phase=$phase, reasonOverride=$reasonOverride")

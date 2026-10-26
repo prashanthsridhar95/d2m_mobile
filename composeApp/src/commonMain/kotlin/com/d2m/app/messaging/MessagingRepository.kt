@@ -515,7 +515,7 @@ class MessagingRepository(
         } catch (e: Throwable) {
             println("MessagingRepository.sendTextInternal: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
             updateMessage(id) { it.copy(status = MessageStatus.FAILED) }
-            _sendErrors.tryEmit("Message couldn't be sent -- tap it to retry")
+            _sendErrors.tryEmit("Message couldn't be sent – tap it to retry")
         }
     }
 
@@ -540,7 +540,7 @@ class MessagingRepository(
         // happened. Full re-upload retry would need fileName/mime/kind
         // persisted on ChatMessage itself, which they aren't today.
         if (message.uploadFailed || (message.localBytesPreview != null && message.media == null)) {
-            _sendErrors.tryEmit("Couldn't retry that attachment -- please attach it again")
+            _sendErrors.tryEmit("Couldn't retry that attachment – please attach it again")
             return
         }
         updateMessage(messageId) { it.copy(status = MessageStatus.SENDING) }
@@ -771,7 +771,7 @@ class MessagingRepository(
                 // gave up on. Without this the resend was a no-op in practice: same
                 // stale session in, same stale session out, so the peer's next decrypt
                 // failed too and they'd send another session.reset right back.
-                println("MessagingRepository.handleEvent: SessionReset from ${event.from} -- resetting our session and resending")
+                println("MessagingRepository.handleEvent: SessionReset from ${event.from} – resetting our session and resending")
                 scope.launch {
                     runCatching { cryptoProvider.resetSession(event.from) }
                     resendUndelivered(event.from)

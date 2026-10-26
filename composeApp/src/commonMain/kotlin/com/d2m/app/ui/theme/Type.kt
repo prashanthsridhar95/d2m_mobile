@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.sp
 @Immutable
 class D2MFonts(val display: FontFamily, val body: FontFamily)
 
-val LocalD2MFonts = compositionLocalOf<D2MFonts> { error("D2MFonts not provided -- wrap in D2MTheme") }
+val LocalD2MFonts = compositionLocalOf<D2MFonts> { error("D2MFonts not provided – wrap in D2MTheme") }
 
 @Composable
 fun rememberD2MFonts(): D2MFonts {

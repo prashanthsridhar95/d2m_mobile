@@ -307,7 +307,7 @@ class ApiClient(
 
     fun friendlyStatusMessage(status: HttpStatusCode): String = when (status.value) {
         404 -> "Not found."
-        429 -> "Rate limit exceeded -- slow down and try again shortly."
+        429 -> "Rate limit exceeded – slow down and try again shortly."
         in 500..599 -> "Something went wrong on our end. Try again shortly."
         else -> "Request failed (${status.value})."
     }

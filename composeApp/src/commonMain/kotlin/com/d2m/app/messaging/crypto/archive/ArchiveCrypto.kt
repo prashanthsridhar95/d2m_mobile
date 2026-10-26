@@ -55,7 +55,7 @@ object ArchiveCrypto {
 
     /** Rebuilds a PKCS8 private key from a JWK that carries `d` (as produced by privateKeyToJwk / ArchiveKeyStore's local cache). */
     fun privateKeyFromJwk(primitives: ArchivePrimitives, jwk: JsonWebKey): ByteArray {
-        val d = requireNotNull(jwk.d) { "privateKeyFromJwk requires a JWK with 'd' (a private-key export) -- got a public-only JWK" }
+        val d = requireNotNull(jwk.d) { "privateKeyFromJwk requires a JWK with 'd' (a private-key export) – got a public-only JWK" }
         return primitives.ecPrivateKeyFromScalar(d.fromBase64Url())
     }
 

@@ -34,6 +34,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import com.d2m.app.ui.strings.LocalStrings
 
 // GIPHY's response is snake_case, which auto-maps to these camelCase field
 // names via ApiClient's already-installed ContentNegotiation
@@ -124,7 +125,7 @@ fun GifPickerPanel(client: HttpClient, onPick: (GifResult) -> Unit, modifier: Mo
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            placeholder = { Text("Search GIFs", color = mutedText(0.4f)) },
+            placeholder = { Text(LocalStrings.current.messaging.searchGifs, color = mutedText(0.4f)) },
             shape = RoundedCornerShape(18.dp),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
@@ -134,9 +135,9 @@ fun GifPickerPanel(client: HttpClient, onPick: (GifResult) -> Unit, modifier: Mo
         )
         Box(modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 220.dp)) {
             when {
-                loading && results.isEmpty() -> CenteredHint("Loading GIFs…")
+                loading && results.isEmpty() -> CenteredHint(LocalStrings.current.messaging.loadingGifs)
                 error != null -> CenteredHint(error!!)
-                results.isEmpty() -> CenteredHint("No GIFs found.")
+                results.isEmpty() -> CenteredHint(LocalStrings.current.messaging.noGifsFound)
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -158,7 +159,7 @@ fun GifPickerPanel(client: HttpClient, onPick: (GifResult) -> Unit, modifier: Mo
         }
         // Required by GIPHY's API terms whenever their content/search is used.
         Text(
-            "Powered by GIPHY",
+            LocalStrings.current.messaging.poweredByGiphy,
             style = MaterialTheme.typography.labelSmall,
             color = mutedText(0.5f),
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

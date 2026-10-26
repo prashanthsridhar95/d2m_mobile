@@ -82,7 +82,7 @@ object NotificationsStringsEn : NotificationsStrings {
     override val minutesAgo = "{n}m ago"
     override val hoursAgo = "{n}h ago"
     override val previewCandidate = "Tap to view the profile."
-    override val previewRequestFrom = "Someone sent you a request -- see Requests."
+    override val previewRequestFrom = "Someone sent you a request – see Requests."
     override val previewThread = "Open your match to see the details."
     override val previewProspect = "Open to see the details."
     override val previewViewerNamed = "{name} opened one of your profile share links."
@@ -99,7 +99,7 @@ object NotificationsStringsEn : NotificationsStrings {
     override val ctaViewShareLinks = "View share links"
     override val ctaViewProfile = "View profile"
     override val extraTypes = mapOf(
-        "calls_unlocked" to listOf("Calling unlocked", "You and {name} have both confirmed you met -- calling is now open.", "You've both confirmed you met -- calling is now open."),
+        "calls_unlocked" to listOf("Calling unlocked", "You and {name} have both confirmed you met – calling is now open.", "You've both confirmed you met – calling is now open."),
         "horoscope_signoff_complete" to listOf("Horoscope signed off", "You and {name} have both signed off on the horoscope match.", "You've both signed off on the horoscope match."),
         "family_meeting_proposed" to listOf("Meeting proposed", "{name} proposed a time to meet.", "A meeting time has been proposed."),
         "family_meeting_confirmed" to listOf("Meeting confirmed", "{name} confirmed your proposed meeting time.", "Your proposed meeting time was confirmed."),
@@ -139,7 +139,7 @@ object NotificationsStringsHi : NotificationsStrings {
     override val minutesAgo = "{n} मिनट पहले"
     override val hoursAgo = "{n} घंटे पहले"
     override val previewCandidate = "प्रोफ़ाइल देखने के लिए टैप करें।"
-    override val previewRequestFrom = "किसी ने आपको अनुरोध भेजा है -- अनुरोध देखें।"
+    override val previewRequestFrom = "किसी ने आपको अनुरोध भेजा है – अनुरोध देखें।"
     override val previewThread = "विवरण देखने के लिए अपना मैच खोलें।"
     override val previewProspect = "विवरण देखने के लिए खोलें।"
     override val previewViewerNamed = "{name} ने आपकी प्रोफ़ाइल का एक शेयर लिंक खोला।"
@@ -156,7 +156,7 @@ object NotificationsStringsHi : NotificationsStrings {
     override val ctaViewShareLinks = "शेयर लिंक देखें"
     override val ctaViewProfile = "प्रोफ़ाइल देखें"
     override val extraTypes = mapOf(
-        "calls_unlocked" to listOf("कॉलिंग खुल गई", "आप और {name} दोनों ने मिलने की पुष्टि की -- अब कॉलिंग खुली है।", "आप दोनों ने मिलने की पुष्टि की -- अब कॉलिंग खुली है।"),
+        "calls_unlocked" to listOf("कॉलिंग खुल गई", "आप और {name} दोनों ने मिलने की पुष्टि की – अब कॉलिंग खुली है।", "आप दोनों ने मिलने की पुष्टि की – अब कॉलिंग खुली है।"),
         "horoscope_signoff_complete" to listOf("कुंडली पर सहमति", "आप और {name} दोनों ने कुंडली मिलान पर सहमति दी है।", "आप दोनों ने कुंडली मिलान पर सहमति दी है।"),
         "family_meeting_proposed" to listOf("मुलाक़ात का प्रस्ताव", "{name} ने मिलने का समय सुझाया।", "मिलने का एक समय सुझाया गया है।"),
         "family_meeting_confirmed" to listOf("मुलाक़ात की पुष्टि", "{name} ने आपके सुझाए समय की पुष्टि की।", "आपके सुझाए मिलने के समय की पुष्टि हो गई।"),
@@ -196,7 +196,7 @@ object NotificationsStringsTa : NotificationsStrings {
     override val minutesAgo = "{n} நிமிடங்களுக்கு முன்"
     override val hoursAgo = "{n} மணிநேரத்துக்கு முன்"
     override val previewCandidate = "சுயவிவரத்தைப் பார்க்கத் தட்டவும்."
-    override val previewRequestFrom = "யாரோ உங்களுக்குக் கோரிக்கை அனுப்பியுள்ளனர் -- கோரிக்கைகளைப் பார்க்கவும்."
+    override val previewRequestFrom = "யாரோ உங்களுக்குக் கோரிக்கை அனுப்பியுள்ளனர் – கோரிக்கைகளைப் பார்க்கவும்."
     override val previewThread = "விவரங்களைப் பார்க்க உங்கள் பொருத்தத்தைத் திறக்கவும்."
     override val previewProspect = "விவரங்களைப் பார்க்கத் திறக்கவும்."
     override val previewViewerNamed = "{name} உங்கள் சுயவிவரத்தின் ஒரு பகிர்வு இணைப்பைத் திறந்தார்."
@@ -213,7 +213,7 @@ object NotificationsStringsTa : NotificationsStrings {
     override val ctaViewShareLinks = "பகிர்வு இணைப்புகளைப் பார்க்கவும்"
     override val ctaViewProfile = "சுயவிவரத்தைப் பார்க்கவும்"
     override val extraTypes = mapOf(
-        "calls_unlocked" to listOf("அழைப்பு திறக்கப்பட்டது", "நீங்களும் {name}-உம் சந்தித்ததை உறுதிசெய்தீர்கள் -- அழைப்பு இப்போது திறந்துள்ளது.", "நீங்கள் இருவரும் சந்தித்ததை உறுதிசெய்தீர்கள் -- அழைப்பு இப்போது திறந்துள்ளது."),
+        "calls_unlocked" to listOf("அழைப்பு திறக்கப்பட்டது", "நீங்களும் {name}-உம் சந்தித்ததை உறுதிசெய்தீர்கள் – அழைப்பு இப்போது திறந்துள்ளது.", "நீங்கள் இருவரும் சந்தித்ததை உறுதிசெய்தீர்கள் – அழைப்பு இப்போது திறந்துள்ளது."),
         "horoscope_signoff_complete" to listOf("ஜாதகம் ஒப்புதல்", "நீங்களும் {name}-உம் ஜாதகப் பொருத்தத்தை ஒப்புக்கொண்டீர்கள்.", "நீங்கள் இருவரும் ஜாதகப் பொருத்தத்தை ஒப்புக்கொண்டீர்கள்."),
         "family_meeting_proposed" to listOf("சந்திப்பு முன்மொழிவு", "{name} சந்திக்க ஒரு நேரத்தை முன்மொழிந்தார்.", "சந்திக்க ஒரு நேரம் முன்மொழியப்பட்டுள்ளது."),
         "family_meeting_confirmed" to listOf("சந்திப்பு உறுதி", "{name} நீங்கள் முன்மொழிந்த நேரத்தை உறுதிசெய்தார்.", "நீங்கள் முன்மொழிந்த சந்திப்பு நேரம் உறுதிசெய்யப்பட்டது."),

@@ -32,7 +32,7 @@ object IdentityVerificationStringsEn : IdentityVerificationStrings {
     override val loadError = "Couldn't load your verification status."
 
     override val statusPending = "PENDING REVIEW"
-    override val pendingNote = "Submitted -- an admin will review this shortly."
+    override val pendingNote = "Submitted – an admin will review this shortly."
     override val statusApproved = "VERIFIED"
     override val approvedNote = "This profile now shows a Verified badge."
     override fun rejectedWithReason(reason: String) = "Not approved: $reason"
@@ -49,7 +49,7 @@ object IdentityVerificationStringsEn : IdentityVerificationStrings {
     override val changePhoto = "Change photo"
     override val submit = "Submit for review"
     override val submitting = "Submitting…"
-    override val submitError = "Couldn't submit that -- try again."
+    override val submitError = "Couldn't submit that – try again."
     override val back = "Back"
 }
 
@@ -58,7 +58,7 @@ object IdentityVerificationStringsHi : IdentityVerificationStrings {
     override val loadError = "आपकी सत्यापन स्थिति लोड नहीं हो सकी।"
 
     override val statusPending = "समीक्षा लंबित"
-    override val pendingNote = "भेज दिया गया -- एक एडमिन जल्द ही इसकी समीक्षा करेगा।"
+    override val pendingNote = "भेज दिया गया – एक एडमिन जल्द ही इसकी समीक्षा करेगा।"
     override val statusApproved = "सत्यापित"
     override val approvedNote = "यह प्रोफ़ाइल अब सत्यापित बैज दिखाती है।"
     override fun rejectedWithReason(reason: String) = "स्वीकृत नहीं: $reason"
@@ -75,7 +75,7 @@ object IdentityVerificationStringsHi : IdentityVerificationStrings {
     override val changePhoto = "फ़ोटो बदलें"
     override val submit = "समीक्षा के लिए भेजें"
     override val submitting = "भेजा जा रहा है…"
-    override val submitError = "वह भेजा नहीं जा सका -- फिर प्रयास करें।"
+    override val submitError = "वह भेजा नहीं जा सका – फिर प्रयास करें।"
     override val back = "वापस"
 }
 
@@ -84,7 +84,7 @@ object IdentityVerificationStringsTa : IdentityVerificationStrings {
     override val loadError = "உங்கள் சரிபார்ப்பு நிலையை ஏற்ற முடியவில்லை."
 
     override val statusPending = "மதிப்பாய்வு நிலுவையில்"
-    override val pendingNote = "சமர்ப்பிக்கப்பட்டது -- ஒரு நிர்வாகி விரைவில் இதை மதிப்பாய்வு செய்வார்."
+    override val pendingNote = "சமர்ப்பிக்கப்பட்டது – ஒரு நிர்வாகி விரைவில் இதை மதிப்பாய்வு செய்வார்."
     override val statusApproved = "சரிபார்க்கப்பட்டது"
     override val approvedNote = "இந்த சுயவிவரம் இப்போது சரிபார்க்கப்பட்ட பேட்ஜைக் காட்டுகிறது."
     override fun rejectedWithReason(reason: String) = "ஒப்புதல் இல்லை: $reason"
@@ -101,6 +101,6 @@ object IdentityVerificationStringsTa : IdentityVerificationStrings {
     override val changePhoto = "புகைப்படத்தை மாற்று"
     override val submit = "மதிப்பாய்வுக்கு சமர்ப்பிக்கவும்"
     override val submitting = "சமர்ப்பிக்கிறது…"
-    override val submitError = "அது சமர்ப்பிக்கப்படவில்லை -- மீண்டும் முயற்சிக்கவும்."
+    override val submitError = "அது சமர்ப்பிக்கப்படவில்லை – மீண்டும் முயற்சிக்கவும்."
     override val back = "பின்செல்"
 }

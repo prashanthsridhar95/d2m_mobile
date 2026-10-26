@@ -103,7 +103,7 @@ object MatchesStringsEn : MatchesStrings {
     override fun themWantsToConfirm(name: String) = "$name wants to confirm your union."
     override val confirmUnion = "Confirm Union"
     override val unionConfirmedTitle = "Union confirmed 🎉"
-    override val unionConfirmedBody = "Share your story in the Success Gallery? Anonymized (5-year age buckets only) -- requires both sides to opt in, and you can revoke any time."
+    override val unionConfirmedBody = "Share your story in the Success Gallery? Anonymized (5-year age buckets only) – requires both sides to opt in, and you can revoke any time."
     override val optInSuccessGallery = "Opt in to the Success Gallery"
     override val viewSuccessGallery = "View the Success Gallery"
     override val messageDeleted = "This message was deleted"
@@ -141,7 +141,7 @@ object MatchesStringsEn : MatchesStrings {
 
 object MatchesStringsHi : MatchesStrings {
     override val yesterday = "कल"
-    override val pageTitle = "Matches"
+    override val pageTitle = "मैच"
     override val tabMatches = "मैच"
     override val tabReceived = "प्राप्त"
     override val tabSent = "भेजे गए"
@@ -172,7 +172,7 @@ object MatchesStringsHi : MatchesStrings {
     override fun themWantsToConfirm(name: String) = "$name विवाह की पुष्टि करना चाहते हैं।"
     override val confirmUnion = "विवाह की पुष्टि करें"
     override val unionConfirmedTitle = "विवाह की पुष्टि हो गई 🎉"
-    override val unionConfirmedBody = "Success Gallery में अपनी कहानी साझा करें? गुमनाम (केवल 5-वर्ष की आयु सीमा) -- दोनों पक्षों की सहमति ज़रूरी है, और आप कभी भी इसे वापस ले सकते हैं।"
+    override val unionConfirmedBody = "Success Gallery में अपनी कहानी साझा करें? गुमनाम (केवल 5-वर्ष की आयु सीमा) – दोनों पक्षों की सहमति ज़रूरी है, और आप कभी भी इसे वापस ले सकते हैं।"
     override val optInSuccessGallery = "Success Gallery में शामिल हों"
     override val viewSuccessGallery = "Success Gallery देखें"
     override val messageDeleted = "यह संदेश हटा दिया गया था"
@@ -210,7 +210,7 @@ object MatchesStringsHi : MatchesStrings {
 
 object MatchesStringsTa : MatchesStrings {
     override val yesterday = "நேற்று"
-    override val pageTitle = "Matches"
+    override val pageTitle = "பொருத்தங்கள்"
     override val tabMatches = "மேட்சஸ்"
     override val tabReceived = "பெறப்பட்டவை"
     override val tabSent = "அனுப்பப்பட்டவை"
@@ -241,7 +241,7 @@ object MatchesStringsTa : MatchesStrings {
     override fun themWantsToConfirm(name: String) = "$name திருமணத்தை உறுதிப்படுத்த விரும்புகிறார்."
     override val confirmUnion = "திருமணத்தை உறுதிப்படுத்து"
     override val unionConfirmedTitle = "திருமணம் உறுதிசெய்யப்பட்டது 🎉"
-    override val unionConfirmedBody = "Success Gallery-இல் உங்கள் கதையைப் பகிரவா? அநாமதேயமானது (5-வருட வயது குழுக்கள் மட்டும்) -- இரு தரப்பினரும் ஒப்புக்கொள்ள வேண்டும், எப்போது வேண்டுமானாலும் திரும்பப் பெறலாம்."
+    override val unionConfirmedBody = "Success Gallery-இல் உங்கள் கதையைப் பகிரவா? அநாமதேயமானது (5-வருட வயது குழுக்கள் மட்டும்) – இரு தரப்பினரும் ஒப்புக்கொள்ள வேண்டும், எப்போது வேண்டுமானாலும் திரும்பப் பெறலாம்."
     override val optInSuccessGallery = "Success Gallery-இல் சேரவும்"
     override val viewSuccessGallery = "Success Gallery-ஐப் பார்க்கவும்"
     override val messageDeleted = "இந்தச் செய்தி நீக்கப்பட்டது"

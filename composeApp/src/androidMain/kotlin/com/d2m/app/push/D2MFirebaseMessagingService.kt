@@ -201,7 +201,7 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                         .onFailure { e -> println("D2MFirebaseMessagingService: decryptAndPersistIncoming failed for $messageId: ${e.message ?: e::class.simpleName}") }
                         .getOrNull()
                 } else {
-                    println("D2MFirebaseMessagingService: chat_message push for $sender missing ciphertext fields (older server build?) -- falling back to generic body")
+                    println("D2MFirebaseMessagingService: chat_message push for $sender missing ciphertext fields (older server build?) – falling back to generic body")
                     null
                 }
                 val preview = when (decrypted) {
@@ -287,7 +287,7 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                     runCatching { messagingRepo.decryptAndPersistIncoming(envelope) }
                         .onFailure { e -> println("D2MFirebaseMessagingService: incoming_call decrypt failed for $messageId: ${e.message ?: e::class.simpleName}") }
                 } else {
-                    println("D2MFirebaseMessagingService: incoming_call push for $sender missing ciphertext fields (SDP too large for FCM, older server build, or the invite already went stale) -- waiting on the live-socket drain instead")
+                    println("D2MFirebaseMessagingService: incoming_call push for $sender missing ciphertext fields (SDP too large for FCM, older server build, or the invite already went stale) – waiting on the live-socket drain instead")
                 }
 
                 // Whichever path actually got there first -- the direct

@@ -78,7 +78,7 @@ class MessagingWsClient {
                                     val event = runCatching {
                                         messagingProtocolJson.decodeFromString(ServerToClient.serializer(), text)
                                     }.getOrElse { e ->
-                                        println("MessagingWsClient: failed to decode incoming frame: ${e.message ?: e::class.simpleName} -- raw=$text")
+                                        println("MessagingWsClient: failed to decode incoming frame: ${e.message ?: e::class.simpleName} – raw=$text")
                                         null
                                     }
                                     if (event != null) {
@@ -108,13 +108,13 @@ class MessagingWsClient {
     /** Returns false (never throws) if there's no live session to send on, or if the send itself fails -- see [isConnected]'s doc comment for why callers that care about delivery (MessagingRepository's send paths) need to check this instead of assuming a lack of exception means it went out. */
     suspend fun send(event: ClientToServer): Boolean {
         val s = session ?: run {
-            println("MessagingWsClient: send(${event::class.simpleName}) dropped -- not connected")
+            println("MessagingWsClient: send(${event::class.simpleName}) dropped – not connected")
             return false
         }
         val text = messagingProtocolJson.encodeToString(ClientToServer.serializer(), event)
         val result = runCatching { s.send(Frame.Text(text)) }
         if (result.isFailure) {
-            println("MessagingWsClient: send(${event::class.simpleName}) failed -- ${result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.let { it::class.simpleName }}")
+            println("MessagingWsClient: send(${event::class.simpleName}) failed – ${result.exceptionOrNull()?.message ?: result.exceptionOrNull()?.let { it::class.simpleName }}")
         }
         return result.isSuccess
     }
