@@ -25,7 +25,8 @@ internal fun notificationTitle(type: String, s: NotificationsStrings): String = 
     "share_link_viewed" -> s.typeShareLinkViewed
     "mutual_sponsor_interest" -> s.typeMutualSponsorInterest
     "shortlisted_profile_updated" -> s.typeShortlistedProfileUpdated
-    else -> type
+    // A type this app has no copy for yet (e.g. calls_unlocked): a readable title, never the raw key.
+    else -> type.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
 }
 
 private fun NotificationOut.str(key: String): String? =
@@ -46,7 +47,8 @@ internal fun notificationBody(n: NotificationOut, s: NotificationsStrings): Stri
         n.str("viewer_name")?.let { s.previewViewerNamed.replace("{name}", it) } ?: s.previewViewerAnonymous
     "mutual_sponsor_interest" -> if (n.str("target_primary_id") != null) s.previewMutualSponsorInterest else ""
     "shortlisted_profile_updated" -> if (n.str("candidate_id") != null) s.previewShortlistedProfileUpdated else ""
-    else -> n.payload?.takeIf { it.isNotEmpty() }?.toString() ?: ""
+    // Unknown type: never dump the raw payload on screen. A counterpart name is the one safe, readable detail.
+    else -> n.str("counterpart_name") ?: ""
 }
 
 internal enum class CtaKind { ViewMatch, ViewRequest, Respond, ViewConversation, ViewDetails, ViewSuggestion, ViewTheirProfile, ViewShareLinks, ViewProfile }

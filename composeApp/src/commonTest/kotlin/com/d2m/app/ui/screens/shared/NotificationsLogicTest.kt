@@ -20,7 +20,10 @@ class NotificationsLogicTest {
     @Test fun titlesMatchWeb() {
         assertEquals("Serious Mode ended", notificationTitle("serious_mode_revoked", s))
         assertEquals("Shortlist update", notificationTitle("shortlisted_profile_updated", s))
-        assertEquals("weird", notificationTitle("weird", s))
+        // unknown types read as plain text, never the raw key or payload
+        assertEquals("Calls unlocked", notificationTitle("calls_unlocked", s))
+        assertEquals("Ashwin", notificationBody(n("calls_unlocked", "counterpart_name" to "Ashwin", "thread_id" to "t"), s))
+        assertEquals("", notificationBody(n("calls_unlocked", "thread_id" to "t"), s))
     }
 
     @Test fun bodiesTruncateIdsLikeWeb() {
