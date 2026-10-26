@@ -276,7 +276,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     val scroll = rememberScrollState()
     val barDensity = androidx.compose.ui.platform.LocalDensity.current.density
     // Flips once, when the solid top bar has taken over from the photo -- the floating buttons restyle for it.
-    val barShown by remember { androidx.compose.runtime.derivedStateOf { scroll.value > 420f * barDensity } }
+    val barShown by remember { androidx.compose.runtime.derivedStateOf { scroll.value > 250f * barDensity } }
     val haptic = LocalHapticFeedback.current
     val shared = LocalStrings.current.sharedComponents
 
@@ -464,7 +464,9 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                     .height(topInset + 56.dp)
                     .graphicsLayer {
                         val d = density.density
-                        alpha = ((scroll.value - 360f * d) / (120f * d)).coerceIn(0f, 1f)
+                        // Solid by ~290dp of scroll: that is where the photo's ID pill and name reach the bar, so they slide under it
+                        // instead of colliding with the back/share buttons.
+                        alpha = ((scroll.value - 190f * d) / (100f * d)).coerceIn(0f, 1f)
                     }
                     .background(MaterialTheme.colorScheme.surface),
             ) {
