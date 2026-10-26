@@ -6,6 +6,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.d2m.app.ui.theme.d2m
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,6 +54,7 @@ import org.koin.compose.koinInject
  * Submits createSponsor() on the last step, then hands off to
  * HandoffScreen via OnboardingResultHolder (see that file's doc comment).
  */
+@Serializable
 private data class WizardForm(
     val yourName: String = "",
     val relationship: String = "Mother",
@@ -67,6 +78,16 @@ private data class WizardForm(
     val rankedCommunityList: List<String> = emptyList(),
 )
 
+/**
+ * Draft persistence: rememberSaveable, so rotation and process death keep a half-filled wizard but a cold start
+ * does not (web uses sessionStorage for the same reason). Birth date and time are blanked before saving, so the
+ * most sensitive fields never sit in saved instance state -- the user re-enters those two after a process kill.
+ */
+private val WizardFormSaver: Saver<WizardForm, String> = Saver(
+    save = { Json.encodeToString(WizardForm.serializer(), it.copy(childDob = "", childTob = "")) },
+    restore = { runCatching { Json.decodeFromString(WizardForm.serializer(), it) }.getOrNull() },
+)
+
 @Composable
 fun OnboardingWizardScreen(onComplete: () -> Unit) {
     val identityRepo: IdentityRepository = koinInject()
@@ -74,8 +95,8 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
     val geocodingApi = koinInject<com.d2m.app.data.network.GeocodingApi>()
     val scope = rememberCoroutineScope()
 
-    var step by remember { mutableStateOf(0) }
-    var form by remember { mutableStateOf(WizardForm()) }
+    var step by rememberSaveable { mutableStateOf(0) }
+    var form by rememberSaveable(stateSaver = WizardFormSaver) { mutableStateOf(WizardForm()) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val totalSteps = 5
@@ -93,7 +114,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
     fun update(patch: WizardForm.() -> WizardForm) { form = form.patch() }
 
     D2MTheme(flow = D2MFlow.PARENT) {
-        Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+        Column(modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 20.dp).padding(top = 20.dp)) {
             /*
              * The comps' named horizontal stepper, replacing a progress
              * bar plus a "Question 3 of 5" caption -- see Stepper.kt for
@@ -103,12 +124,20 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
              * depends on it).
              */
             PageTitle(strings.setUpProfile)
+            val stepNames = listOf(strings.stepAboutYou, strings.stepAboutThem, strings.stepBirthDetails, strings.stepPreferences, strings.stepReview)
+            val progressText = strings.stepProgress(step + 1, totalSteps, stepNames[step])
             D2MStepper(
-                steps = listOf(strings.stepAboutYou, strings.stepAboutThem, strings.stepBirthDetails, strings.stepPreferences, strings.stepReview),
+                steps = stepNames,
                 activeIndex = step,
                 onStepClick = { step = it },
                 modifier = Modifier.padding(top = 14.dp),
+                progressDescription = progressText,
             )
+            D2MStepProgressBar((step + 1).toFloat() / totalSteps, Modifier.padding(top = 10.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(progressText, style = MaterialTheme.typography.labelMedium, color = d2m.meta, modifier = Modifier.clearAndSetSemantics {})
+                Text(strings.draftSaved, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+            }
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (step) {
@@ -168,15 +197,21 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            // Sticky action bar: outside the scroller, lifted by the keyboard (imePadding above) and clear of the nav bar.
+            Row(
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (step > 0) {
-                    D2MButton(strings.back, variant = D2MButtonVariant.OUTLINE, onClick = { step -= 1 })
+                    D2MButton(strings.back, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.heightIn(min = 48.dp), onClick = { step -= 1 })
                 } else {
                     androidx.compose.foundation.layout.Spacer(Modifier)
                 }
                 D2MButton(
                     text = if (step < totalSteps - 1) strings.continueAction else if (submitting) strings.saving else strings.confirmProfile,
                     enabled = !submitting,
+                    modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         if (step < totalSteps - 1) {
                             step += 1
@@ -215,6 +250,9 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                                         childName = form.childName,
                                         inviteExpiresAt = response.inviteExpiresAt,
                                     )
+                                    // Success: drop the draft so a second visit starts clean.
+                                    form = WizardForm()
+                                    step = 0
                                     onComplete()
                                 } catch (e: Exception) {
                                     error = com.d2m.app.data.network.friendlyError(e, strings.errCouldntSaveProfile)
