@@ -398,55 +398,57 @@ private fun CasualCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun IconBubble(icon: String, label: String, value: String?, match: Boolean? = null) {
     if (value == null) return
-    // Tapping the pill says which field it is ("Fitness routine"), like the web's hover bubble.
-    TapTip(text = label, minTarget = 36.dp) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        modifier = Modifier
-            .background(d2m.accentSoft, RoundedCornerShape(999.dp))
-            .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
-    ) {
-        Text(icon, fontSize = 13.sp)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
-        MatchIndicator(match, value)
+    val palette = LocalD2MStatusPalette.current
+    val strings = LocalStrings.current.sharedComponents
+    // Tapping the pill explains it, like the web's hover bubble: the field's name, and -- when it was compared with the
+    // viewer's own answer -- the verdict, in the verdict's own green/red ("Sleep schedule: you both picked the same answer").
+    val tip = when (match) {
+        true -> strings.matchTooltipYesShared(label)
+        false -> strings.matchTooltipNoShared(label)
+        null -> label
     }
+    TapTip(
+        text = tip,
+        container = when (match) { true -> palette.success.fg; false -> palette.danger.fg; null -> null },
+        content = if (match != null) MaterialTheme.colorScheme.background else null,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier
+                .background(d2m.accentSoft, RoundedCornerShape(999.dp))
+                .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+        ) {
+            Text(icon, fontSize = 13.sp)
+            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
+            MatchMark(match)
+        }
     }
 }
 
-// Small green-check/red-X circle, tap/hover-tooltip explaining the
-// verdict -- same TooltipBox/PlainTooltip, soft tinted bg + colored icon
-// treatment as FeaturedBadge/VerifiedBadge above, mirrors d2m_web's
-// MatchIndicator.jsx (variant="shared": there's no saved preference for
-// any About Me field, so the copy is "you both picked the same answer,"
-// not "matches your saved preference").
+// Small green-check/red-X circle inside a pill -- a quiet mark only (soft tinted bg + coloured icon, as on web); the pill
+// it sits in is what you tap, so the mark itself never has to be a tiny target or make the pill bigger.
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun MatchIndicator(match: Boolean?, label: String, size: Dp = 13.dp) {
+private fun MatchMark(match: Boolean?, size: Dp = 13.dp) {
     if (match == null) return
     val palette = LocalD2MStatusPalette.current
     val circleColor = if (match) palette.success.bg else palette.danger.bg
     val strokeColor = if (match) palette.success.fg else palette.danger.fg
-    val strings = LocalStrings.current.sharedComponents
-    val tooltipText = if (match) strings.matchTooltipYesShared(label) else strings.matchTooltipNoShared(label)
-    // Bubble in the verdict's own colour (solid fg with the page colour as text), like the web's colour-coded tooltip.
-    TapTip(text = tooltipText, container = strokeColor, content = MaterialTheme.colorScheme.background, minTarget = 40.dp) {
-        Canvas(modifier = Modifier.size(size)) {
-            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
-            val w = this.size.width
-            val h = this.size.height
-            val strokeWidth = this.size.minDimension * 0.11f
-            if (match) {
-                val path = Path().apply {
-                    moveTo(w * 0.292f, h * 0.5125f)
-                    lineTo(w * 0.425f, h * 0.6458f)
-                    lineTo(w * 0.708f, h * 0.3583f)
-                }
-                drawPath(path, color = strokeColor, style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            } else {
-                drawLine(strokeColor, Offset(w * 0.3f, h * 0.3f), Offset(w * 0.7f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
-                drawLine(strokeColor, Offset(w * 0.7f, h * 0.3f), Offset(w * 0.3f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+    Canvas(modifier = Modifier.size(size)) {
+        drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+        val w = this.size.width
+        val h = this.size.height
+        val strokeWidth = this.size.minDimension * 0.11f
+        if (match) {
+            val path = Path().apply {
+                moveTo(w * 0.292f, h * 0.5125f)
+                lineTo(w * 0.425f, h * 0.6458f)
+                lineTo(w * 0.708f, h * 0.3583f)
             }
+            drawPath(path, color = strokeColor, style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        } else {
+            drawLine(strokeColor, Offset(w * 0.3f, h * 0.3f), Offset(w * 0.7f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            drawLine(strokeColor, Offset(w * 0.7f, h * 0.3f), Offset(w * 0.3f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
         }
     }
 }
