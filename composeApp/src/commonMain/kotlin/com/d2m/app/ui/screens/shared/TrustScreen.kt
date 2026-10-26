@@ -17,7 +17,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -43,6 +46,7 @@ import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
 import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.PageTitle
@@ -127,7 +131,8 @@ fun TrustScreen() {
     val strings = LocalStrings.current.trust
 
     var notClaimed by remember { mutableStateOf(false) }
-    var tabIndex by remember { mutableStateOf(0) }
+    // null = the grouped settings list; otherwise the open detail pane (index into the five sections).
+    var tabIndex by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // Same childPrimaryId resolution as ShareLinksScreen.kt -- see that
     // file's doc comment. Vouches/endorsements are profile-scoped
@@ -149,27 +154,40 @@ fun TrustScreen() {
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            PageTitle(strings.pageTitle)
-            Text(
-                strings.introBody,
-                style = MaterialTheme.typography.bodySmall,
-                color = mutedText(0.55f),
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-            )
-
-            D2MTabs(
-                titles = listOf(strings.tabVouches, strings.tabConnections, strings.tabEndorsements, strings.tabRecommendations, strings.tabReferences),
-                selectedIndex = tabIndex,
-                onSelect = { tabIndex = it },
-            )
-
-            Column(modifier = Modifier.padding(top = 16.dp)) {
-                when (tabIndex) {
-                    0 -> VouchesSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
-                    1 -> ConnectionsSection(trustRepo, stepUpController)
-                    2 -> EndorsementsSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
-                    3 -> RecommendationsSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
-                    else -> ExternalReferencesSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
+            val tabLabels = listOf(strings.tabVouches, strings.tabConnections, strings.tabEndorsements, strings.tabRecommendations, strings.tabReferences)
+            val open = tabIndex
+            BackHandlerCompat(enabled = open != null) { tabIndex = null }
+            if (open == null) {
+                PageTitle(strings.pageTitle)
+                Text(
+                    strings.introBody,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedText(0.55f),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                )
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TrustNavList(
+                        groups = listOf(
+                            TrustNavGroup(
+                                strings.navGroupTrustSharing,
+                                tabLabels.mapIndexed { i, l -> TrustNavItem(i.toString(), l) },
+                            ),
+                        ),
+                        searchLabel = strings.searchSettings,
+                        noMatch = strings.searchSettingsNone,
+                        onSelect = { tabIndex = it.toInt() },
+                    )
+                }
+            } else {
+                TrustBackRow(strings.backToAllWith(tabLabels[open])) { tabIndex = null }
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    when (open) {
+                        0 -> VouchesSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
+                        1 -> ConnectionsSection(trustRepo, stepUpController)
+                        2 -> EndorsementsSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
+                        3 -> RecommendationsSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
+                        else -> ExternalReferencesSection(primaryId, notClaimed, identity.role, trustRepo, stepUpController)
+                    }
                 }
             }
         }

@@ -115,6 +115,7 @@ fun SettingsScreen(
     var muted by remember { mutableStateOf(false) }
     var frequency by remember { mutableStateOf("immediate") }
     var hideNameOverride by remember { mutableStateOf(false) }
+    var primaryGender by remember { mutableStateOf("") }
     var primaryVerified by remember { mutableStateOf(false) }
     var verificationStatus by remember { mutableStateOf<String?>(null) }
     var languageSheet by remember { mutableStateOf(false) }
@@ -136,6 +137,7 @@ fun SettingsScreen(
         if (linkedPrimaryId == null) return@LaunchedEffect
         runCatching { identityRepo.getPrimaryProfile(linkedPrimaryId) }.onSuccess {
             hideNameOverride = it.hideNameOverride
+            primaryGender = it.gender
             primaryVerified = it.isVerified
         }
         verificationStatus = runCatching { identityRepo.getIdentityVerification(linkedPrimaryId)?.status }.getOrNull()
@@ -208,7 +210,7 @@ fun SettingsScreen(
                     onClick = { languageSheet = true },
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(locale.nativeName, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+                            Text(locale.nativeName, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = mutedText(0.45f))
                         }
                     },
@@ -228,7 +230,8 @@ fun SettingsScreen(
                 )
                 // "Hide name": a name auto-masks until a match exists, then unmasks; this
                 // is the manual override that keeps it masked even after a match.
-                if (linkedPrimaryId != null) {
+                // Same gate as web: the child's own control, shown only for a female profile.
+                if (linkedPrimaryId != null && identity.role == D2MRole.CHILD && primaryGender.equals("female", ignoreCase = true)) {
                     SettingsDivider()
                     SettingsSwitchRow(
                         icon = Icons.Filled.VisibilityOff,
