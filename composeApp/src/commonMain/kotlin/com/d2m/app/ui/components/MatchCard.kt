@@ -634,7 +634,8 @@ fun ProfileRow(
                         itemVerticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (score != null) D2MLevelPill(overallRating(score))
-                        facts.forEach { f -> Text(f, style = MaterialTheme.typography.bodySmall, color = d2m.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        // One dotted run, so it wraps as a sentence instead of dropping single words onto separate lines.
+                        if (facts.isNotEmpty()) Text(facts.joinToString(" \u00B7 "), style = MaterialTheme.typography.bodySmall, color = d2m.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

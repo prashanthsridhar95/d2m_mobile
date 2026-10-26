@@ -320,7 +320,12 @@ fun App() {
                 // this Scaffold's own chrome, and each screen's header --
                 // stays completely still.
                 contentWindowInsets = WindowInsets.systemBars,
-                snackbarHost = { D2MSnackbarHost(snackbarState) },
+                snackbarHost = {
+                    // On a profile the pinned action bar (~100dp) sits at the bottom: lift the toast above it so an
+                    // Undo toast never covers the very buttons beside it.
+                    val liftForActionBar = currentRoute == Routes.PROFILE_DETAIL
+                    D2MSnackbarHost(snackbarState, Modifier.padding(bottom = if (liftForActionBar) 96.dp else 0.dp))
+                },
                 bottomBar = {
                     if (showBottomBar && tabs != null) {
                         D2MShellBottomBar(
