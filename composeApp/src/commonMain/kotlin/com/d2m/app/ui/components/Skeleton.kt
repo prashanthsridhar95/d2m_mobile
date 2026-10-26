@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.d2m.app.platform.rememberReduceMotion
+import com.d2m.app.ui.strings.LocalStrings
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
@@ -47,8 +52,9 @@ fun D2MSkeleton(
     height: Dp = 16.dp,
     radius: Dp = D2MRadius.md,
 ) {
-    val transition = rememberInfiniteTransition(label = "skeleton")
-    val progress = transition.animateFloat(
+    val reduceMotion = rememberReduceMotion()
+    // Reduce motion: a still, flat tone -- no infinite transition is created at all.
+    val progress = if (reduceMotion) null else rememberInfiniteTransition(label = "skeleton").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart),
@@ -63,8 +69,11 @@ fun D2MSkeleton(
     Box(
         modifier = m
             .clip(RoundedCornerShape(radius))
+            // Individual bars are decoration: the loading container announces one "Loading" node instead.
+            .clearAndSetSemantics {}
             .drawBehind {
                 drawRect(base)
+                if (progress == null) return@drawBehind
                 val w = size.width
                 val x = -w + progress.value * 3f * w
                 drawRect(
@@ -85,6 +94,11 @@ fun D2MSkeleton(
  */
 @Composable
 fun SkeletonListRow(modifier: Modifier = Modifier, avatarSize: Dp = 56.dp, circle: Boolean = true) {
+    SkeletonListRowBody(modifier.loadingSemantics(), avatarSize, circle)
+}
+
+@Composable
+private fun SkeletonListRowBody(modifier: Modifier, avatarSize: Dp, circle: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -101,15 +115,15 @@ fun SkeletonListRow(modifier: Modifier = Modifier, avatarSize: Dp = 56.dp, circl
 
 @Composable
 fun SkeletonList(count: Int = 6, modifier: Modifier = Modifier, avatarSize: Dp = 56.dp, circle: Boolean = true) {
-    Column(modifier = modifier) {
-        repeat(count) { SkeletonListRow(avatarSize = avatarSize, circle = circle) }
+    Column(modifier = modifier.loadingSemantics()) {
+        repeat(count) { SkeletonListRowBody(Modifier, avatarSize, circle) }
     }
 }
 
 /** Mirrors the BioDataSkeleton pattern: label+field pairs grouped under section headings, previewing the real form's shape. */
 @Composable
 fun FieldSkeleton(modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
+    Column(modifier = modifier.loadingSemantics()) {
         D2MSkeleton(width = 90.dp, height = 9.dp)
         androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
         D2MSkeleton(height = 46.dp)
@@ -118,7 +132,7 @@ fun FieldSkeleton(modifier: Modifier = Modifier) {
 
 @Composable
 fun CardSkeletonRow(count: Int = 3) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.loadingSemantics()) {
         repeat(count) {
             Column {
                 D2MSkeleton(width = 120.dp, height = 120.dp, radius = D2MRadius.lg)
@@ -127,4 +141,11 @@ fun CardSkeletonRow(count: Int = 3) {
             }
         }
     }
+}
+
+/** One "Loading" node for a whole skeleton group; the bars inside are hidden from accessibility. */
+@Composable
+internal fun Modifier.loadingSemantics(): Modifier {
+    val label = LocalStrings.current.sharedComponents.loadingA11y
+    return this.semantics(mergeDescendants = true) { contentDescription = label }
 }

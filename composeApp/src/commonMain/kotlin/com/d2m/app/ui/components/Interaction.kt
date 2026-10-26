@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -27,8 +28,9 @@ fun Modifier.pressScale(
     pressedScale: Float = 0.96f,
 ): Modifier {
     val pressed = interactionSource.collectIsPressedAsState()
+    val reduceMotion = rememberReduceMotion()
     val scale: State<Float> = animateFloatAsState(
-        targetValue = if (pressed.value) pressedScale else 1f,
+        targetValue = if (pressed.value && !reduceMotion) pressedScale else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "pressScale",
     )

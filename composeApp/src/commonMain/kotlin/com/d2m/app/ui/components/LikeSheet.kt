@@ -1,5 +1,7 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +81,7 @@ fun LikeSheet(
         contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).imePadding()) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 14.dp)

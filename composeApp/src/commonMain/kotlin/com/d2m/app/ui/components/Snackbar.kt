@@ -1,5 +1,10 @@
 package com.d2m.app.ui.components
 
+import com.d2m.app.platform.rememberReduceMotion
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -83,6 +88,7 @@ fun rememberD2MSnackbarState(): D2MSnackbarState = remember { D2MSnackbarState()
 fun D2MSnackbarHost(state: D2MSnackbarState, modifier: Modifier = Modifier) {
     // Keep the last snack around while the exit animation plays.
     var shown by remember { mutableStateOf<D2MSnack?>(null) }
+    val reduceMotion = rememberReduceMotion()
     val current = state.current
     if (current != null && current !== shown) shown = current
 
@@ -94,8 +100,8 @@ fun D2MSnackbarHost(state: D2MSnackbarState, modifier: Modifier = Modifier) {
 
     AnimatedVisibility(
         visible = current != null,
-        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+        enter = if (reduceMotion) fadeIn() else slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = if (reduceMotion) fadeOut() else slideOutVertically(targetOffsetY = { it }) + fadeOut(),
         modifier = modifier,
     ) {
         val snack = shown
@@ -116,6 +122,10 @@ private fun SnackContent(snack: D2MSnack, onDismiss: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
+            // TalkBack / VoiceOver announce the toast when it appears (errors interrupt, the rest wait their turn).
+            .semantics(mergeDescendants = true) {
+                liveRegion = if (snack.kind == D2MSnackKind.Error) LiveRegionMode.Assertive else LiveRegionMode.Polite
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .fillMaxWidth()
             .background(d2m.panelBg, shape)
@@ -123,7 +133,7 @@ private fun SnackContent(snack: D2MSnack, onDismiss: () -> Unit) {
             .padding(start = 16.dp, end = 8.dp)
             .padding(vertical = 4.dp),
     ) {
-        Box(Modifier.padding(vertical = 10.dp).background(accent, RoundedCornerShape(2.dp)).padding(horizontal = 2.dp, vertical = 9.dp))
+        Box(Modifier.padding(vertical = 10.dp).background(accent, RoundedCornerShape(2.dp)).padding(horizontal = 2.dp, vertical = 9.dp).clearAndSetSemantics {})
         Text(
             snack.message,
             color = d2m.panelFg,

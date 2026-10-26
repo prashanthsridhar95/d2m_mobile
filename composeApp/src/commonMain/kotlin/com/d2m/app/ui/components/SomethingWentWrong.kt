@@ -1,5 +1,10 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,18 +41,19 @@ import com.d2m.app.ui.theme.d2m
 fun SomethingWentWrong(onRetry: (() -> Unit)?, modifier: Modifier = Modifier) {
     val strings = LocalStrings.current.common
     Column(
-        modifier = modifier.fillMaxWidth().fillMaxHeight().heightIn(min = 420.dp).padding(horizontal = 32.dp, vertical = 32.dp),
+        // Assertive: a whole-screen failure should be announced the moment it replaces the content.
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Assertive }.fillMaxWidth().fillMaxHeight().heightIn(min = 420.dp).padding(horizontal = 32.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        ErrorIllustration(Modifier.size(width = 150.dp, height = 150.dp))
+        ErrorIllustration(Modifier.size(width = 150.dp, height = 150.dp).clearAndSetSemantics {})
         Text(
             strings.errorTitle,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = d2m.textPrimary,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 36.dp),
+            modifier = Modifier.padding(top = 36.dp).semantics { heading() },
         )
         Text(
             strings.errorBody,

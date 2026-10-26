@@ -1,5 +1,9 @@
 package com.d2m.app.ui.screens.child
 
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -227,6 +231,11 @@ fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
                         stampSnooze = strings.stampSnooze,
                         modifier = Modifier.fillMaxSize(),
                         onAcceptGesture = { likeError = null; likeTarget = LikeTarget("profile") },
+                        // Screen-reader alternative to the swipe gestures.
+                        topCardActions = listOf(
+                            CustomAccessibilityAction(strings.likeProfileAction) { likeError = null; likeTarget = LikeTarget("profile"); true },
+                            CustomAccessibilityAction(strings.passFab) { if (!deckState.busy) deckState.swipe(SwipeDirection.Pass); true },
+                        ),
                     ) { card, isTop ->
                         ProfileCardContent(
                             card = card,
@@ -248,7 +257,8 @@ fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
             SnackbarHost(
                 hostState = snackbar,
                 // Top: at the bottom it would cover the card's name block.
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 12.dp),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 12.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
 

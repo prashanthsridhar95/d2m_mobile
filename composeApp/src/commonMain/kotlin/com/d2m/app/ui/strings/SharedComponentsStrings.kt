@@ -69,6 +69,10 @@ interface SharedComponentsStrings {
     val tabAbout: String
     val tabChart: String
     val loading: String
+    val loadingA11y: String
+    val shortlist: String
+    val shortlisted: String
+    val notShortlisted: String
     val noBioDataYet: String
     val noAboutMeYet: String
     val sectionBasicPersonal: String
@@ -170,6 +174,10 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val tabAbout = "About"
     override val tabChart = "Chart"
     override val loading = "Loading…"
+    override val loadingA11y = "Loading"
+    override val shortlist = "Shortlist"
+    override val shortlisted = "Shortlisted"
+    override val notShortlisted = "Not shortlisted"
     override val noBioDataYet = "No bio data on file for this profile yet."
     override val noAboutMeYet = "This profile hasn't filled in About Me yet."
     override val sectionBasicPersonal = "Basic & personal"
@@ -271,6 +279,10 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val tabAbout = "परिचय"
     override val tabChart = "कुंडली"
     override val loading = "लोड हो रहा है…"
+    override val loadingA11y = "लोड हो रहा है"
+    override val shortlist = "शॉर्टलिस्ट"
+    override val shortlisted = "शॉर्टलिस्ट किया गया"
+    override val notShortlisted = "शॉर्टलिस्ट नहीं किया गया"
     override val noBioDataYet = "इस प्रोफ़ाइल के लिए अभी तक कोई बायो डेटा नहीं है।"
     override val noAboutMeYet = "इस प्रोफ़ाइल ने अभी तक मेरे बारे में नहीं भरा है।"
     override val sectionBasicPersonal = "बुनियादी और व्यक्तिगत"
@@ -372,6 +384,10 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val tabAbout = "விவரம்"
     override val tabChart = "ஜாதகம்"
     override val loading = "ஏற்றப்படுகிறது…"
+    override val loadingA11y = "ஏற்றப்படுகிறது"
+    override val shortlist = "ஷார்ட்லிஸ்ட்"
+    override val shortlisted = "ஷார்ட்லிஸ்ட்டில் உள்ளது"
+    override val notShortlisted = "ஷார்ட்லிஸ்ட்டில் இல்லை"
     override val noBioDataYet = "இந்த சுயவிவரத்திற்கு இன்னும் தனிப்பட்ட தகவல் இல்லை."
     override val noAboutMeYet = "இந்த சுயவிவரம் இன்னும் என்னைப் பற்றி நிரப்பவில்லை."
     override val sectionBasicPersonal = "அடிப்படை & தனிப்பட்ட"

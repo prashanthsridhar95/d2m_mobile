@@ -27,6 +27,7 @@ interface DiscoveryStrings {
     val morePhotos: String
     val cdProfileCard: String
     val passFab: String
+    val likeProfileAction: String
     val likeThisPhoto: String
     val likeThisAnswer: String
     val likeProfile: String
@@ -71,6 +72,7 @@ object DiscoveryStringsEn : DiscoveryStrings {
     override val morePhotos = "More photos"
     override val cdProfileCard = "Profile card"
     override val passFab = "Pass for now"
+    override val likeProfileAction = "Like profile"
     override val likeThisPhoto = "Like this photo"
     override val likeThisAnswer = "Like this answer"
     override val likeProfile = "Like their profile"
@@ -115,6 +117,7 @@ object DiscoveryStringsHi : DiscoveryStrings {
     override val morePhotos = "और फ़ोटो"
     override val cdProfileCard = "प्रोफ़ाइल कार्ड"
     override val passFab = "अभी छोड़ें"
+    override val likeProfileAction = "प्रोफ़ाइल पसंद करें"
     override val likeThisPhoto = "यह फ़ोटो पसंद करें"
     override val likeThisAnswer = "यह जवाब पसंद करें"
     override val likeProfile = "प्रोफ़ाइल पसंद करें"
@@ -159,6 +162,7 @@ object DiscoveryStringsTa : DiscoveryStrings {
     override val morePhotos = "மேலும் புகைப்படங்கள்"
     override val cdProfileCard = "சுயவிவர அட்டை"
     override val passFab = "இப்போதைக்கு தவிர்"
+    override val likeProfileAction = "சுயவிவரத்தை விரும்பு"
     override val likeThisPhoto = "இந்தப் புகைப்படத்தை விரும்பு"
     override val likeThisAnswer = "இந்த பதிலை விரும்பு"
     override val likeProfile = "சுயவிவரத்தை விரும்பு"
