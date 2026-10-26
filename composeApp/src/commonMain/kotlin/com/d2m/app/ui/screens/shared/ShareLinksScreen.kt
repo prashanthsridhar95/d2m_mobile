@@ -397,7 +397,8 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Side by side normally; stacked full-width at large system text so neither label is clipped.
+            val buttons: @Composable (Modifier) -> Unit = { mod ->
                 D2MActionButton(
                     text = if (copied) strings.linkCopied else strings.copyLink,
                     leadingIcon = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
@@ -405,7 +406,7 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                     emphasis = D2MActionEmphasis.SECONDARY,
                     done = copied,
                     height = 44.dp,
-                    modifier = Modifier.weight(1f),
+                    modifier = mod,
                 )
                 if (expired || !link.isActive) {
                     D2MActionButton(
@@ -413,10 +414,19 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                         onClick = if (expired) onExtend else onToggle,
                         loading = busy,
                         height = 44.dp,
-                        modifier = Modifier.weight(1f),
+                        modifier = mod,
                     )
                 } else if (busy) {
-                    D2MActionButton(text = "…", onClick = {}, enabled = false, emphasis = D2MActionEmphasis.TERTIARY, height = 44.dp)
+                    D2MActionButton(text = "\u2026", onClick = {}, enabled = false, emphasis = D2MActionEmphasis.TERTIARY, height = 44.dp)
+                }
+            }
+            if (com.d2m.app.ui.theme.isLargeText()) {
+                Column(Modifier.fillMaxWidth().padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    buttons(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    buttons(Modifier.weight(1f))
                 }
             }
         }
