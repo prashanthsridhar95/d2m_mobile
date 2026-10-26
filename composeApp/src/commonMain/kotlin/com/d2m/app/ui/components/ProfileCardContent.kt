@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +58,7 @@ import com.d2m.app.data.model.PhotoOut
 import com.d2m.app.data.model.SuggestionOut
 import com.d2m.app.data.network.ApiClient
 import com.d2m.app.domain.repository.IdentityRepository
+import com.d2m.app.ui.strings.LocalAppLocale
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
@@ -63,6 +66,14 @@ import com.d2m.app.ui.theme.mutedText
 import org.koin.compose.koinInject
 
 private val CardShape = RoundedCornerShape(22.dp)
+
+/** Backend matches likes on this exact English label (taxonomy.WHAT_MATTERS_MOST_LABEL). */
+private const val WHAT_MATTERS_KEY = "What matters most to me"
+
+private fun heightLabel(cm: Int): String {
+    val totalInches = kotlin.math.round(cm / 2.54).toInt()
+    return "${totalInches / 12}'${totalInches % 12}\" ($cm cm)"
+}
 
 /**
  * One whole profile as a single card: full-bleed hero (name / age / city / occupation and the overall rating on a
@@ -74,6 +85,8 @@ private val CardShape = RoundedCornerShape(22.dp)
  *
  * @param topInset status-bar height; the hero is already drawn under it by the caller, this only keeps text clear.
  * @param bottomClearance room kept under the hero text and at the end of the scroll for the floating action bar.
+ * @param readOnly matched-profile mode: the hero is a fixed share of the height (so details are visible and the page
+ *   scrolls normally), there are no hearts and no floating-button clearance.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -85,6 +98,8 @@ fun ProfileCardContent(
     bottomClearance: Dp,
     onLike: (LikeTarget) -> Unit,
     modifier: Modifier = Modifier,
+    /** Matched-profile view: no hearts, no deck sizing / bottom clearance for the floating pass button. */
+    readOnly: Boolean = false,
 ) {
     val strings = LocalStrings.current.discovery
     val sharedStrings = LocalStrings.current.sharedComponents
@@ -98,41 +113,91 @@ fun ProfileCardContent(
     var prompts by remember(card.candidateId) {
         mutableStateOf(identityRepo.peekAboutMe(card.candidateId)?.aboutPrompts.orEmpty())
     }
+    var whatMatters by remember(card.candidateId) { mutableStateOf(identityRepo.peekAboutMe(card.candidateId)?.whatMattersMost) }
+    var bio by remember(card.candidateId) { mutableStateOf(identityRepo.peekExtendedBio(card.candidateId)) }
     LaunchedEffect(card.candidateId, isTop) {
         if (!isTop) return@LaunchedEffect
         photos = runCatching { identityRepo.getPhotos(card.candidateId) }.getOrDefault(emptyList()).sortedBy { it.sortOrder }
-        prompts = runCatching { identityRepo.getAboutMe(card.candidateId) }.getOrNull()?.aboutPrompts ?: prompts
+        val about = runCatching { identityRepo.getAboutMe(card.candidateId) }.getOrNull()
+        prompts = about?.aboutPrompts ?: prompts
+        whatMatters = about?.whatMattersMost ?: whatMatters
+        bio = runCatching { identityRepo.getExtendedBio(card.candidateId) }.getOrNull() ?: bio
     }
     val heroPhotoId = photos.firstOrNull()?.id
-    val feed = remember(photos, prompts) { buildFeed(photos.drop(1), prompts) }
+    val heroUrl = card.photoUrl ?: photos.firstOrNull()?.url
+    // "What matters most to me" is a prompt like the rest: it lives in the feed with a heart. The backend matches
+    // likes on this exact English label, so the like id stays English whatever the display language.
+    val feed = remember(photos, prompts, whatMatters, strings) {
+        val all = prompts.map { it to it.prompt } +
+            (whatMatters?.takeIf { it.isNotBlank() }?.let { listOf(AboutMePromptEntry(strings.whatMattersMost, it) to WHAT_MATTERS_KEY) } ?: emptyList())
+        buildFeed(photos.drop(1), all)
+    }
+    val locale = LocalAppLocale.current
+    val facts = remember(card, bio, strings, locale) {
+        listOf(
+            strings.factWork to (card.occupationTitle ?: bio?.occupationTitle),
+            strings.factHeight to (bio?.heightCm ?: card.heightCm)?.let(::heightLabel),
+            strings.factEducation to bio?.highestEducation?.let { Taxonomy.toLabel(it, locale) },
+            strings.factReligion to bio?.religion,
+            strings.factLanguage to bio?.motherTongue,
+            strings.factGothram to (card.gothram ?: bio?.gothram),
+        ).filter { !it.second.isNullOrBlank() }.map { it.first to it.second!! }
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().clip(CardShape).background(MaterialTheme.colorScheme.surface)) {
-        val heroHeight = maxHeight
+        val heroHeight = if (readOnly) (maxHeight * 0.62f).coerceIn(300.dp, 520.dp) else maxHeight
         val scroll = rememberScrollState()
         val heroPx = with(androidx.compose.ui.platform.LocalDensity.current) { heroHeight.toPx() }
         Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll, enabled = isTop)) {
             Box(modifier = Modifier.fillMaxWidth().height(heroHeight).background(d2m.surfaceSunken)) {
-                if (card.photoUrl != null) {
+                if (heroUrl != null) {
                     AsyncImage(
-                        model = card.photoUrl?.let(apiClient::resolveMediaUrl),
+                        model = apiClient.resolveMediaUrl(heroUrl),
                         imageLoader = rememberPhotoImageLoader(),
                         contentDescription = sharedStrings.photographOf(card.candidateName),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PersonGlyph(64.dp) }
+                    // No photo: initials (as on web) rather than a generic glyph.
+                    val initials = card.candidateName.split(Regex("\\s+")).filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase()
+                    Box(Modifier.fillMaxSize().clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+                        if (initials.isEmpty()) PersonGlyph(64.dp)
+                        else Text(initials, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = mutedText(0.45f))
+                    }
                 }
                 // Top scrim keeps the status bar legible over bright photos.
                 Box(
                     Modifier.fillMaxWidth().height(topInset + 72.dp).align(Alignment.TopCenter)
                         .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.40f), Color.Transparent))),
                 )
+                if (card.source == "sponsor_pushed") {
+                    Text(
+                        strings.fromFamily,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = topInset + 12.dp)
+                            .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+                if (photos.size > 1) {
+                    Text(
+                        strings.photosCount(photos.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(end = 14.dp, top = topInset + 12.dp)
+                            .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
                 // Bottom scrim carrying the identity block.
                 Column(
                     modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-                        .padding(start = 20.dp, end = 20.dp, top = 72.dp, bottom = bottomClearance),
+                        .padding(start = 20.dp, end = 20.dp, top = 72.dp, bottom = if (readOnly) 20.dp else bottomClearance),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
@@ -143,7 +208,7 @@ fun ProfileCardContent(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val subline = listOfNotNull(card.city, card.occupationTitle).joinToString(" \u00B7 ")
+                    val subline = card.city.orEmpty()
                     if (subline.isNotEmpty()) {
                         Text(subline, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -151,7 +216,7 @@ fun ProfileCardContent(
                         D2MLevelPill(rating)
                     }
                 }
-                if (isTop) {
+                if (isTop && !readOnly) {
                     LikeHeart(
                         label = strings.likePhotoTitle(firstName),
                         onClick = { onLike(LikeTarget("photo", heroPhotoId, card.photoUrl)) },
@@ -165,11 +230,25 @@ fun ProfileCardContent(
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    // Essentials line (first three facts) then the rest as a short label/value list, as on web.
+                    if (facts.isNotEmpty()) {
+                        Text(
+                            facts.take(3).joinToString(" \u00B7 ") { it.second },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        facts.drop(3).forEach { (k, v) ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(k, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.6f), modifier = Modifier.width(112.dp))
+                                Text(v, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                     CompatibilityCard(
                         level = rating,
                         breakdown = listOf(
-                            strings.astrology to astrologicalCompatibility(card.scores),
-                            strings.preferences to preferenceCompatibility(card.scores),
+                            strings.yourPreferences to levelForScore(card.scores.childScore),
+                            strings.parentsPreferences to levelForScore((card.scores.parentScore + card.scores.astrologyScore) / 2.0),
                         ),
                         size = CompatibilityCardSize.Small,
                         modifier = Modifier.fillMaxWidth(),
@@ -187,13 +266,13 @@ fun ProfileCardContent(
                                 url = apiClient.resolveMediaUrl(item.photo.url),
                                 name = sharedStrings.photographOf(card.candidateName),
                                 likeLabel = strings.likePhotoTitle(firstName),
-                                onLike = { onLike(LikeTarget("photo", item.photo.id, item.photo.url)) },
+                                onLike = if (readOnly) null else ({ onLike(LikeTarget("photo", item.photo.id, item.photo.url)) }),
                             )
                             is FeedItem.Prompt -> FeedPromptBlock(
                                 prompt = item.entry.prompt,
                                 answer = item.entry.answer,
                                 likeLabel = strings.likePromptTitle(firstName),
-                                onLike = { onLike(LikeTarget("prompt", item.entry.prompt, prompt = item.entry.prompt, answer = item.entry.answer)) },
+                                onLike = if (readOnly) null else ({ onLike(LikeTarget("prompt", item.likeId, prompt = item.entry.prompt, answer = item.entry.answer)) }),
                             )
                         }
                     }
@@ -211,11 +290,11 @@ fun ProfileCardContent(
                         viewerPrimaryId = viewerPrimaryId,
                         hideAboutPrompts = true,
                     )
-                    Spacer(Modifier.height(bottomClearance))
+                    Spacer(Modifier.height(if (readOnly) 16.dp else bottomClearance))
                 }
             }
         }
-        if (isTop) {
+        if (isTop && !readOnly) {
             // Keeps the clock/status icons legible once profile text scrolls up underneath them; invisible over the hero.
             Box(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth().height(topInset + 16.dp)
@@ -234,23 +313,23 @@ fun ProfileCardContent(
 
 private sealed interface FeedItem {
     data class Photo(val photo: PhotoOut) : FeedItem
-    data class Prompt(val entry: AboutMePromptEntry) : FeedItem
+    data class Prompt(val entry: AboutMePromptEntry, val likeId: String) : FeedItem
 }
 
 /** Prompt, photo, prompt, photo ... with whatever is left of either kind appended (the hero is photo #1). */
-private fun buildFeed(photos: List<PhotoOut>, prompts: List<AboutMePromptEntry>): List<FeedItem> {
+private fun buildFeed(photos: List<PhotoOut>, prompts: List<Pair<AboutMePromptEntry, String>>): List<FeedItem> {
     val out = ArrayList<FeedItem>(photos.size + prompts.size)
     val ph = photos.iterator()
     val pr = prompts.iterator()
     while (ph.hasNext() || pr.hasNext()) {
-        if (pr.hasNext()) out += FeedItem.Prompt(pr.next())
+        if (pr.hasNext()) pr.next().let { out += FeedItem.Prompt(it.first, it.second) }
         if (ph.hasNext()) out += FeedItem.Photo(ph.next())
     }
     return out
 }
 
 @Composable
-private fun FeedPhotoBlock(url: String, name: String, likeLabel: String, onLike: () -> Unit) {
+private fun FeedPhotoBlock(url: String, name: String, likeLabel: String, onLike: (() -> Unit)?) {
     Box(
         Modifier.fillMaxWidth().aspectRatio(4f / 5f).clip(RoundedCornerShape(16.dp)).background(d2m.surfaceSunken),
     ) {
@@ -261,20 +340,20 @@ private fun FeedPhotoBlock(url: String, name: String, likeLabel: String, onLike:
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-        LikeHeart(likeLabel, onLike, Modifier.align(Alignment.BottomEnd).padding(14.dp))
+        if (onLike != null) LikeHeart(likeLabel, onLike, Modifier.align(Alignment.BottomEnd).padding(14.dp))
     }
 }
 
 @Composable
-private fun FeedPromptBlock(prompt: String, answer: String, likeLabel: String, onLike: () -> Unit) {
+private fun FeedPromptBlock(prompt: String, answer: String, likeLabel: String, onLike: (() -> Unit)?) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(d2m.surfaceSunken),
     ) {
-        Column(Modifier.padding(start = 20.dp, top = 22.dp, bottom = 26.dp, end = 78.dp)) {
+        Column(Modifier.padding(start = 20.dp, top = 22.dp, bottom = 26.dp, end = if (onLike != null) 78.dp else 20.dp)) {
             Text(prompt, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
             Text(answer, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
         }
-        LikeHeart(likeLabel, onLike, Modifier.align(Alignment.TopEnd).padding(14.dp))
+        if (onLike != null) LikeHeart(likeLabel, onLike, Modifier.align(Alignment.TopEnd).padding(14.dp))
     }
 }
 
@@ -303,24 +382,30 @@ fun LikeHeart(label: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     }
 }
 
-/** The single floating X: "pass for now" (not a rejection -- the server snoozes it and it comes back later). */
+/**
+ * The single floating "Not now" pill: a skip glyph (double chevron) plus a visible label. It is not a rejection --
+ * the server snoozes the profile and it comes back later. [label] is the visible text, [description] the spoken one.
+ */
 @Composable
-fun PassFab(label: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PassFab(label: String, description: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberHaptics()
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val ink = d2m.textPrimary
-    Box(
+    Row(
         modifier = modifier
-            .size(44.dp)
+            .heightIn(min = 48.dp)
             .pressScale(interaction)
             .shadow(6.dp, CircleShape)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button) { haptics.light(); onClick() }
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
+            .semantics(mergeDescendants = true) { contentDescription = description }
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Canvas(Modifier.size(15.dp)) { drawCross(ink) }
+        Canvas(Modifier.size(18.dp)) { drawSkip(ink) }
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
     }
 }
 
@@ -340,8 +425,13 @@ fun SwipeDeckSkeleton(topInset: Dp, bottomClearance: Dp, modifier: Modifier = Mo
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCross(color: Color) {
-    val w = this.size.width; val sw = w * 0.16f
-    drawLine(color, Offset(0f, 0f), Offset(w, w), sw, StrokeCap.Round)
-    drawLine(color, Offset(w, 0f), Offset(0f, w), sw, StrokeCap.Round)
+/** "Skip" glyph: two right-pointing chevrons (passing is never a permanent no, so not an X). */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSkip(color: Color) {
+    val w = this.size.width; val sw = w * 0.13f
+    fun chevron(x0: Float, x1: Float) {
+        drawLine(color, Offset(x0, w * 0.2f), Offset(x1, w * 0.5f), sw, StrokeCap.Round)
+        drawLine(color, Offset(x1, w * 0.5f), Offset(x0, w * 0.8f), sw, StrokeCap.Round)
+    }
+    chevron(w * 0.1f, w * 0.48f)
+    chevron(w * 0.52f, w * 0.9f)
 }

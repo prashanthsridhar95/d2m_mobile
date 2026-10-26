@@ -1,6 +1,8 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -64,7 +66,8 @@ fun LikeSheet(
 ) {
     val strings = LocalStrings.current.discovery
     val apiClient: ApiClient = koinInject()
-    var text by remember { mutableStateOf("") }
+    // Per item: a different liked photo/answer starts with an empty comment (a failed send keeps the sheet and text).
+    var text by remember(target) { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val first = name.substringBefore(" ")
 
@@ -113,21 +116,34 @@ fun LikeSheet(
             }
 
             D2MTextArea(
-                label = "",
+                label = strings.commentLabel,
                 value = text,
                 onValueChange = { if (it.length <= MAX_COMMENT) text = it },
                 placeholder = strings.commentPlaceholder,
                 minLines = 3,
             )
 
+            val left = MAX_COMMENT - text.length
+            Text(
+                "${text.length}/$MAX_COMMENT",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (left < 30) MaterialTheme.colorScheme.error else mutedText(0.55f),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            )
             if (error != null) {
-                Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    strings.likeKept(error),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Assertive },
+                )
             }
 
             Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 D2MButton(strings.cancel, variant = D2MButtonVariant.OUTLINE, enabled = !busy, onClick = onCancel, modifier = Modifier.weight(1f))
                 D2MButton(
-                    if (busy) strings.sending else strings.sendLike,
+                    if (busy) strings.sending else if (error != null) strings.tryAgain else strings.sendLike,
                     enabled = !busy,
                     onClick = { onSend(text.trim().ifEmpty { null }) },
                     modifier = Modifier.weight(1.4f),
