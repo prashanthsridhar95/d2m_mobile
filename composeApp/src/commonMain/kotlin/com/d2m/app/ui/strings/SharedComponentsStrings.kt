@@ -118,6 +118,15 @@ interface SharedComponentsStrings {
     fun youngerSistersCount(count: Int): String
     val screenRecordingDetected: String
     val profileContentHiddenWhileRecording: String
+
+    val resetAll: String
+    fun showNResults(count: Int): String
+    fun openProfileNamed(name: String): String
+    fun addToShortlistNamed(name: String): String
+    fun removeFromShortlistNamed(name: String): String
+    val keyFacts: String
+    val sectionExpanded: String
+    val sectionCollapsed: String
 }
 
 object SharedComponentsStringsEn : SharedComponentsStrings {
@@ -223,6 +232,15 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override fun youngerSistersCount(count: Int) = "$count younger sister${if (count > 1) "s" else ""}"
     override val screenRecordingDetected = "Screen recording detected"
     override val profileContentHiddenWhileRecording = "Profile content is hidden while your screen is being recorded or mirrored."
+
+    override val resetAll = "Reset all"
+    override fun showNResults(count: Int) = "Show $count results"
+    override fun openProfileNamed(name: String) = "Open $name's profile"
+    override fun addToShortlistNamed(name: String) = "Add $name to shortlist"
+    override fun removeFromShortlistNamed(name: String) = "Remove $name from shortlist"
+    override val keyFacts = "Key facts"
+    override val sectionExpanded = "Expanded"
+    override val sectionCollapsed = "Collapsed"
 }
 
 object SharedComponentsStringsHi : SharedComponentsStrings {
@@ -328,6 +346,15 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override fun youngerSistersCount(count: Int) = "$count छोटी बहनें"
     override val screenRecordingDetected = "स्क्रीन रिकॉर्डिंग का पता चला"
     override val profileContentHiddenWhileRecording = "जब तक आपकी स्क्रीन रिकॉर्ड या मिरर की जा रही है, प्रोफ़ाइल सामग्री छुपी रहती है।"
+
+    override val resetAll = "सब रीसेट करें"
+    override fun showNResults(count: Int) = "$count परिणाम दिखाएं"
+    override fun openProfileNamed(name: String) = "$name की प्रोफ़ाइल खोलें"
+    override fun addToShortlistNamed(name: String) = "$name को शॉर्टलिस्ट में जोड़ें"
+    override fun removeFromShortlistNamed(name: String) = "$name को शॉर्टलिस्ट से हटाएं"
+    override val keyFacts = "मुख्य जानकारी"
+    override val sectionExpanded = "खुला"
+    override val sectionCollapsed = "बंद"
 }
 
 object SharedComponentsStringsTa : SharedComponentsStrings {
@@ -433,4 +460,13 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override fun youngerSistersCount(count: Int) = "$count தங்கைகள்"
     override val screenRecordingDetected = "ஸ்க்ரீன் ரெக்கார்டிங் கண்டறியப்பட்டது"
     override val profileContentHiddenWhileRecording = "உங்கள் திரை பதிவு செய்யப்படும் அல்லது பிரதிபலிக்கப்படும் போது சுயவிவரத் தகவல் மறைக்கப்பட்டிருக்கும்."
+
+    override val resetAll = "அனைத்தையும் மீட்டமை"
+    override fun showNResults(count: Int) = "$count முடிவுகளைக் காட்டு"
+    override fun openProfileNamed(name: String) = "$name இன் சுயவிவரத்தைத் திற"
+    override fun addToShortlistNamed(name: String) = "$name ஐ ஷார்ட்லிஸ்ட்டில் சேர்"
+    override fun removeFromShortlistNamed(name: String) = "$name ஐ ஷார்ட்லிஸ்ட்டிலிருந்து நீக்கு"
+    override val keyFacts = "முக்கிய தகவல்கள்"
+    override val sectionExpanded = "விரிந்தது"
+    override val sectionCollapsed = "சுருங்கியது"
 }

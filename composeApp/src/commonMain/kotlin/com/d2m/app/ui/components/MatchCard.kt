@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Icon
@@ -566,5 +567,124 @@ fun ShortlistHeart(
                 modifier = Modifier.size(if (flat) 20.dp else 16.dp),
             )
         }
+    }
+}
+
+/** 5'8" -- same rounding as the table's height column. */
+internal fun formatHeightFtIn(cm: Int): String {
+    val totalIn = kotlin.math.round(cm / 2.54).toInt()
+    return "${totalIn / 12}'${totalIn % 12}\""
+}
+
+/** The facts shown under a row's name, in web's default column order (gothram, sect, nakshatra), capped at [limit] and skipping empties. */
+fun profileRowFacts(s: SuggestionOut, limit: Int = 3): List<String> =
+    listOfNotNull(s.gothram, s.sect, s.moonNakshatra).filter { it.isNotBlank() }.take(limit)
+
+/**
+ * Compact list row for Browse (web's PhoneBrowse ProfileRow): 64dp thumb; name with Featured/Verified badges; an
+ * "age · height · city" line; the level pill plus up to three chosen facts; a chevron. Tapping the row opens the
+ * profile. The shortlist star is a separate >= 48dp target beside it, so toggling never opens the profile by accident.
+ */
+@Composable
+fun ProfileRow(
+    suggestion: SuggestionOut,
+    resolvePhotoUrl: (String) -> String,
+    onOpen: () -> Unit,
+    isShortlisted: Boolean,
+    onToggleShortlist: () -> Unit,
+    modifier: Modifier = Modifier,
+    facts: List<String> = profileRowFacts(suggestion),
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val name = suggestion.candidateName
+    val meta = listOfNotNull(
+        suggestion.age?.toString(),
+        suggestion.heightCm?.takeIf { it > 0 }?.let(::formatHeightFtIn),
+        (suggestion.city ?: suggestion.nativity)?.takeIf { it.isNotBlank() },
+    ).joinToString(" · ").ifEmpty { "—" }
+    val score = suggestion.compositeScore?.takeIf { it > 0.0 }
+    val haptic = LocalHapticFeedback.current
+
+    Row(modifier.fillMaxWidth().heightIn(min = 80.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .weight(1f)
+                .clickable(role = Role.Button, onClick = onOpen)
+                .semantics(mergeDescendants = true) { contentDescription = strings.openProfileNamed(name) }
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ProfileThumb(photoUrl = suggestion.photoUrl?.let(resolvePhotoUrl), contentDescription = null, size = 64.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = d2m.textPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (suggestion.isFoundingMember) FeaturedBadge(size = 15.dp)
+                    if (suggestion.isVerified) VerifiedBadge(size = 15.dp)
+                }
+                Text(meta, style = MaterialTheme.typography.bodyMedium, color = d2m.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (score != null || facts.isNotEmpty()) {
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (score != null) D2MLevelPill(overallRating(score))
+                        facts.forEach { f -> Text(f, style = MaterialTheme.typography.bodySmall, color = d2m.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                }
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                tint = d2m.faint, modifier = Modifier.size(22.dp),
+            )
+        }
+        // Separate star target (>= 48dp), with the profile's name in its label.
+        Box(
+            Modifier
+                .size(56.dp)
+                .toggleable(
+                    value = isShortlisted,
+                    role = Role.Switch,
+                    onValueChange = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleShortlist()
+                    },
+                )
+                .semantics {
+                    contentDescription = if (isShortlisted) strings.removeFromShortlistNamed(name) else strings.addToShortlistNamed(name)
+                    stateDescription = if (isShortlisted) strings.shortlisted else strings.notShortlisted
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (isShortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                contentDescription = null,
+                tint = if (isShortlisted) d2m.goldStrong else d2m.gold,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+    }
+}
+
+/** List-view placeholder: the row's own geometry (64dp thumb, three text bars, star dot). */
+@Composable
+fun ProfileRowSkeleton(modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 80.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        D2MSkeleton(width = 64.dp, height = 64.dp, radius = 12.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            D2MSkeleton(width = 140.dp, height = 15.dp)
+            D2MSkeleton(width = 100.dp, height = 12.dp)
+            D2MSkeleton(width = 180.dp, height = 12.dp)
+        }
+        D2MSkeleton(width = 28.dp, height = 28.dp, radius = 14.dp)
     }
 }

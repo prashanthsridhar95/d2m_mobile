@@ -4,6 +4,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -116,7 +124,7 @@ import org.koin.compose.koinInject
 // with no ambiguity, while ProfileDetailScreen serves both roles and
 // needs the real check.
 @Composable
-fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null, hideAboutPrompts: Boolean = false) {
+fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null, hideAboutPrompts: Boolean = false, bioAccordion: Boolean = false) {
     val strings = LocalStrings.current.sharedComponents
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
@@ -194,12 +202,12 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
                 if (showAboutMe) {
                     when (tab) {
                         0 -> AboutMeTab(aboutMe, aboutMeLoaded, bio, ownAboutMe, ownBio?.childrenPreference, hideAboutPrompts)
-                        1 -> BioDataTab(bio, bioLoaded)
+                        1 -> BioDataTab(bio, bioLoaded, bioAccordion)
                         else -> ChartTab(chart, chartNotComputed, chartLoaded)
                     }
                 } else {
                     when (tab) {
-                        0 -> BioDataTab(bio, bioLoaded)
+                        0 -> BioDataTab(bio, bioLoaded, bioAccordion)
                         else -> ChartTab(chart, chartNotComputed, chartLoaded)
                     }
                 }
@@ -209,13 +217,15 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, show
 }
 
 @Composable
-private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
+private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean, accordion: Boolean = false) {
     val strings = LocalStrings.current.sharedComponents
     val locale = LocalAppLocale.current
     when {
         !loaded -> Text(strings.loading, color = mutedText(0.45f))
         bio == null -> Text(strings.noBioDataYet, color = mutedText(0.45f))
         else -> Column {
+            if (accordion) BioKeyFacts(bio)
+            BioSections(accordion) {
             BioSection(
                 strings.sectionBasicPersonal,
                 listOf(bio.heightCm, bio.complexion, bio.motherTongue, bio.otherLanguages, bio.bodyType),
@@ -269,6 +279,7 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
             }
             BioSection(strings.sectionLocationContact, listOf(bio.citizenshipStatus)) {
                 BioRow(strings.rowCitizenshipResiding, bio.citizenshipStatus?.let { Taxonomy.toLabel(it, locale) })
+            }
             }
         }
     }
@@ -493,14 +504,108 @@ private fun siblingsSummary(bio: ExtendedBioDataOut, strings: SharedComponentsSt
     bio.youngerSistersCount?.takeIf { it > 0 }?.let(strings::youngerSistersCount),
 ).joinToString(", ").ifBlank { null }
 
+/**
+ * Collapsible Bio data on the parent profile screen (web's ParentBioData accordion on phones): provided by [BioSections]
+ * only when asked for, so every other caller (Discover, preview) keeps the always-open sections. Only the first
+ * non-empty section starts open; [claimFirst] is read once per section, in composition order.
+ */
+private class BioAccordion {
+    private var firstClaimed = false
+    fun claimFirst(): Boolean {
+        if (firstClaimed) return false
+        firstClaimed = true
+        return true
+    }
+}
+
+private val LocalBioAccordion = androidx.compose.runtime.compositionLocalOf<BioAccordion?> { null }
+
+@Composable
+private fun BioSections(accordion: Boolean, content: @Composable () -> Unit) {
+    if (accordion) {
+        val acc = remember { BioAccordion() }
+        androidx.compose.runtime.CompositionLocalProvider(LocalBioAccordion provides acc) { content() }
+    } else {
+        content()
+    }
+}
+
+/** Up to four pills a parent scans for before reading anything: height (ft/in), highest education, occupation, nativity. Empties skipped. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BioKeyFacts(bio: ExtendedBioDataOut) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
+    val facts = listOfNotNull(
+        bio.heightCm?.takeIf { it > 0 }?.let(::formatHeightFtIn),
+        bio.highestEducation?.let { Taxonomy.toLabel(it, locale) },
+        bio.occupationTitle,
+        bio.nativity,
+    ).filter { it.isNotBlank() }
+    if (facts.isEmpty()) return
+    FlowRow(
+        modifier = Modifier
+            .padding(bottom = 14.dp)
+            .semantics(mergeDescendants = true) { contentDescription = strings.keyFacts + ": " + facts.joinToString(", ") },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        facts.forEach { f ->
+            Text(
+                f,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = d2m.accentStrong,
+                modifier = Modifier
+                    .background(d2m.accentSoft, RoundedCornerShape(percent = 50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
 /** label:value pairs, skipping anything not set -- an empty section would just be visual noise. */
 @Composable
 private fun BioSection(title: String, anyValues: List<Any?>, content: @Composable () -> Unit) {
     val hasAny = anyValues.any { v -> v != null && v != "" && (v as? Collection<*>)?.isEmpty() != true }
     if (!hasAny) return
-    Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
-        Column(modifier = Modifier.padding(top = 6.dp)) { content() }
+    val accordion = LocalBioAccordion.current
+    if (accordion == null) {
+        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+            Column(modifier = Modifier.padding(top = 6.dp)) { content() }
+        }
+        return
+    }
+    val strings = LocalStrings.current.sharedComponents
+    val firstOpen = remember { accordion.claimFirst() }
+    var open by remember { mutableStateOf(firstOpen) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button) { open = !open }
+                .semantics { stateDescription = if (open) strings.sectionExpanded else strings.sectionCollapsed },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+            // Static rotation (no animation), so it needs no reduce-motion branch.
+            androidx.compose.material3.Icon(
+                Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = mutedText(0.55f),
+                modifier = Modifier.size(22.dp).rotate(if (open) 180f else 0f),
+            )
+        }
+        if (open) Column(modifier = Modifier.padding(bottom = 8.dp)) { content() }
+        HorizontalDivider(color = d2m.borderSoft)
     }
 }
 

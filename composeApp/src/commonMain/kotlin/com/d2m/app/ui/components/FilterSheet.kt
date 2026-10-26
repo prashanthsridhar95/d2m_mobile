@@ -166,14 +166,8 @@ fun D2MFilterSheet(
         contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SectionHeading(if (activeCount > 0) "${strings.filtersTitle} · $activeCount" else strings.filtersTitle)
-                if (anyActive) LinkText(strings.clearAll, onClearAll, modifier = Modifier.heightIn(min = 48.dp))
-            }
+            // Title only; the live "N of M profiles match" subtitle follows (web's FiltersSheet), and Reset all lives in the footer.
+            SectionHeading(strings.filtersTitle)
             // The live readout the comps put under the rail heading. On a
             // phone it earns its place twice over: while the sheet is open
             // the results are behind it, so this is the only feedback that
@@ -208,11 +202,24 @@ fun D2MFilterSheet(
                 }
             }
 
-            D2MActionButton(
-                text = strings.showResultCount(resultCount),
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-            )
+            // Footer: Reset all (disabled when nothing is applied) + the primary "Show N results".
+            Row(
+                Modifier.fillMaxWidth().padding(top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                D2MActionButton(
+                    text = strings.resetAll,
+                    onClick = onClearAll,
+                    emphasis = D2MActionEmphasis.SECONDARY,
+                    enabled = anyActive,
+                    modifier = Modifier.weight(0.8f),
+                )
+                D2MActionButton(
+                    text = strings.showNResults(resultCount),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1.2f),
+                )
+            }
         }
     }
 }
