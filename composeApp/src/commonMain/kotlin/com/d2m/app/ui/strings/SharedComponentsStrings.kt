@@ -25,6 +25,7 @@ interface SharedComponentsStrings {
     val compatHigh: String
     val compatExceptional: String
     val overallCompatibility: String
+    val notYetCompared: String
     val notScoredYet: String
     val retry: String
     val nothingHereYet: String
@@ -129,6 +130,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val compatHigh = "High"
     override val compatExceptional = "Exceptional"
     override val overallCompatibility = "Overall compatibility"
+    override val notYetCompared = "Not yet compared"
     override val notScoredYet = "This pairing hasn't been scored yet."
     override val retry = "Retry"
     override val nothingHereYet = "Nothing here yet"
@@ -229,6 +231,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val compatHigh = "उच्च"
     override val compatExceptional = "असाधारण"
     override val overallCompatibility = "समग्र संगतता"
+    override val notYetCompared = "अभी तुलना नहीं हुई"
     override val notScoredYet = "इस जोड़ी का अभी तक स्कोर नहीं किया गया है।"
     override val retry = "फिर से प्रयास करें"
     override val nothingHereYet = "अभी यहां कुछ नहीं"
@@ -329,6 +332,7 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val compatHigh = "அதிகம்"
     override val compatExceptional = "விதிவிலக்கானது"
     override val overallCompatibility = "ஒட்டுமொத்த பொருத்தம்"
+    override val notYetCompared = "இன்னும் ஒப்பிடப்படவில்லை"
     override val notScoredYet = "இந்த ஜோடி இன்னும் மதிப்பிடப்படவில்லை."
     override val retry = "மீண்டும் முயற்சிக்கவும்"
     override val nothingHereYet = "இன்னும் இங்கே எதுவும் இல்லை"

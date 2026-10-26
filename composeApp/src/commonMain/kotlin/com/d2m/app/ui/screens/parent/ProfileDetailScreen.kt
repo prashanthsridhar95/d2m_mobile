@@ -81,6 +81,7 @@ import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.ParentContactsStore
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.ui.components.CompatibilityCard
+import com.d2m.app.ui.components.CompatibilityCardSize
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MCard
@@ -396,6 +397,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                     strings.astrology to astrologicalCompatibility(c.scores),
                                     strings.preferences to preferenceCompatibility(c.scores),
                                 ) else emptyList(),
+                                size = if (identity.role == D2MRole.CHILD) CompatibilityCardSize.Small else CompatibilityCardSize.Large,
                                 modifier = Modifier.fillMaxWidth(),
                             )
 

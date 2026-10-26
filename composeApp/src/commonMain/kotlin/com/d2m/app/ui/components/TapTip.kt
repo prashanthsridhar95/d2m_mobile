@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -59,6 +60,8 @@ fun TapTip(
     container: Color? = null,
     content: Color? = null,
     minTarget: Dp = 0.dp,
+    /** The tappable area's shape: the press ripple is clipped to it, so a pill ripples as a pill, not a square. */
+    shape: androidx.compose.ui.graphics.Shape = androidx.compose.ui.graphics.RectangleShape,
     visibleFor: Long = 4_000L,
     inner: @Composable () -> Unit,
 ) {
@@ -70,6 +73,7 @@ fun TapTip(
     Box(
         modifier
             .defaultMinSize(minWidth = minTarget, minHeight = minTarget)
+            .clip(shape)
             .clickable(role = Role.Button) { open = !open }
             .semantics { contentDescription = text },
         contentAlignment = Alignment.Center,

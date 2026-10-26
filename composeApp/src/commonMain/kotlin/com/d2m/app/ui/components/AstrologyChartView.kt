@@ -248,9 +248,9 @@ private fun drawChartGrid(
         }
 
         val signStyle = TextStyle(fontSize = 10.sp, color = pal.muted)
-        val planetStyle = TextStyle(fontSize = 16.sp, color = pal.ink, fontWeight = FontWeight.Bold)
-        val lagnaStyle = TextStyle(fontSize = 16.sp, color = pal.lagnaInk, fontWeight = FontWeight.Bold)
-        val gap = 6.dp.toPx()
+        val planetStyle = TextStyle(fontSize = 12.sp, color = pal.ink, fontWeight = FontWeight.Bold)
+        val lagnaStyle = TextStyle(fontSize = 12.sp, color = pal.lagnaInk, fontWeight = FontWeight.Bold)
+        val gap = 5.dp.toPx()
 
         for (index in 0..15) {
             val signIndex = CELL_TO_SIGN[index] ?: continue
@@ -262,18 +262,35 @@ private fun drawChartGrid(
             val signResult = textMeasurer.measure(RASI_NAMES[signIndex], signStyle)
             drawText(signResult, topLeft = Offset(nameX, cellY + pad - 1.dp.toPx()))
 
-            // Planets: wrapped left to right, like words, instead of one per line -- four or five fit a cell.
-            var x = cellX + pad
-            var y = cellY + pad + signResult.size.height + 4.dp.toPx()
-            val maxX = cellX + cell - pad
-            data.placementsBySign[signIndex].orEmpty().forEach { p ->
-                val r = textMeasurer.measure(p, if (p == "Asc") lagnaStyle else planetStyle)
-                if (x + r.size.width > maxX && x > cellX + pad) {
-                    x = cellX + pad
-                    y += r.size.height + 2.dp.toPx()
+            // Planets: laid out as centred lines of abbreviations (wrapping when a cell holds several), the whole block
+            // centred both ways in the cell -- the sign name stays small in the corner.
+            val names = data.placementsBySign[signIndex].orEmpty()
+            if (names.isNotEmpty()) {
+                val inner = cell - 2 * pad
+                val measured = names.map { it to textMeasurer.measure(it, if (it == "Asc") lagnaStyle else planetStyle) }
+                val lines = ArrayList<List<Pair<String, androidx.compose.ui.text.TextLayoutResult>>>()
+                var cur = ArrayList<Pair<String, androidx.compose.ui.text.TextLayoutResult>>()
+                var curW = 0f
+                measured.forEach { m ->
+                    val w = m.second.size.width.toFloat()
+                    if (cur.isNotEmpty() && curW + gap + w > inner) { lines += cur; cur = ArrayList(); curW = 0f }
+                    curW += (if (cur.isEmpty()) 0f else gap) + w
+                    cur += m
                 }
-                if (y + r.size.height <= cellY + cell) drawText(r, topLeft = Offset(x, y))
-                x += r.size.width + gap
+                if (cur.isNotEmpty()) lines += cur
+                val lineH = measured.maxOf { it.second.size.height }.toFloat()
+                val lineGap = 2.dp.toPx()
+                val blockH = lines.size * lineH + (lines.size - 1) * lineGap
+                var y = cellY + (cell - blockH) / 2f
+                lines.forEach { line ->
+                    val lw = line.sumOf { it.second.size.width } + (line.size - 1) * gap
+                    var x = cellX + (cell - lw) / 2f
+                    line.forEach { (_, r) ->
+                        drawText(r, topLeft = Offset(x, y + (lineH - r.size.height) / 2f))
+                        x += r.size.width + gap
+                    }
+                    y += lineH + lineGap
+                }
             }
         }
 

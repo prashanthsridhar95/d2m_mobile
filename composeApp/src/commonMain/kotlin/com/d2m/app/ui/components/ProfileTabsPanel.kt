@@ -411,6 +411,7 @@ private fun IconBubble(icon: String, label: String, value: String?, match: Boole
         text = tip,
         container = when (match) { true -> palette.success.fg; false -> palette.danger.fg; null -> null },
         content = if (match != null) MaterialTheme.colorScheme.background else null,
+        shape = RoundedCornerShape(999.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -478,7 +479,8 @@ private fun FlowWrap(modifier: Modifier = Modifier, content: @Composable FlowRow
 private fun PromptCard(prompt: String, answer: String) {
     CasualCard {
         Text(prompt, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
-        Text(answer, style = d2mNoteStyle().copy(fontSize = 17.sp, lineHeight = 24.sp), modifier = Modifier.padding(top = 6.dp))
+        // Same style as the Discover feed's prompt answers, so every answer in the app reads in one voice.
+        Text(answer, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 6.dp))
     }
 }
 

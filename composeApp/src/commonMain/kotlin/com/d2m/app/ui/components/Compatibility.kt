@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.d2m.app.data.model.SubScoreBreakdown
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.strings.SharedComponentsStrings
@@ -102,23 +103,41 @@ fun D2MLevelPill(level: String) {
 
 enum class CompatibilityCardSize { Large, Small }
 
+/** A level word as a solid-tone chip (web's LevelPill): [large] is the card's Overall rating, the small one is each breakdown entry. */
+@Composable
+private fun LevelChip(level: String?, large: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
+    val palette = LocalD2MStatusPalette.current
+    val tone = level?.let { toneForLevel(it) } ?: D2MBadgeTone.NEUTRAL
+    val colors = when (tone) {
+        D2MBadgeTone.SUCCESS -> palette.success
+        D2MBadgeTone.INFO -> palette.info
+        D2MBadgeTone.WARNING -> palette.warning
+        else -> palette.neutral
+    }
+    Text(
+        text = (level?.let { levelLabel(it, strings) } ?: strings.notYetCompared).uppercase(),
+        color = colors.fg,
+        style = if (large) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelSmall,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+        modifier = Modifier
+            .background(colors.bg, androidx.compose.foundation.shape.RoundedCornerShape(if (large) 8.dp else 6.dp))
+            .padding(horizontal = if (large) 14.dp else 9.dp, vertical = if (large) 7.dp else 3.dp),
+    )
+}
+
 /**
- * Mirrors web's CompatibilityCard.jsx (its own doc comment there has the
- * full seven-round history) -- Overall as a big colour word, a double
- * hairline rule (deliberately heavier than the single rule D2MDivider
- * draws everywhere else, marking this as the one section-within-a-section
- * on the card), then the breakdown as N columns split by vertical rules,
- * each with the same word-not-pill treatment as Overall, just smaller.
+ * Mirrors web's CompatibilityCard.jsx in both of its shapes.
  *
- * No title on the card itself -- "leave off the Compatibility title, make
- * it 'Overall compatibility'" (reported directly on web) -- the label
- * above the word carries the card's whole identification.
+ * Small (child Discover / child profile): a coloured 3dp edge on the left (the overall level's colour); on the left the
+ * "Overall compatibility" label over a large level chip, a hairline rule, and on the right each breakdown entry as a
+ * label over a small level chip, stacked.
  *
- * `size` exists because this card is used two ways: full width, on its
- * own row (ProfileDetailScreen, DiscoveryScreen) wants Large; nothing on
- * mobile currently needs Small, but the param exists so a narrower future
- * placement doesn't need a second component, same reasoning as web's own
- * `size` prop.
+ * Large (parent profile): "Overall compatibility", the level as a 22sp display word in its colour, ONE hairline, then the
+ * breakdown as equal columns split by vertical rules, each a 16sp word -- web dropped the old double rule as "one divider
+ * too many".
+ *
+ * No title on the card itself; the label carries the identification.
  */
 @Composable
 fun CompatibilityCard(
@@ -128,57 +147,72 @@ fun CompatibilityCard(
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalStrings.current.sharedComponents
-    SectionCard(modifier = modifier) {
-        if (level == null) {
-            Text(
-                strings.notScoredYet,
-                style = MaterialTheme.typography.bodyMedium,
-                color = d2m.meta,
-            )
-            return@SectionCard
+    if (level == null) {
+        SectionCard(modifier = modifier) {
+            Text(strings.notScoredYet, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
         }
+        return
+    }
 
-        val overallStyle = if (size == CompatibilityCardSize.Large) {
-            MaterialTheme.typography.headlineMedium
-        } else {
-            MaterialTheme.typography.titleLarge
+    if (size == CompatibilityCardSize.Small) {
+        D2MCard(modifier = modifier) {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(levelColor(level)))
+                Row(Modifier.weight(1f).padding(18.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(
+                        Modifier.weight(1f).padding(end = 20.dp),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(7.dp),
+                    ) {
+                        LabelText(strings.overallCompatibility)
+                        LevelChip(level, large = true)
+                    }
+                    if (breakdown.isNotEmpty()) {
+                        Box(Modifier.width(D2MStroke.hairline).fillMaxHeight().background(d2m.borderSoft))
+                        Column(
+                            Modifier.weight(1f).padding(start = 20.dp),
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                        ) {
+                            breakdown.forEach { (label, value) ->
+                                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                                    LabelText(label)
+                                    LevelChip(value, large = false)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+        return
+    }
 
+    SectionCard(modifier = modifier, padding = 24.dp) {
         LabelText(strings.overallCompatibility)
-        Text(levelLabel(level, strings), style = overallStyle, color = levelColor(level), modifier = Modifier.padding(top = 4.dp))
+        Text(
+            levelLabel(level, strings),
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 25.sp),
+            color = levelColor(level),
+            modifier = Modifier.padding(top = 6.dp),
+        )
 
         if (breakdown.isNotEmpty()) {
-            Column(Modifier.padding(top = 16.dp)) {
-                D2MDivider(soft = false)
-                Spacer(Modifier.height(3.dp))
-                D2MDivider(soft = false)
-            }
+            Spacer(Modifier.height(20.dp))
+            D2MDivider(soft = false)
+            Spacer(Modifier.height(20.dp))
 
-            val subStyle = if (size == CompatibilityCardSize.Large) {
-                MaterialTheme.typography.titleLarge
-            } else {
-                MaterialTheme.typography.titleMedium
-            }
-
-            Row(Modifier.fillMaxWidth().padding(top = 16.dp).height(IntrinsicSize.Min)) {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                 breakdown.forEachIndexed { index, (label, value) ->
                     if (index > 0) {
-                        Box(
-                            Modifier
-                                .fillMaxHeight()
-                                .width(D2MStroke.hairline)
-                                .padding(vertical = 1.dp)
-                                .background(d2m.borderSoft),
-                        )
+                        Box(Modifier.fillMaxHeight().width(D2MStroke.hairline).background(d2m.borderSoft))
                         Spacer(Modifier.width(20.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         LabelText(label)
                         Text(
                             value?.let { levelLabel(it, strings) } ?: "—",
-                            style = subStyle,
+                            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 16.sp, lineHeight = 18.sp),
                             color = value?.let { levelColor(it) } ?: d2m.faint,
-                            modifier = Modifier.padding(top = 4.dp),
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                     if (index < breakdown.lastIndex) Spacer(Modifier.width(20.dp))
