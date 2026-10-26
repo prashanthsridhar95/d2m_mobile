@@ -398,6 +398,15 @@ fun DiscoveryScreen(onOpenMatches: () -> Unit = {}) {
                 // Top: at the bottom it would cover the card's name block.
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset + 12.dp)
                     .semantics { liveRegion = LiveRegionMode.Polite },
+                // The app's own toast colours (espresso ground, gold action), not Material's default grey and lavender.
+                snackbar = { data ->
+                    androidx.compose.material3.Snackbar(
+                        snackbarData = data,
+                        containerColor = com.d2m.app.ui.theme.d2m.ink,
+                        contentColor = com.d2m.app.ui.theme.d2m.accentOn,
+                        actionColor = com.d2m.app.ui.theme.d2m.goldButton,
+                    )
+                },
             )
         }
 
