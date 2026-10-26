@@ -21,6 +21,11 @@ interface TrustStrings {
     val tabEndorsements: String
     val tabRecommendations: String
     val tabReferences: String
+    val navGroupTrustSharing: String
+    val searchSettings: String
+    val searchSettingsNone: String
+    val backToAll: String
+    fun backToAllWith(tab: String): String
 
     // Shared across sections.
     val approve: String
@@ -129,6 +134,11 @@ object TrustStringsEn : TrustStrings {
     override val tabEndorsements = "Endorsements"
     override val tabRecommendations = "Recommendations"
     override val tabReferences = "References"
+    override val navGroupTrustSharing = "Trust & Sharing"
+    override val searchSettings = "Search settings"
+    override val searchSettingsNone = "Nothing matches that. Try a shorter word."
+    override val backToAll = "All settings"
+    override fun backToAllWith(tab: String) = "All settings · $tab"
     override val approve = "Approve"
     override val decline = "Decline"
     override val withdraw = "Withdraw"
@@ -225,6 +235,11 @@ object TrustStringsHi : TrustStrings {
     override val tabEndorsements = "एंडोर्समेंट"
     override val tabRecommendations = "सिफारिशें"
     override val tabReferences = "संदर्भ"
+    override val navGroupTrustSharing = "भरोसा और शेयरिंग"
+    override val searchSettings = "सेटिंग खोजें"
+    override val searchSettingsNone = "इससे कुछ मेल नहीं खाता। कोई छोटा शब्द आज़माएँ।"
+    override val backToAll = "सभी सेटिंग"
+    override fun backToAllWith(tab: String) = "सभी सेटिंग · $tab"
     override val approve = "स्वीकृत करें"
     override val decline = "अस्वीकार करें"
     override val withdraw = "वापस लें"
@@ -321,6 +336,11 @@ object TrustStringsTa : TrustStrings {
     override val tabEndorsements = "ஒப்புதல்கள்"
     override val tabRecommendations = "பரிந்துரைகள்"
     override val tabReferences = "சான்றுகள்"
+    override val navGroupTrustSharing = "நம்பிக்கை & பகிர்வு"
+    override val searchSettings = "அமைப்புகளைத் தேடுங்கள்"
+    override val searchSettingsNone = "பொருந்தும் முடிவு இல்லை. சிறிய சொல்லை முயலுங்கள்."
+    override val backToAll = "அனைத்து அமைப்புகள்"
+    override fun backToAllWith(tab: String) = "அனைத்து அமைப்புகள் · $tab"
     override val approve = "அங்கீகரிக்கவும்"
     override val decline = "நிராகரிக்கவும்"
     override val withdraw = "திரும்பப்பெறு"
