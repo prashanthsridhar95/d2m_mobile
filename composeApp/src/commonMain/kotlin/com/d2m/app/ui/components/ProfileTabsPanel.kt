@@ -221,7 +221,7 @@ private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean, accordion: Boo
     val strings = LocalStrings.current.sharedComponents
     val locale = LocalAppLocale.current
     when {
-        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        !loaded -> SkeletonList(count = 3)
         bio == null -> Text(strings.noBioDataYet, color = mutedText(0.45f))
         else -> Column {
             if (accordion) BioKeyFacts(bio)
@@ -309,7 +309,7 @@ private fun AboutMeTab(
     val cpd = LocalStrings.current.childProfileDialog
     val locale = LocalAppLocale.current
     when {
-        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        !loaded -> SkeletonList(count = 3)
         aboutMe == null -> Text(strings.noAboutMeYet, color = mutedText(0.45f))
         else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // The Discover feed already shows (and lets you like) each prompt, so it asks for them to be left out here.
@@ -663,7 +663,7 @@ private fun BioRow(label: String, value: String?) {
 private fun ChartTab(chart: ChartOut?, chartNotComputed: Boolean, loaded: Boolean) {
     val strings = LocalStrings.current.sharedComponents
     when {
-        !loaded -> Text(strings.loading, color = mutedText(0.45f))
+        !loaded -> SkeletonList(count = 3)
         chartNotComputed || chart == null -> Text(strings.chartNotComputedYet, color = mutedText(0.45f))
         else -> AstrologyChartView(
             d1 = chart.chartJson["d1"] as? JsonObject,

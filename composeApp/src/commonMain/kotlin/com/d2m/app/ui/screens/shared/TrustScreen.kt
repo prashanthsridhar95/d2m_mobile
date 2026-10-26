@@ -1,5 +1,6 @@
 package com.d2m.app.ui.screens.shared
 
+import com.d2m.app.ui.components.SkeletonList
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -303,7 +304,7 @@ private fun VouchesSection(
 
     when {
         notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyVouches)
-        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
+        primaryId == null && role == D2MRole.PARENT -> SkeletonList(count = 3)
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -727,7 +728,7 @@ private fun EndorsementsSection(
 
     when {
         notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyEndorsements)
-        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
+        primaryId == null && role == D2MRole.PARENT -> SkeletonList(count = 3)
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -956,7 +957,7 @@ private fun RecommendationsSection(
 
     when {
         notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyRecommendations)
-        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
+        primaryId == null && role == D2MRole.PARENT -> SkeletonList(count = 3)
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -1241,7 +1242,7 @@ private fun ExternalReferencesSection(
 
     when {
         notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBodyReferences)
-        primaryId == null && role == D2MRole.PARENT -> Text(strings.loading, color = mutedText(0.55f))
+        primaryId == null && role == D2MRole.PARENT -> SkeletonList(count = 3)
         else -> {
             D2MCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
