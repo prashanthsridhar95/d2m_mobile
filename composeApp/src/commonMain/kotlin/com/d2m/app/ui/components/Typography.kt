@@ -1,5 +1,7 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -61,7 +63,7 @@ fun PageTitle(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = MaterialTheme.typography.displaySmall,
         color = d2m.ink,
-        modifier = modifier,
+        modifier = modifier.semantics { heading() },
     )
 }
 
@@ -85,7 +87,7 @@ fun SectionHeading(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = MaterialTheme.typography.headlineMedium,
         color = d2m.ink,
-        modifier = modifier,
+        modifier = modifier.semantics { heading() },
     )
 }
 
@@ -98,7 +100,7 @@ fun SubHeading(text: String, modifier: Modifier = Modifier, maxLines: Int = 2) {
         color = d2m.ink,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
-        modifier = modifier,
+        modifier = modifier.semantics { heading() },
     )
 }
 

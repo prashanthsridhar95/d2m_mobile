@@ -1,6 +1,10 @@
 package com.d2m.app.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -93,10 +97,14 @@ fun <T : Any> SwipeDeck(
     modifier: Modifier = Modifier,
     /** When set, a right swipe does not commit: the card springs back and this is called instead (the like sheet). */
     onAcceptGesture: (() -> Unit)? = null,
+    /** Screen-reader alternatives to the swipe gestures, attached to the top card (e.g. Like / Pass). */
+    topCardActions: List<CustomAccessibilityAction> = emptyList(),
     card: @Composable (item: T, isTop: Boolean) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
+    val currentReduceMotion by rememberUpdatedState(reduceMotion)
     val currentItems by rememberUpdatedState(items)
     val currentOnDecision by rememberUpdatedState(onDecision)
 
@@ -122,7 +130,7 @@ fun <T : Any> SwipeDeck(
                             SwipeDirection.Snooze -> state.offsetX.value
                         }
                         val yTarget = if (dir == SwipeDirection.Snooze) -h * 1.1f else state.offsetY.value
-                        val spec = tween<Float>(durationMillis = 230, easing = FlyEasing)
+                        val spec = tween<Float>(durationMillis = if (currentReduceMotion) 40 else 230, easing = FlyEasing)
                         val jobX = launch(start = CoroutineStart.UNDISPATCHED) {
                             state.offsetX.animateTo(xTarget, spec, initialVelocity = velocityX)
                         }
@@ -167,7 +175,7 @@ fun <T : Any> SwipeDeck(
                                 val x = state.offsetX.value
                                 translationX = x
                                 translationY = state.offsetY.value
-                                rotationZ = (x / wPx).coerceIn(-1.5f, 1.5f) * 12f
+                                rotationZ = if (reduceMotion) 0f else (x / wPx).coerceIn(-1.5f, 1.5f) * 12f
                                 transformOrigin = TransformOrigin(0.5f, 0.92f)
                             } else {
                                 val p = (maxOf(abs(state.offsetX.value) / (wPx * 0.5f), abs(state.offsetY.value) / (hPx * 0.4f)))
@@ -182,6 +190,7 @@ fun <T : Any> SwipeDeck(
                                 transformOrigin = TransformOrigin(0.5f, 0f)
                             }
                         }
+                        .then(if (isTop && topCardActions.isNotEmpty()) Modifier.semantics { customActions = topCardActions } else Modifier)
                         .then(
                             if (isTop) {
                                 Modifier.horizontalSwipe(
@@ -200,6 +209,10 @@ fun <T : Any> SwipeDeck(
                                         val intercepted = dir == SwipeDirection.Accept && onAcceptGesture != null
                                         if (intercepted) onAcceptGesture?.invoke()
                                         if (dir != null && !intercepted) flyOff(dir, velocity) else scope.launch {
+                                            if (currentReduceMotion) {
+                                                state.offsetX.snapTo(0f); state.offsetY.snapTo(0f)
+                                                return@launch
+                                            }
                                             // Natural spring back, carrying the release velocity so it feels flicked, not snapped.
                                             val spring = spring<Float>(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)
                                             launch(start = CoroutineStart.UNDISPATCHED) { state.offsetX.animateTo(0f, spring, initialVelocity = velocity) }

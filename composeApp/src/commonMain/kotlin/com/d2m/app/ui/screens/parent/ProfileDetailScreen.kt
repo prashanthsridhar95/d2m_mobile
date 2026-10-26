@@ -1,5 +1,7 @@
 package com.d2m.app.ui.screens.parent
 
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -477,7 +479,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 15.dp, start = 64.dp, end = 64.dp),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 15.dp, start = 64.dp, end = 64.dp)
+                            .semantics { heading() },
                     )
                 }
                 HorizontalDivider(Modifier.align(Alignment.BottomCenter), color = mutedText(0.12f))
@@ -527,7 +530,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 onToggle = { toggleShortlist(shortlisted) },
                                 selectedIcon = Icons.Filled.Star,
                                 unselectedIcon = Icons.Outlined.StarBorder,
-                                contentDescription = if (shortlisted) shared.removeFromShortlist else shared.addToShortlist,
+                                contentDescription = shared.shortlist,
+                                stateDescription = if (shortlisted) shared.shortlisted else shared.notShortlisted,
                             )
                             // Parent-to-parent only (no request/accept gate, see
                             // messageParent()'s doc comment). Parent-to-child messaging

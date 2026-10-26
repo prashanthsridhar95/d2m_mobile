@@ -1,5 +1,7 @@
 package com.d2m.app.ui.screens.parent
 
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
 import com.d2m.app.ui.components.D2MActionButton
 import com.d2m.app.ui.components.D2MActionEmphasis
 import androidx.compose.foundation.BorderStroke
@@ -385,7 +387,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                             BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
                             BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
                             if (activeFacetCount > 0) {
-                                BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
+                                BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close, isAction = true)
                             }
                         }
                         ViewToggle(
@@ -545,6 +547,8 @@ private fun BrowseChip(
     onClick: () -> Unit,
     leading: ImageVector? = null,
     outlinedAccent: Boolean = false,
+    /** A one-shot action ("Clear filters") rather than one of a set of options: announced as a button, not as selected/not selected. */
+    isAction: Boolean = false,
 ) {
     val shape = RoundedCornerShape(percent = 50)
     val bg = if (selected && !outlinedAccent) d2m.accent else if (selected) d2m.accentSoft else MaterialTheme.colorScheme.surface
@@ -553,7 +557,10 @@ private fun BrowseChip(
     Box(
         Modifier
             .heightIn(min = 48.dp)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+            .then(
+                if (isAction) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onClick)
+                else Modifier.selectable(selected = selected, interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.RadioButton, onClick = onClick),
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -611,7 +618,7 @@ private fun ViewToggle(
 ) {
     val shape = RoundedCornerShape(percent = 50)
     Row(
-        modifier.height(36.dp).clip(shape).border(BorderStroke(1.dp, d2m.border), shape).background(MaterialTheme.colorScheme.surface),
+        modifier.height(36.dp).clip(shape).border(BorderStroke(1.dp, d2m.border), shape).background(MaterialTheme.colorScheme.surface).selectableGroup(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         listOf(false to (Icons.Filled.GridView to gridLabel), true to (Icons.Filled.TableRows to tableLabel)).forEach { (isTable, pair) ->
@@ -620,7 +627,7 @@ private fun ViewToggle(
                 Modifier
                     .width(44.dp).fillMaxHeight()
                     .background(if (selected) d2m.accent else Color.Transparent)
-                    .clickable(role = Role.RadioButton, onClick = { onChange(isTable) })
+                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onChange(isTable) })
                     .semantics { contentDescription = pair.second },
                 contentAlignment = Alignment.Center,
             ) {

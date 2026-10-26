@@ -1,5 +1,6 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +87,7 @@ fun ProfileCardContent(
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalStrings.current.discovery
+    val sharedStrings = LocalStrings.current.sharedComponents
     val apiClient: ApiClient = koinInject()
     val identityRepo: IdentityRepository = koinInject()
     val rating = overallRating(card.scores.compositeScore)
@@ -114,7 +116,7 @@ fun ProfileCardContent(
                     AsyncImage(
                         model = card.photoUrl?.let(apiClient::resolveMediaUrl),
                         imageLoader = rememberPhotoImageLoader(),
-                        contentDescription = card.candidateName,
+                        contentDescription = sharedStrings.photographOf(card.candidateName),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -151,7 +153,7 @@ fun ProfileCardContent(
                 }
                 if (isTop) {
                     LikeHeart(
-                        label = strings.likeThisPhoto,
+                        label = strings.likePhotoTitle(firstName),
                         onClick = { onLike(LikeTarget("photo", heroPhotoId, card.photoUrl)) },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 16.dp),
                     )
@@ -183,14 +185,14 @@ fun ProfileCardContent(
                         when (item) {
                             is FeedItem.Photo -> FeedPhotoBlock(
                                 url = apiClient.resolveMediaUrl(item.photo.url),
-                                name = card.candidateName,
-                                likeLabel = strings.likeThisPhoto,
+                                name = sharedStrings.photographOf(card.candidateName),
+                                likeLabel = strings.likePhotoTitle(firstName),
                                 onLike = { onLike(LikeTarget("photo", item.photo.id, item.photo.url)) },
                             )
                             is FeedItem.Prompt -> FeedPromptBlock(
                                 prompt = item.entry.prompt,
                                 answer = item.entry.answer,
-                                likeLabel = strings.likeThisAnswer,
+                                likeLabel = strings.likePromptTitle(firstName),
                                 onLike = { onLike(LikeTarget("prompt", item.entry.prompt, prompt = item.entry.prompt, answer = item.entry.answer)) },
                             )
                         }
@@ -200,7 +202,7 @@ fun ProfileCardContent(
                         strings.moreAbout(firstName),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 6.dp),
+                        modifier = Modifier.padding(top = 6.dp).semantics { heading() },
                     )
                     D2MProfileTabsPanel(
                         candidateId = card.candidateId,

@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.ui
 
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -850,13 +851,13 @@ private fun MessageTicks(status: MessageStatus, mine: Boolean) {
  */
 @Composable
 private fun TypingIndicatorBubble(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "typing")
-    val t by transition.animateFloat(
+    // Reduce motion: three still dots, no infinite transition.
+    val t = if (rememberReduceMotion()) 0f else rememberInfiniteTransition(label = "typing").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
         label = "typing-progress",
-    )
+    ).value
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Row(
             modifier = Modifier

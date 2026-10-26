@@ -1,6 +1,10 @@
 package com.d2m.app.ui.components
 
 
+import com.d2m.app.platform.rememberReduceMotion
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -416,7 +420,8 @@ private fun PhotoOverlayCard(
     val shape = RoundedCornerShape(if (large) 20.dp else 14.dp)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale = animateFloatAsState(if (pressed) 0.97f else 1f, label = "card-press")
+    val reduceMotion = rememberReduceMotion()
+    val scale = animateFloatAsState(if (pressed && !reduceMotion) 0.97f else 1f, label = "card-press")
     val level = remember(suggestion.compositeScore) { suggestion.compositeScore?.takeIf { it > 0.0 }?.let { overallRating(it) } }
     val place = suggestion.nativity ?: suggestion.city
     val title = suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: "")
@@ -512,21 +517,26 @@ fun ShortlistHeart(
     val haptic = LocalHapticFeedback.current
     val pop = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
     Box(
         modifier
             .size(48.dp)
-            .clickable(
+            .toggleable(
+                value = shortlisted,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = {
+                role = Role.Switch,
+                onValueChange = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onToggle()
-                    scope.launch {
+                    if (!reduceMotion) scope.launch {
                         pop.animateTo(1.3f, tween(90))
                         pop.animateTo(1f, spring(dampingRatio = 0.4f))
                     }
                 },
-            ),
+            )
+            // Name + state ("Shortlist", "Shortlisted") instead of a label that flips to the opposite action.
+            .semantics { stateDescription = if (shortlisted) strings.shortlisted else strings.notShortlisted },
         contentAlignment = Alignment.Center,
     ) {
         // A small status badge, not a button-sized disc: 28dp chip, 16dp bookmark. The tap target stays 48dp (above).
@@ -551,7 +561,7 @@ fun ShortlistHeart(
         ) {
             Icon(
                 imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                contentDescription = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist,
+                contentDescription = strings.shortlist,
                 tint = tint,
                 modifier = Modifier.size(if (flat) 20.dp else 16.dp),
             )

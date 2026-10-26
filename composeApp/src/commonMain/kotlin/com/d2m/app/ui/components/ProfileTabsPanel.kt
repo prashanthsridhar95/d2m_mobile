@@ -1,5 +1,7 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -304,7 +306,7 @@ private fun AboutMeTab(
 
             if (aboutMe.fitnessRoutine != null || aboutMe.sleepSchedule != null || aboutMe.pets != null || aboutMe.socialEnergy != null) {
                 CasualCard {
-                    Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("🏃", cpd.fitnessRoutine, aboutMe.fitnessRoutine, traitMatch(ownAboutMe?.fitnessRoutine, aboutMe.fitnessRoutine))
                         IconBubble("🌙", cpd.sleepSchedule, aboutMe.sleepSchedule, traitMatch(ownAboutMe?.sleepSchedule, aboutMe.sleepSchedule))
@@ -316,7 +318,7 @@ private fun AboutMeTab(
 
             if (aboutMe.partnerQualities.isNotEmpty()) {
                 CasualCard {
-                    Text(strings.whatIValueInPartner, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.whatIValueInPartner, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         aboutMe.partnerQualities.forEach { PlainBubble(it) }
                     }
@@ -335,7 +337,7 @@ private fun AboutMeTab(
             // param this tab now takes, alongside career/living/relocation.
             if (aboutMe.careerAfterMarriage != null || aboutMe.livingArrangement != null || aboutMe.openToRelocation != null || bio?.childrenPreference != null) {
                 CasualCard {
-                    Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("💼", cpd.careerAfterMarriage, aboutMe.careerAfterMarriage, traitMatch(ownAboutMe?.careerAfterMarriage, aboutMe.careerAfterMarriage))
                         IconBubble("🏠", cpd.livingArrangement, aboutMe.livingArrangement, traitMatch(ownAboutMe?.livingArrangement, aboutMe.livingArrangement))
@@ -347,7 +349,7 @@ private fun AboutMeTab(
 
             if (aboutMe.favoriteCuisine != null || aboutMe.dreamDestination != null || aboutMe.loveLanguage != null) {
                 CasualCard {
-                    Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+                    Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
                     FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
                         IconBubble("🍽️", cpd.favoriteCuisine, aboutMe.favoriteCuisine, traitMatch(ownAboutMe?.favoriteCuisine, aboutMe.favoriteCuisine))
                         IconBubble("✈️", cpd.dreamDestination, aboutMe.dreamDestination, traitMatch(ownAboutMe?.dreamDestination, aboutMe.dreamDestination))
@@ -497,7 +499,7 @@ private fun BioSection(title: String, anyValues: List<Any?>, content: @Composabl
     val hasAny = anyValues.any { v -> v != null && v != "" && (v as? Collection<*>)?.isEmpty() != true }
     if (!hasAny) return
     Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
+        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
         Column(modifier = Modifier.padding(top = 6.dp)) { content() }
     }
 }

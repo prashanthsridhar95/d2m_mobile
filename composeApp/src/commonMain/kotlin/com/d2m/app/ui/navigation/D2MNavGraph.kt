@@ -1,5 +1,6 @@
 package com.d2m.app.ui.navigation
 
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -71,7 +72,10 @@ fun D2MNavGraph(
     //  - tab <-> tab, or into/out of Login: short crossfade (no spatial relationship)
     //  - everything else: iOS-style push -- new screen slides in from the right
     //    while the old one drifts left at ~30% speed (parallax); pop reverses it.
+    // Reduce motion: every transition is the plain short crossfade -- no sliding or parallax.
+    val reduceMotion = rememberReduceMotion()
     fun AnimatedContentTransitionScope<NavBackStackEntry>.isFade(): Boolean {
+        if (reduceMotion) return true
         val from = initialState.destination.route
         val to = targetState.destination.route
         return (from in tabRoutes && to in tabRoutes) || from == Routes.LOGIN || to == Routes.LOGIN

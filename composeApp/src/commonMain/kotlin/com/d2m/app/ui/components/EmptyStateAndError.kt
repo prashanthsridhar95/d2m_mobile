@@ -1,5 +1,9 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -99,6 +103,8 @@ fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Mod
     val shape = RoundedCornerShape(D2MRadius.md)
     Row(
         modifier = modifier
+            // Announced when it appears (form / action errors) without moving focus.
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Assertive }
             .fillMaxWidth()
             // height(IntrinsicSize.Min) is what lets the 3dp edge below
             // stretch to the banner's own height. Without it a Row's
@@ -115,7 +121,8 @@ fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Mod
             Modifier
                 .width(3.dp)
                 .fillMaxHeight()
-                .background(danger.fg),
+                .background(danger.fg)
+                .clearAndSetSemantics {},
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(message, color = danger.fg, style = MaterialTheme.typography.bodyMedium)

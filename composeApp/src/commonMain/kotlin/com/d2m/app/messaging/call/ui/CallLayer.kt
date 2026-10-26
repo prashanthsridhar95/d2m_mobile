@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.call.ui
 
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -167,8 +168,8 @@ fun CallLayer() {
         // first frame `minimized` flips true instead of popping in.
         AnimatedVisibility(
             visible = true,
-            enter = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
-            exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(150)),
+            enter = if (rememberReduceMotion()) fadeIn(tween(80)) else slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
+            exit = if (rememberReduceMotion()) fadeOut(tween(80)) else slideOutVertically(tween(180)) { it } + fadeOut(tween(150)),
         ) {
             MinimizedCallBar(peerName = peerName, onExpand = { minimized = false }, onHangup = { callManager.hangup() })
         }
@@ -233,19 +234,21 @@ private fun IncomingCallToast(peerName: String, isVideo: Boolean, onAccept: () -
  */
 @Composable
 fun PulsingAvatar(initial: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 88.dp) {
-    val infinite = rememberInfiniteTransition(label = "callPulse")
-    val ringScale by infinite.animateFloat(
+    // Reduce motion: no expanding ring at all (the avatar itself still shows who is calling).
+    val reduceMotion = rememberReduceMotion()
+    val infinite = if (reduceMotion) null else rememberInfiniteTransition(label = "callPulse")
+    val ringScale = infinite?.animateFloat(
         initialValue = 1f,
         targetValue = 1.35f,
         animationSpec = infiniteRepeatable(animation = tween(1100), repeatMode = RepeatMode.Restart),
         label = "pulseScale",
-    )
-    val ringAlpha by infinite.animateFloat(
+    )?.value ?: 1f
+    val ringAlpha = infinite?.animateFloat(
         initialValue = 0.45f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(animation = tween(1100), repeatMode = RepeatMode.Restart),
         label = "pulseAlpha",
-    )
+    )?.value ?: 0f
     Box(modifier = modifier.size(size * 1.4f), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier

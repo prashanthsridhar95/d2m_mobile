@@ -1,5 +1,9 @@
 package com.d2m.app.ui.components
 
+import com.d2m.app.platform.rememberReduceMotion
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -148,13 +152,17 @@ fun D2MToggleIconButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 52.dp,
+    /** Spoken state ("Shortlisted" / "Not shortlisted"); falls back to the platform's On / Off. */
+    stateDescription: String? = null,
 ) {
     val haptics = rememberHaptics()
+    val reduceMotion = rememberReduceMotion()
     val source = remember { MutableInteractionSource() }
     val pop = remember { Animatable(1f) }
     var first by remember { mutableStateOf(true) }
     LaunchedEffect(selected) {
         if (first) { first = false; return@LaunchedEffect }
+        if (reduceMotion) return@LaunchedEffect
         pop.snapTo(0.6f)
         pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessMedium))
     }
@@ -165,10 +173,11 @@ fun D2MToggleIconButton(
             .clip(CircleShape)
             .background(if (selected) d2m.accentSoft else d2m.surfaceSunken)
             .border(BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) d2m.accent else d2m.borderStrong), CircleShape)
-            .clickable(interactionSource = source, indication = null, role = Role.Switch, onClick = {
+            .toggleable(value = selected, interactionSource = source, indication = null, role = Role.Switch, onValueChange = {
                 if (selected) haptics.light() else haptics.success()
                 onToggle()
-            }),
+            })
+            .then(if (stateDescription != null) Modifier.semantics { this.stateDescription = stateDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
