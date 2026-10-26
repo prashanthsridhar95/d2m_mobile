@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -203,6 +206,9 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
     var unionStatus by remember { mutableStateOf<UnionStatusOut?>(null) }
     var unionBusy by remember { mutableStateOf(false) }
     var unionError by remember { mutableStateOf<String?>(null) }
+    // "We met" call gate (web: chat-next-step strip + met-info dialog).
+    var metDialogOpen by remember { mutableStateOf(false) }
+    var metBusy by remember { mutableStateOf(false) }
 
     // "Include request sent/request received profiles sections in matches
     // tab" (reported directly) -- a Thread only exists once BOTH sides
@@ -617,9 +623,21 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
             // option all in one line - that's how things are in all the
             // apps." ChatPane below owns nothing but messages + composer.
             val peerUsername = remember(t.otherParticipantId) { d2mIdToMessagingUsername(t.otherParticipantId) }
+            val goSeriousAction: () -> Unit = {
+                val pid = primaryId
+                if (pid != null) scope.launch {
+                    try {
+                        seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
+                    } catch (e: Exception) {
+                        actionError = friendlyError(e, strings.errSendSeriousModeRequest)
+                    }
+                    refresh()
+                }
+            }
             Column(modifier = Modifier.fillMaxSize()) {
                 ConversationHeader(
                     thread = t,
+                    callsUnlocked = t.callsUnlocked,
                     onBack = { chatUiState.setActiveThreadId(null) },
                     onOpenProfile = { onOpenProfile(t.otherParticipantId) },
                     onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
@@ -627,17 +645,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                     menuContent = {
                         MoreOptionsMenu(
                             thread = t,
-                            onGoSerious = {
-                                val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch {
-                                    try {
-                                        seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
-                                    } catch (e: Exception) {
-                                        actionError = friendlyError(e, strings.errSendSeriousModeRequest)
-                                    }
-                                    refresh()
-                                }
-                            },
+                            onGoSerious = goSeriousAction,
                             onRevoke = {
                                 val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch {
@@ -693,6 +701,55 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 actionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
                 unionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
 
+                // Phones' "next step" strip (web: .chat-next-step) -- says WHY
+                // calls are locked and what unlocks them, instead of a
+                // cryptic header pill.
+                if (!t.callsUnlocked) {
+                    FlatStripRow {
+                        Text(
+                            if (t.metConfirmedByMe) strings.metWaitingStrip(t.otherParticipantName) else strings.metStrip,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!t.metConfirmedByMe) {
+                            D2MButton(text = strings.weMet, size = D2MButtonSize.SM, enabled = !metBusy, onClick = { metDialogOpen = true })
+                        }
+                    }
+                } else if (t.status == "active" && t.pendingSeriousModeRequestId == null) {
+                    FlatStripRow {
+                        Text(strings.goSeriousStrip, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        D2MButton(text = strings.goSerious, size = D2MButtonSize.SM, onClick = goSeriousAction)
+                    }
+                }
+                if (metDialogOpen) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { metDialogOpen = false },
+                        title = { Text(strings.metDialogTitle) },
+                        text = { Text(strings.metDialogBody) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(enabled = !metBusy, onClick = {
+                                val pid = primaryId
+                                metDialogOpen = false
+                                if (pid != null) {
+                                    metBusy = true
+                                    scope.launch {
+                                        try {
+                                            seriousModeRepo.confirmMet(pid, t.threadId)
+                                        } catch (e: Exception) {
+                                            actionError = friendlyError(e, strings.errConfirmMet)
+                                        }
+                                        refresh()
+                                        metBusy = false
+                                    }
+                                }
+                            }) { Text(strings.metDialogConfirm) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { metDialogOpen = false }) { Text(strings.metDialogCancel) }
+                        },
+                    )
+                }
+
                 // Banner only ever appears once someone has actually asked
                 // (myUnionConfirmed or otherUnionConfirmed) -- see the
                 // comment where those are computed above for why gating on
@@ -700,25 +757,19 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}, onOpenGallery: () -> Uni
                 // for being exclusive. "More options > Confirm Union" is
                 // still there for whoever wants to actually start it.
                 if (t.status == "exclusive" && unionStatus?.status != "confirmed" && (myUnionConfirmed || otherUnionConfirmed)) {
-                    D2MCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            if (myUnionConfirmed) {
-                                Text(strings.waitingOnThemToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                Text(strings.themWantsToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                D2MButton(text = strings.confirmUnion, size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
-                            }
+                    FlatStripRow {
+                        if (myUnionConfirmed) {
+                            Text(strings.waitingOnThemToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        } else {
+                            Text(strings.themWantsToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            D2MButton(text = strings.confirmUnion, size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
                         }
                     }
                 }
 
                 if (t.status == "exclusive" && unionStatus?.status == "confirmed") {
-                    D2MCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                    FlatStrip {
+                        Column {
                             Text(strings.unionConfirmedTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 strings.unionConfirmedBody,
@@ -902,6 +953,7 @@ private fun InitialAvatar(name: String, size: Dp) {
 @Composable
 private fun ConversationHeader(
     thread: ThreadOut,
+    callsUnlocked: Boolean,
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
     onStartAudioCall: () -> Unit,
@@ -952,8 +1004,8 @@ private fun ConversationHeader(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = strings.audioCall, onClick = onStartAudioCall)
-            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = strings.videoCall, onClick = onStartVideoCall)
+            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = strings.audioCall, onClick = onStartAudioCall, enabled = callsUnlocked, disabledReason = strings.callsLockedDesc)
+            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = strings.videoCall, onClick = onStartVideoCall, enabled = callsUnlocked, disabledReason = strings.callsLockedDesc)
             menuContent()
         }
     }
@@ -962,15 +1014,48 @@ private fun ConversationHeader(
 /** Same 38dp outlined-circle visual as the call buttons used to be inside ChatPane's old toolbar -- kept identical now that they live here instead. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+private fun HeaderIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    disabledReason: String? = null,
+) {
     Box(
         modifier = Modifier.size(38.dp)
             .clip(CircleShape)
             .border(BorderStroke(1.dp, mutedText(0.15f)), CircleShape)
-            .combinedClickable(onClick = onClick, onLongClick = {}),
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = {})
+            .semantics {
+                if (!enabled) {
+                    disabled()
+                    if (disabledReason != null) stateDescription = disabledReason
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp))
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp), tint = if (enabled) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.4f))
+    }
+}
+
+/** Flat edge-to-edge strip (web: padding 10/16, no radius, bottom hairline, accentSoft) for chat banners. */
+@Composable
+private fun FlatStrip(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().background(d2m.accentSoft)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), content = content)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.border))
+    }
+}
+
+@Composable
+private fun FlatStripRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    FlatStrip {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
     }
 }
 

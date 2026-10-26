@@ -304,8 +304,10 @@ private fun NotificationRow(ui: NotifUi, strings: NotificationsStrings, onClick:
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
+            // Read items sit on a sunken surface (full-contrast text) instead of faded text.
+            .background(if (unread) androidx.compose.ui.graphics.Color.Transparent else d2m.surfaceSunken, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
             .bounceClickable(onClick = onClick, pressedScale = 0.985f)
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
         Box(
             Modifier
@@ -317,7 +319,7 @@ private fun NotificationRow(ui: NotifUi, strings: NotificationsStrings, onClick:
             title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
-            color = if (unread) MaterialTheme.colorScheme.onSurface else mutedText(0.7f),
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         Text(ui.time, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))
@@ -377,7 +379,7 @@ private fun NotificationRow(
                     notificationTitle(ui.n.type, strings),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
-                    color = if (unread) MaterialTheme.colorScheme.onSurface else mutedText(0.7f),
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 Text(relative, style = MaterialTheme.typography.labelSmall, color = mutedText(0.45f))

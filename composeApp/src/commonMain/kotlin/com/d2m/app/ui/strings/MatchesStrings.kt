@@ -58,6 +58,16 @@ interface MatchesStrings {
     val youPrefix: String
     fun unreadDesc(count: Int): String
     val sayHi: String
+    val metStrip: String
+    fun metWaitingStrip(name: String): String
+    val weMet: String
+    val goSeriousStrip: String
+    val metDialogTitle: String
+    val metDialogBody: String
+    val metDialogConfirm: String
+    val metDialogCancel: String
+    val callsLockedDesc: String
+    val errConfirmMet: String
 }
 
 object MatchesStringsEn : MatchesStrings {
@@ -117,6 +127,16 @@ object MatchesStringsEn : MatchesStrings {
     override val youPrefix = "You: "
     override fun unreadDesc(count: Int) = "$count unread"
     override val sayHi = "Say hi 👋"
+    override val metStrip = "Calls unlock once you both confirm you've met."
+    override fun metWaitingStrip(name: String) = "Waiting for $name to confirm you met. Calls unlock after that."
+    override val weMet = "We met"
+    override val goSeriousStrip = "Ready to focus on each other? Serious mode pauses new matches for you both."
+    override val metDialogTitle = "Confirm you've met"
+    override val metDialogBody = "Audio and video calls stay off in a new chat until both of you confirm that you've met. Once you both confirm, calls unlock for the two of you."
+    override val metDialogConfirm = "Yes, we've met"
+    override val metDialogCancel = "Not yet"
+    override val callsLockedDesc = "Unavailable until you both confirm you've met"
+    override val errConfirmMet = "Couldn't confirm that you met."
 }
 
 object MatchesStringsHi : MatchesStrings {
@@ -176,6 +196,16 @@ object MatchesStringsHi : MatchesStrings {
     override val youPrefix = "आप: "
     override fun unreadDesc(count: Int) = "$count अपठित"
     override val sayHi = "नमस्ते कहें 👋"
+    override val metStrip = "कॉल तब खुलेंगे जब आप दोनों पुष्टि करेंगे कि आप मिल चुके हैं।"
+    override fun metWaitingStrip(name: String) = "$name के यह पुष्टि करने का इंतज़ार है कि आप मिल चुके हैं। उसके बाद कॉल खुलेंगे।"
+    override val weMet = "हम मिल चुके हैं"
+    override val goSeriousStrip = "एक-दूसरे पर ध्यान देने के लिए तैयार हैं? सीरियस मोड आप दोनों के लिए नए मैच रोक देता है।"
+    override val metDialogTitle = "पुष्टि करें कि आप मिल चुके हैं"
+    override val metDialogBody = "नई चैट में ऑडियो और वीडियो कॉल तब तक बंद रहते हैं जब तक आप दोनों पुष्टि न करें कि आप मिल चुके हैं। दोनों के पुष्टि करने पर कॉल खुल जाएँगे।"
+    override val metDialogConfirm = "हाँ, हम मिल चुके हैं"
+    override val metDialogCancel = "अभी नहीं"
+    override val callsLockedDesc = "आप दोनों के मिलने की पुष्टि करने तक उपलब्ध नहीं"
+    override val errConfirmMet = "मिलने की पुष्टि नहीं हो सकी।"
 }
 
 object MatchesStringsTa : MatchesStrings {
@@ -235,4 +265,14 @@ object MatchesStringsTa : MatchesStrings {
     override val youPrefix = "நீங்கள்: "
     override fun unreadDesc(count: Int) = "$count படிக்காதவை"
     override val sayHi = "வணக்கம் சொல்லுங்கள் 👋"
+    override val metStrip = "நீங்கள் இருவரும் சந்தித்ததை உறுதிப்படுத்தியதும் அழைப்புகள் திறக்கும்."
+    override fun metWaitingStrip(name: String) = "நீங்கள் சந்தித்ததை $name உறுதிப்படுத்த காத்திருக்கிறோம். அதன் பிறகு அழைப்புகள் திறக்கும்."
+    override val weMet = "சந்தித்தோம்"
+    override val goSeriousStrip = "ஒருவர்மீது ஒருவர் கவனம் செலுத்தத் தயாரா? சீரியஸ் மோட் உங்கள் இருவருக்கும் புதிய மேட்ச்களை நிறுத்தும்."
+    override val metDialogTitle = "சந்தித்ததை உறுதிப்படுத்துங்கள்"
+    override val metDialogBody = "நீங்கள் இருவரும் சந்தித்ததை உறுதிப்படுத்தும் வரை புதிய அரட்டையில் ஆடியோ, வீடியோ அழைப்புகள் முடக்கப்பட்டிருக்கும். இருவரும் உறுதிப்படுத்தியதும் அழைப்புகள் திறக்கும்."
+    override val metDialogConfirm = "ஆம், சந்தித்தோம்"
+    override val metDialogCancel = "இன்னும் இல்லை"
+    override val callsLockedDesc = "நீங்கள் இருவரும் சந்தித்ததை உறுதிப்படுத்தும் வரை கிடைக்காது"
+    override val errConfirmMet = "சந்தித்ததை உறுதிப்படுத்த முடியவில்லை."
 }
