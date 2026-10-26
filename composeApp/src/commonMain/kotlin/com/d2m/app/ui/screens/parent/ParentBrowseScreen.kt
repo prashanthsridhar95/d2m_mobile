@@ -376,9 +376,9 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 shortIdError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 6.dp)) }
 
                 if (showChrome) {
-                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val chips: @Composable (Modifier) -> Unit = { mod ->
                         Row(
-                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            mod.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -388,13 +388,28 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                 BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close)
                             }
                         }
+                    }
+                    val toggle: @Composable (Modifier) -> Unit = { mod ->
                         ViewToggle(
                             table = tableView,
                             onChange = { tableView = it },
                             gridLabel = strings.grid,
                             tableLabel = strings.table,
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = mod,
                         )
+                    }
+                    if (com.d2m.app.ui.theme.isLargeText()) {
+                        // Large system text: the chips get the full width and the view toggle sits on its own row,
+                        // instead of both fighting for one line (which clipped "All profiles").
+                        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                            chips(Modifier.fillMaxWidth())
+                            toggle(Modifier.padding(top = 4.dp))
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            chips(Modifier.weight(1f))
+                            toggle(Modifier.padding(start = 8.dp))
+                        }
                     }
                 }
             }

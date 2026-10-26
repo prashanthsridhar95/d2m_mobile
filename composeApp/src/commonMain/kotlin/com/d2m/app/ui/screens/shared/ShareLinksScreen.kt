@@ -347,40 +347,19 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
 
     D2MCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Title + status badge + menu on one row; the details run full width below it. (They used to share a row, so at
+            // large text the dates and view count were squeezed into a sliver beside the badge and collided with it.)
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        when (link.detailLevel) {
-                            "full" -> strings.detailLevelFullShort
-                            "minimal" -> strings.detailLevelMinimal
-                            else -> strings.detailLevelCustomCount(link.customFields?.trueFieldCount() ?: 0)
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.bodySmall, color = d2m.meta)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 44.dp)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                            .clickable(enabled = link.viewCount > 0, role = androidx.compose.ui.semantics.Role.Button, onClick = onSeeViewers),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(Icons.Filled.Visibility, contentDescription = null, tint = d2m.meta, modifier = Modifier.size(18.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = d2m.meta,
-                            )
-                            if (link.viewCount > 0) {
-                                Text(strings.seeViewers, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = d2m.accent)
-                            }
-                        }
-                    }
-                }
+                Text(
+                    when (link.detailLevel) {
+                        "full" -> strings.detailLevelFullShort
+                        "minimal" -> strings.detailLevelMinimal
+                        else -> strings.detailLevelCustomCount(link.customFields?.trueFieldCount() ?: 0)
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
                 D2MBadge(statusText, statusTone)
                 Box {
                     IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
@@ -389,6 +368,30 @@ private fun ShareLinkRow(link: ShareLinkOut, busy: Boolean, onCopy: () -> Unit, 
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(text = { Text(if (link.isActive) strings.turnOff else strings.turnOn) }, onClick = { menuOpen = false; onToggle() })
                         DropdownMenuItem(text = { Text(strings.extendCta) }, onClick = { menuOpen = false; onExtend() })
+                    }
+                }
+            }
+            Column(Modifier.fillMaxWidth().padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(strings.linkExpires(link.expiresAt.take(10)), style = MaterialTheme.typography.bodySmall, color = d2m.meta)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .clickable(enabled = link.viewCount > 0, role = androidx.compose.ui.semantics.Role.Button, onClick = onSeeViewers),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Filled.Visibility, contentDescription = null, tint = d2m.meta, modifier = Modifier.size(18.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            strings.linkViewCount(link.viewCount) + (link.lastViewedAt?.let { strings.linkLastViewedSuffix(it.take(10)) } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = d2m.meta,
+                        )
+                        if (link.viewCount > 0) {
+                            Text(strings.seeViewers, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = d2m.accent)
+                        }
                     }
                 }
             }

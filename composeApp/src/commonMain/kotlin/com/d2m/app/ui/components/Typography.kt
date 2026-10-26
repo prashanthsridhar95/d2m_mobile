@@ -35,12 +35,15 @@ import com.d2m.app.ui.theme.d2m
  */
 @Composable
 fun LabelText(text: String, modifier: Modifier = Modifier, color: Color? = null) {
-    Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        color = color ?: d2m.label,
-        modifier = modifier,
-    )
+    // Uppercase, letter-spaced micro-labels cannot wrap gracefully, so their scale is capped (see CappedFontScale).
+    com.d2m.app.ui.theme.CappedFontScale(1.3f) {
+        Text(
+            text = text.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = color ?: d2m.label,
+            modifier = modifier,
+        )
+    }
 }
 
 /** Same treatment in gold, for an eyebrow above a heading rather than a field label. */

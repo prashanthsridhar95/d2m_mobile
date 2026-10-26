@@ -67,7 +67,7 @@ fun D2MBadge(
         D2MBadgeTone.DANGER -> { bg = palette.danger.bg; fg = palette.danger.fg }
         D2MBadgeTone.NEUTRAL -> { bg = palette.neutral.bg; fg = palette.neutral.fg }
         D2MBadgeTone.GOLD -> { bg = d2m.gold; fg = Color(0xFFFFFDF8); borderColor = d2m.gold }
-        D2MBadgeTone.GOLD_OUTLINE -> { bg = Color.Transparent; fg = d2m.gold; borderColor = d2m.gold }
+        D2MBadgeTone.GOLD_OUTLINE -> { bg = Color.Transparent; fg = d2m.goldStrong; borderColor = d2m.gold }
         D2MBadgeTone.ACCENT -> { bg = d2m.accent; fg = d2m.accentOn; borderColor = d2m.accent }
     }
     val shape = RoundedCornerShape(D2MRadius.sm)

@@ -302,6 +302,8 @@ private fun BottomBarItem(
                 }
             }
         }
+        // Four tabs share the width: cap the label scale so "Dashboard" is never cut to "Dashb...".
+        com.d2m.app.ui.theme.CappedFontScale(1.15f) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
@@ -311,6 +313,7 @@ private fun BottomBarItem(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp),
         )
+        }
     }
 }
 

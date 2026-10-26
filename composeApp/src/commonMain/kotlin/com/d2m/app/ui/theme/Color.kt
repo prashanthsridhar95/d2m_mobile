@@ -21,8 +21,8 @@ object D2MPalette {
     val Ink = Color(0xFF251C15)          // headings, dark bars and panels
     val TextPrimary = Color(0xFF2E2621)  // body copy, field values
     val TextMeta = Color(0xFF5F5954)     // meta line under a name
-    val TextLabel = Color(0xFF8C8375)    // UPPERCASE micro-labels
-    val TextFaint = Color(0xFFB9AF9F)    // disabled / placeholder-adjacent
+    val TextLabel = Color(0xFF6F6759)    // UPPERCASE micro-labels (4.7:1 on every light surface -- was 3.5:1, failing AA)
+    val TextFaint = Color(0xFF8C8375)    // disabled / placeholder-adjacent (3.5:1; was 2.0:1)
 
     // Surfaces
     val PageBg = Color(0xFFFAF6ED)
@@ -60,7 +60,7 @@ object D2MPalette {
     val DarkTextPrimary = Color(0xFFEFE7D9)
     val DarkTextMeta = Color(0xFFB3A897)
     val DarkTextLabel = Color(0xFF9A8F80)
-    val DarkTextFaint = Color(0xFF6B6055)
+    val DarkTextFaint = Color(0xFF8A7F70)
 
     val DarkPageBg = Color(0xFF191410)
     val DarkCardBg = Color(0xFF221B15)
@@ -70,7 +70,7 @@ object D2MPalette {
     val DarkBorderSoft = Color(0xFF2F271F)
     val DarkBorderStrong = Color(0xFF473A2E)
 
-    val DarkAccent = Color(0xFFC9563E)
+    val DarkAccent = Color(0xFFD56A52)
     val DarkAccentStrong = Color(0xFFDB6A50)
     val DarkAccentOn = Color(0xFF1C0F0A)
 
@@ -115,7 +115,7 @@ val LightStatusPalette = D2MStatusPalette(
     info = StatusColors(bg = Color(0xFFE6EFEE), fg = Color(0xFF2F6A63)),
     warning = StatusColors(bg = Color(0xFFF6ECD6), fg = D2MPalette.GoldStrong, border = Color(0xFFE0C88A)),
     danger = StatusColors(bg = Color(0xFFF8E9E6), fg = Color(0xFF96231A), border = Color(0xFFE3BCB6)),
-    neutral = StatusColors(bg = D2MPalette.SurfaceSunken, fg = Color(0xFF7A7064)),
+    neutral = StatusColors(bg = D2MPalette.SurfaceSunken, fg = Color(0xFF6E6458)),
 )
 
 val DarkStatusPalette = D2MStatusPalette(

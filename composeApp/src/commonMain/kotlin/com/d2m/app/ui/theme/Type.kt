@@ -116,15 +116,15 @@ fun d2mTypography(display: FontFamily, body: FontFamily) = Typography(
         fontWeight = FontWeight.Normal,
         lineHeight = 29.sp,
     ),
-    titleSmall = TextStyle(fontFamily = body, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 19.sp),
-    titleMedium = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp),
+    titleSmall = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp),
+    titleMedium = TextStyle(fontFamily = body, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, lineHeight = 22.sp),
 
-    bodyLarge = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 23.sp),
-    bodyMedium = TextStyle(fontFamily = body, fontSize = 13.5.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
-    bodySmall = TextStyle(fontFamily = body, fontSize = 12.5.sp, fontWeight = FontWeight.Normal, lineHeight = 18.sp),
+    bodyLarge = TextStyle(fontFamily = body, fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontFamily = body, fontSize = 14.5.sp, fontWeight = FontWeight.Normal, lineHeight = 21.sp),
+    bodySmall = TextStyle(fontFamily = body, fontSize = 13.5.sp, fontWeight = FontWeight.Normal, lineHeight = 19.sp),
 
-    labelLarge = TextStyle(fontFamily = body, fontSize = 14.sp, fontWeight = FontWeight.Bold, lineHeight = 18.sp),
-    labelMedium = TextStyle(fontFamily = body, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, lineHeight = 16.sp),
+    labelLarge = TextStyle(fontFamily = body, fontSize = 15.sp, fontWeight = FontWeight.Bold, lineHeight = 19.sp),
+    labelMedium = TextStyle(fontFamily = body, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 17.sp),
     // THE micro-label -- every "GOTHRAM" / "DATE OF BIRTH" / "REGISTRATION
     // NUMBER" in the comps. Uppercasing happens at the call site (see
     // components/Typography.kt's LabelText) rather than here, because
@@ -132,10 +132,10 @@ fun d2mTypography(display: FontFamily, body: FontFamily) = Typography(
     // uppercase strings.
     labelSmall = TextStyle(
         fontFamily = body,
-        fontSize = 10.5.sp,
+        fontSize = 11.5.sp,
         fontWeight = FontWeight.SemiBold,
-        lineHeight = 14.sp,
-        letterSpacing = 1.0.sp,
+        lineHeight = 15.sp,
+        letterSpacing = 0.8.sp,
     ),
 )
 

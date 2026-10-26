@@ -123,6 +123,16 @@ fun D2MDivider(modifier: Modifier = Modifier, soft: Boolean = true) {
  */
 @Composable
 fun DataRow(label: String, value: String?, modifier: Modifier = Modifier) {
+    val text = value?.takeIf { it.isNotBlank() } ?: "\u2014"
+    val muted = value.isNullOrBlank()
+    if (com.d2m.app.ui.theme.isLargeText()) {
+        // Large system text: label above value, nothing truncated.
+        Column(modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = if (muted) d2m.faint else d2m.textPrimary)
+        }
+        return
+    }
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -135,9 +145,9 @@ fun DataRow(label: String, value: String?, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(end = 12.dp),
         )
         Text(
-            text = value?.takeIf { it.isNotBlank() } ?: "—",
+            text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (value.isNullOrBlank()) d2m.faint else d2m.textPrimary,
+            color = if (muted) d2m.faint else d2m.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
@@ -149,20 +159,29 @@ fun DataRow(label: String, value: String?, modifier: Modifier = Modifier) {
 /** The same pairing but ruled, for a long list where the rules do real scanning work. */
 @Composable
 fun FieldRow(label: String, value: String?, last: Boolean = false, modifier: Modifier = Modifier) {
+    val text = value?.takeIf { it.isNotBlank() } ?: "\u2014"
+    val muted = value.isNullOrBlank()
     Column(modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
-            Text(
-                text = value?.takeIf { it.isNotBlank() } ?: "—",
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (value.isNullOrBlank()) d2m.faint else d2m.textPrimary,
-                textAlign = TextAlign.End,
-                modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
-            )
+        if (com.d2m.app.ui.theme.isLargeText()) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+                Text(text, style = MaterialTheme.typography.bodyLarge, color = if (muted) d2m.faint else d2m.textPrimary)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (muted) d2m.faint else d2m.textPrimary,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
+                )
+            }
         }
         if (!last) D2MDivider()
     }
