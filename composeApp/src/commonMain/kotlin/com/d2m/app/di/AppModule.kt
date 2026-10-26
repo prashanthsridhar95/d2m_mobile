@@ -47,6 +47,7 @@ val appModule = module {
     single { ConsentApi(get()) }
     single { OffboardingApi(get()) }
     single { AdminApi(get()) }
+    single { StaffGalleryApi(get()) }
     single { NotificationsApi(get()) }
     single { DashboardApi(get()) }
     single { PanchangamApi(get()) }
@@ -77,6 +78,7 @@ val appModule = module {
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }
     single { AdminRepository(get()) }
+    single { StaffGalleryRepository(get()) }
 
     single { IdentityStore(createSettings()) }
     single { LocaleStore(createSettings()) }

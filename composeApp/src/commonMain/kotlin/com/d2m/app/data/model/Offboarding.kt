@@ -107,3 +107,25 @@ data class InviteLinkOut(
     val inviteExpiresAt: String,
     val reused: Boolean,
 )
+
+/** Mirrors staff_ops.py GalleryQueueItemOut. */
+@Serializable
+data class GalleryQueueItemOut(
+    val entryId: String,
+    val story: String,
+    val moderationStatus: String,
+    val createdAt: String,
+    val bothPartnersConsented: Boolean,
+    val riskLevel: String,
+    val riskCohortSize: Int,
+    val riskReasons: List<String> = emptyList(),
+    val reviewedBy: String? = null,
+    val reviewedAt: String? = null,
+    val reviewNote: String? = null,
+)
+
+@Serializable
+data class GalleryPublishIn(val acknowledgeRisk: Boolean = false, val note: String? = null)
+
+@Serializable
+data class GalleryDecisionIn(val note: String)

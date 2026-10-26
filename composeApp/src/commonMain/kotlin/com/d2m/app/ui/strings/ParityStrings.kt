@@ -17,6 +17,17 @@ interface ParityStrings {
     val publishCta: String
     val published: String
     val errPublish: String
+    val staffAccessRequired: String
+    val noteLabel: String
+    val rejectCta: String
+    val unpublishCta: String
+    val acknowledgeRiskTitle: String
+    val acknowledgeRiskCta: String
+    val cancel: String
+    val queueEmpty: String
+    val rejected: String
+    val unpublished: String
+    val noteRequired: String
 
     // BrowseTable
     val colName: String
@@ -50,6 +61,17 @@ object ParityStringsEn : ParityStrings {
     override val publishCta = "Publish"
     override val published = "Published."
     override val errPublish = "Couldn't publish that entry."
+    override val staffAccessRequired = "Staff access required. Your account is not authorised to moderate the gallery."
+    override val noteLabel = "Note (min 3 characters)"
+    override val rejectCta = "Reject"
+    override val unpublishCta = "Unpublish"
+    override val acknowledgeRiskTitle = "Re-identification risk: confirm you reviewed this entry before publishing."
+    override val acknowledgeRiskCta = "Acknowledge risk and publish"
+    override val cancel = "Cancel"
+    override val queueEmpty = "Nothing in the queue."
+    override val rejected = "Rejected."
+    override val unpublished = "Unpublished."
+    override val noteRequired = "A note of at least 3 characters is required."
     override val colName = "Name"
     override val colAge = "Age"
     override val colCity = "City"
@@ -77,6 +99,17 @@ object ParityStringsHi : ParityStrings {
     override val publishCta = "प्रकाशित करें"
     override val published = "प्रकाशित हो गया।"
     override val errPublish = "वह एंट्री प्रकाशित नहीं हो सकी।"
+    override val staffAccessRequired = "Staff access required. Your account is not authorised to moderate the gallery."
+    override val noteLabel = "Note (min 3 characters)"
+    override val rejectCta = "Reject"
+    override val unpublishCta = "Unpublish"
+    override val acknowledgeRiskTitle = "Re-identification risk: confirm you reviewed this entry before publishing."
+    override val acknowledgeRiskCta = "Acknowledge risk and publish"
+    override val cancel = "Cancel"
+    override val queueEmpty = "Nothing in the queue."
+    override val rejected = "Rejected."
+    override val unpublished = "Unpublished."
+    override val noteRequired = "A note of at least 3 characters is required."
     override val colName = "नाम"
     override val colAge = "आयु"
     override val colCity = "शहर"
@@ -104,6 +137,17 @@ object ParityStringsTa : ParityStrings {
     override val publishCta = "வெளியிடவும்"
     override val published = "வெளியிடப்பட்டது."
     override val errPublish = "அந்த பதிவை வெளியிட முடியவில்லை."
+    override val staffAccessRequired = "Staff access required. Your account is not authorised to moderate the gallery."
+    override val noteLabel = "Note (min 3 characters)"
+    override val rejectCta = "Reject"
+    override val unpublishCta = "Unpublish"
+    override val acknowledgeRiskTitle = "Re-identification risk: confirm you reviewed this entry before publishing."
+    override val acknowledgeRiskCta = "Acknowledge risk and publish"
+    override val cancel = "Cancel"
+    override val queueEmpty = "Nothing in the queue."
+    override val rejected = "Rejected."
+    override val unpublished = "Unpublished."
+    override val noteRequired = "A note of at least 3 characters is required."
     override val colName = "பெயர்"
     override val colAge = "வயது"
     override val colCity = "நகரம்"
