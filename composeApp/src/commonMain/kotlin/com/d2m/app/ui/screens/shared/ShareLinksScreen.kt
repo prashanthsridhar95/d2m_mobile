@@ -91,7 +91,7 @@ private const val EXTEND_HOURS = 168 // +7 days -- one plain "extend" action, sa
 
 /** Mirrors screens/shared/ShareLinksScreen.jsx -- create/list/toggle/extend
  *  public profile share links, mounted for both roles (the parent
- *  "Sharing" tab -- AppScaffold.kt's D2MTab.ParentSharing -- and a child-
+ *  Settings' "Share my profile" row (both roles; it was a parent tab before) and a child-
  *  side entry point in Settings, since the child tab bar has no free
  *  slot). Create/manage only: the actual public landing page a link's
  *  recipient opens is a web-only route this app never renders itself. */

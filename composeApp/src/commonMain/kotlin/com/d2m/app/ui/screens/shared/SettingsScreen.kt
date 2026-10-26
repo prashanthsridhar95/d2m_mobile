@@ -151,28 +151,23 @@ fun SettingsScreen(
 
             AccountHeader(identity = identity, accountId = accountId, verified = identity.role == D2MRole.CHILD && primaryVerified, onOpenProfile = onOpenProfile)
 
-            val isChild = identity.role == D2MRole.CHILD
-            if (linkedPrimaryId != null || isChild) {
-                SettingsSection(strings.sectionProfile) {
-                    if (linkedPrimaryId != null) {
-                        SettingsRow(
-                            icon = Icons.Filled.Visibility,
-                            title = strings.previewProfile,
-                            subtitle = strings.previewProfileHint,
-                            onClick = { onOpenProfilePreview(linkedPrimaryId) },
-                        )
-                    }
-                    if (linkedPrimaryId != null && isChild) SettingsDivider()
-                    // Child role only -- the parent role reaches this via its own "Sharing" tab.
-                    if (isChild) {
-                        SettingsRow(
-                            icon = Icons.Filled.Share,
-                            title = strings.shareMyProfile,
-                            subtitle = strings.shareMyProfileSubtitle,
-                            onClick = onOpenShareLinks,
-                        )
-                    }
+            // Both roles: the parent's former Sharing tab now lives here too.
+            SettingsSection(strings.sectionProfile) {
+                if (linkedPrimaryId != null) {
+                    SettingsRow(
+                        icon = Icons.Filled.Visibility,
+                        title = strings.previewProfile,
+                        subtitle = strings.previewProfileHint,
+                        onClick = { onOpenProfilePreview(linkedPrimaryId) },
+                    )
                 }
+                if (linkedPrimaryId != null) SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Filled.Share,
+                    title = strings.shareMyProfile,
+                    subtitle = strings.shareMyProfileSubtitle,
+                    onClick = onOpenShareLinks,
+                )
             }
 
             SettingsSection(strings.sectionTrust) {

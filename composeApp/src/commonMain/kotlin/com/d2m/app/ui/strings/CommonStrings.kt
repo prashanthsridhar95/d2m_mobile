@@ -48,6 +48,7 @@ interface CommonStrings {
     val tryAgain: String
     val tabDiscover: String
     val tabMatches: String
+    val tabMessages: String
     val tabNotifications: String
 }
 
@@ -90,6 +91,7 @@ object CommonStringsEn : CommonStrings {
     override val tryAgain = "Try again"
     override val tabDiscover = "Discover"
     override val tabMatches = "Matches"
+    override val tabMessages = "Messages"
     override val tabNotifications = "Notifications"
 }
 
@@ -132,6 +134,7 @@ object CommonStringsHi : CommonStrings {
     override val tryAgain = "फिर से प्रयास करें"
     override val tabDiscover = "डिस्कवर"
     override val tabMatches = "मैचेस"
+    override val tabMessages = "संदेश"
     override val tabNotifications = "सूचनाएं"
 }
 
@@ -174,5 +177,6 @@ object CommonStringsTa : CommonStrings {
     override val tryAgain = "மீண்டும் முயலவும்"
     override val tabDiscover = "டிஸ்கவர்"
     override val tabMatches = "மேட்சஸ்"
+    override val tabMessages = "செய்திகள்"
     override val tabNotifications = "அறிவிப்புகள்"
 }

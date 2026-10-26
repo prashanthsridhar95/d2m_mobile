@@ -15,7 +15,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -104,7 +104,8 @@ enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
     // Parent tabs
     ParentDashboard("Dashboard", Icons.Filled.Home, Routes.PARENT_HOME),
     ParentSearch("Browse", Icons.Filled.GridView, Routes.PARENT_BROWSE),
-    ParentSharing("Sharing", Icons.Filled.Share, Routes.SHARE_LINKS),
+    // Messages is the parent-to-parent chat inbox (web has it as a top-level item); Sharing moved into Settings.
+    ParentMessages("Messages", Icons.Filled.ChatBubble, Routes.PARENT_MESSAGES),
     ParentSettings("Settings", Icons.Filled.Settings, Routes.SETTINGS),
 
     // Child tabs -- Settings intentionally omitted, see doc comment above.
@@ -114,14 +115,14 @@ enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
     ChildNotifications("Notifications", Icons.Filled.Notifications, Routes.NOTIFICATIONS),
 }
 
-val ParentTabs = listOf(D2MTab.ParentDashboard, D2MTab.ParentSearch, D2MTab.ParentSharing, D2MTab.ParentSettings)
+val ParentTabs = listOf(D2MTab.ParentDashboard, D2MTab.ParentSearch, D2MTab.ParentMessages, D2MTab.ParentSettings)
 val ChildTabs = listOf(D2MTab.ChildHome, D2MTab.ChildDiscover, D2MTab.ChildMatches, D2MTab.ChildNotifications)
 
 /** D2MTab.label is a fixed English key; this resolves the localized copy to actually show. */
 fun D2MTab.localizedLabel(common: CommonStrings): String = when (this) {
     D2MTab.ParentDashboard -> common.tabDashboard
     D2MTab.ParentSearch -> common.tabSearch
-    D2MTab.ParentSharing -> common.tabSharing
+    D2MTab.ParentMessages -> common.tabMessages
     D2MTab.ParentSettings -> common.tabSettings
     D2MTab.ChildHome -> common.tabHome
     D2MTab.ChildDiscover -> common.tabDiscover
@@ -177,7 +178,10 @@ fun D2MShellBottomBar(tabs: List<D2MTab>, currentRoute: String?, onTabSelected: 
     }
 
     val badges = remember(unreadMessages, unreadNotifications, isChild) {
-        if (!isChild) emptyMap() else buildMap {
+        if (!isChild) {
+            // Parent: unread chat messages on the Messages tab.
+            if (unreadMessages > 0) mapOf(D2MTab.ParentMessages to unreadMessages) else emptyMap()
+        } else buildMap {
             if (unreadMessages > 0) put(D2MTab.ChildMatches, unreadMessages)
             if (unreadNotifications > 0) put(D2MTab.ChildNotifications, unreadNotifications)
         }
