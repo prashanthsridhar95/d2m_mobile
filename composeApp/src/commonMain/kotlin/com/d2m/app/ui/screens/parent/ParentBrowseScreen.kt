@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as listItems
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -35,10 +38,19 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.TableRows
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import com.d2m.app.platform.rememberReduceMotion
+import com.d2m.app.ui.components.FacetMode
+import com.d2m.app.ui.components.LocalD2MSnackbar
+import com.d2m.app.ui.components.ProfileRow
+import com.d2m.app.ui.components.ProfileRowSkeleton
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -61,6 +73,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -113,18 +126,19 @@ import org.koin.compose.koinInject
 /** How many cards are composed-ready at a time; the next page is appended as the user nears the end. */
 private const val PAGE_SIZE = 24
 
+/** One removable "applied filter" chip. */
+private class AppliedChip(val id: String, val label: String, val onRemove: () -> Unit)
+
 /**
- * Browse, photo-forward. Sticky chrome (title, ID search, chip row) sits
- * above a two-column LazyVerticalGrid of portrait photo tiles; filters live
- * in the bottom sheet with an active-count on the chip. Everything
- * filtering-related is client-side over the fetched batch, as before.
+ * Browse, synced to web's compact redesign.
  *
- * - Shortlist heart is optimistic with rollback; state lives in a
- *   SnapshotStateMap read only inside the item, so a toggle recomposes one tile.
- * - Items have stable keys + contentType; the visible window grows by
- *   PAGE_SIZE as the user nears the end (pagination-ready for a paged API).
- * - The photos of the next few rows are prefetched while scrolling.
- * - A Grid | Table toggle (both modes) swaps the tiles for a sortable sheet view over the same filtered pool.
+ * - Default view is a compact LIST of profile rows (64dp thumb, badges, "age . ft/in . city", level pill + facts,
+ *   separate star). View choice List | Cards | Compare is persisted across launches; search/sort/pool/filters are kept
+ *   per child profile in memory so opening a profile and coming back never loses them (BrowseState.kt).
+ * - Sort chip opens a radio sheet (Best match, Compatibility, Age, Name); unknown values sort last, in every view.
+ * - Each applied filter value is its own removable chip; "Reset all" appears from two chips up.
+ * - Shortlist is optimistic with rollback, and a successful toggle offers a 6s Undo snackbar.
+ * - Filters live in the bottom sheet; everything filtering-related is client-side over the fetched batch.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,15 +150,23 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val snackbar = LocalD2MSnackbar.current
+    val reduceMotion = rememberReduceMotion()
 
-    // "Provide an ID for each profile for easy search & finding" -- a direct
-    // server lookup by short_id, distinct from the client-side facet filters.
-    var shortIdQuery by remember { mutableStateOf("") }
+    val childPrimaryId = identity.childPrimaryId ?: identity.primaryId
+    val strings = LocalStrings.current.parentBrowse
+    val stateKey = childPrimaryId ?: ""
+    val saved = remember(stateKey) { BrowseStateHolder.load(stateKey) }
+
+    // Name / registration-number search: filters the list live as you type; submitting also tries the server-side
+    // short_id lookup (the existing "find profile by ID" behaviour). Kept across navigation.
+    var query by remember(stateKey) { mutableStateOf(saved.query) }
     var shortIdSearching by remember { mutableStateOf(false) }
     var shortIdError by remember { mutableStateOf<String?>(null) }
 
-    var mode by remember { mutableStateOf(0) } // 0 = matching, 1 = all
-    var tableView by remember { mutableStateOf(false) }
+    var mode by remember(stateKey) { mutableStateOf(saved.mode) } // 0 = matching, 1 = all
+    var sort by remember(stateKey) { mutableStateOf(saved.sort) }
+    var view by remember { mutableStateOf(BrowseStateHolder.loadView()) }
     var matching by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
     var all by remember { mutableStateOf<List<BrowseCandidateOut>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -154,17 +176,23 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     var notClaimed by remember { mutableStateOf(false) }
 
     var sheetOpen by remember { mutableStateOf(false) }
-    var cityFacet by remember { mutableStateOf(FacetState()) }
-    var gothramFacet by remember { mutableStateOf(FacetState()) }
-    var sectFacet by remember { mutableStateOf(FacetState()) }
-    var starFacet by remember { mutableStateOf(FacetState()) }
-    var ageRange by remember { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
+    var sortSheetOpen by remember { mutableStateOf(false) }
+    var viewSheetOpen by remember { mutableStateOf(false) }
+    var cityFacet by remember(stateKey) { mutableStateOf(saved.city) }
+    var gothramFacet by remember(stateKey) { mutableStateOf(saved.gothram) }
+    var sectFacet by remember(stateKey) { mutableStateOf(saved.sect) }
+    var starFacet by remember(stateKey) { mutableStateOf(saved.star) }
+    var ageRange by remember(stateKey) { mutableStateOf(saved.ageRange) }
+
+    // Remember it all for this child profile so Back from a profile restores the screen as it was.
+    SideEffect {
+        if (stateKey.isNotEmpty()) {
+            BrowseStateHolder.save(stateKey, BrowseSavedState(query, sort, mode, cityFacet, gothramFacet, sectFacet, starFacet, ageRange))
+        }
+    }
 
     // candidateId -> optimistic shortlist state (absent = use the server's).
     val shortlistOverrides = remember { mutableStateMapOf<String, Boolean>() }
-
-    val childPrimaryId = identity.childPrimaryId ?: identity.primaryId
-    val strings = LocalStrings.current.parentBrowse
 
     // A Sponsor whose invite hasn't been redeemed yet has no childPrimaryId;
     // same lookup web's ChildIdGate.jsx does (GET /sponsors/{id}/child).
@@ -214,6 +242,10 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
             )
         }
     }
+    // In the all-profiles pool "best match" floats the candidates that are also in the ranked feed.
+    val matchingIds: Set<String>? = remember(mode, all) {
+        if (mode == 1) all.filter { it.isMatching }.map { it.candidateId }.toSet() else null
+    }
 
     val ageBounds = remember(pool) {
         val ages = pool.mapNotNull { it.age }
@@ -226,15 +258,22 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
         return a >= r.start.toInt() && a <= r.endInclusive.toInt()
     }
 
-    val filtered = remember(pool, cityFacet, gothramFacet, sectFacet, starFacet, ageRange) {
+    val q = query.trim()
+    fun matchesQuery(s: SuggestionOut): Boolean =
+        q.isEmpty() || s.candidateName.contains(q, ignoreCase = true) || (s.shortId?.contains(q, ignoreCase = true) == true)
+
+    val filtered = remember(pool, q, cityFacet, gothramFacet, sectFacet, starFacet, ageRange) {
         pool.filter {
-            cityFacet.allows(it.city ?: it.nativity) &&
+            matchesQuery(it) &&
+                cityFacet.allows(it.city ?: it.nativity) &&
                 gothramFacet.allows(it.gothram) &&
                 sectFacet.allows(it.sect) &&
                 starFacet.allows(it.moonNakshatra) &&
                 matchesAge(it)
         }
     }
+    // The chosen sort applies to the filtered list for every view.
+    val sorted = remember(filtered, sort, matchingIds) { sortProfiles(filtered, sort, matchingIds) }
 
     /*
      * Faceted counts: a group's own counts are computed against the pool
@@ -246,7 +285,8 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     fun countsFor(key: String, extract: (SuggestionOut) -> String?): Map<String, Int> =
         pool.asSequence()
             .filter { s ->
-                (key == "city" || cityFacet.allows(s.city ?: s.nativity)) &&
+                matchesQuery(s) &&
+                    (key == "city" || cityFacet.allows(s.city ?: s.nativity)) &&
                     (key == "gothram" || gothramFacet.allows(s.gothram)) &&
                     (key == "sect" || sectFacet.allows(s.sect)) &&
                     (key == "star" || starFacet.allows(s.moonNakshatra)) &&
@@ -268,64 +308,99 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
     )
     val activeFacetCount = groups.count { it.state.isActive } + (if (ageRange != null) 1 else 0)
 
+    // One removable chip per applied value, so "what is applied" is always visible and one tap undoes it.
+    val appliedChips = buildList {
+        groups.forEach { g ->
+            g.state.values.sorted().forEach { v ->
+                add(
+                    AppliedChip(
+                        id = "${g.title}:$v",
+                        label = if (g.state.mode == FacetMode.EXCLUDE) strings.chipNot(v) else "${g.title}: $v",
+                        onRemove = { g.onChange(g.state.copy(values = g.state.values - v)) },
+                    ),
+                )
+            }
+        }
+        ageRange?.let { r -> add(AppliedChip("age", strings.chipAge(r.start.toInt(), r.endInclusive.toInt())) { ageRange = null }) }
+    }
+
     fun clearFacets() {
         cityFacet = FacetState(); gothramFacet = FacetState()
         sectFacet = FacetState(); starFacet = FacetState(); ageRange = null
     }
+    fun clearAllAndQuery() { clearFacets(); query = "" }
 
-    fun toggleShortlist(s: SuggestionOut, now: Boolean) {
+    // Optimistic: flips at once, rolls back (with a message) if the server refuses, and a successful toggle offers a
+    // 6s Undo. Runs on a screen-independent scope so Undo still works after the user has opened a profile.
+    fun toggleShortlist(s: SuggestionOut, now: Boolean, silent: Boolean = false) {
         val pid = childPrimaryId ?: return
         shortlistOverrides[s.candidateId] = now
-        scope.launch {
+        BrowseStateHolder.appScope.launch {
             try {
                 if (now) suggestionsRepo.addToShortlist(pid, s.candidateId)
                 else suggestionsRepo.removeFromShortlist(pid, s.candidateId)
+                if (!silent) {
+                    snackbar.show(
+                        message = if (now) strings.shortlistAddedToast(s.candidateName) else strings.shortlistRemovedToast(s.candidateName),
+                        actionLabel = strings.undo,
+                        onAction = { toggleShortlist(s, !now, silent = true) },
+                    )
+                }
             } catch (_: Exception) {
                 shortlistOverrides[s.candidateId] = !now // roll back
+                snackbar.showError(strings.couldntUpdateShortlist)
             }
         }
     }
 
     fun findById() {
-        val code = shortIdQuery.trim()
+        val code = query.trim()
         if (code.isEmpty() || shortIdSearching) return
         scope.launch {
             shortIdSearching = true
             shortIdError = null
             try {
                 val result = identityRepo.searchByShortId(code)
-                shortIdQuery = ""
                 onOpenProfile(result.primaryId)
             } catch (e: Exception) {
-                shortIdError = friendlyError(e, strings.errSearchById)
+                // Not a registration number: the live name filter already shows what matched, so only a
+                // genuine failure (not "no such profile") is worth an error banner.
+                if (e !is com.d2m.app.data.network.ApiError || e.status != 404) shortIdError = friendlyError(e, strings.errSearchById)
             } finally {
                 shortIdSearching = false
             }
         }
     }
 
-    var searchOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember(stateKey) { mutableStateOf(saved.query.isNotBlank()) }
     val searchFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     fun closeSearch() {
         searchOpen = false
-        shortIdQuery = ""
+        query = ""
         shortIdError = null
         focusManager.clearFocus()
     }
-    LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
+    LaunchedEffect(searchOpen) { if (searchOpen && saved.query.isBlank()) searchFocus.requestFocus() }
 
     // While a load error (or the 'waiting on your child' state) is showing, the screen offers only that message and its Retry:
     // search, filters, mode chips and the view toggle would act on data that isn't there.
     val showChrome = error == null && !notClaimed
 
+    // "N profiles" with "of M" when something narrows the pool.
+    val countText = strings.profilesCount(sorted.size) + if (sorted.size != pool.size) " " + strings.ofTotal(pool.size) else ""
+
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(Modifier.fillMaxSize()) {
             // ---- sticky chrome -------------------------------------------
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                Crossfade(targetState = searchOpen && showChrome, label = "browse-header") { searching ->
+                Crossfade(
+                    targetState = searchOpen && showChrome,
+                    animationSpec = if (reduceMotion) snap() else tween(300),
+                    label = "browse-header",
+                ) { searching ->
                     if (searching) {
-                        // Search by profile ID, only while asked for: it replaces the title row instead of
+                        // Search by name / registration number, only while asked for: it replaces the title row instead of
                         // permanently taking a third of the screen above the results.
                         Row(
                             Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -334,13 +409,18 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                         ) {
                             ToolbarIcon(Icons.AutoMirrored.Filled.ArrowBack, strings.closeSearch, onClick = ::closeSearch, bordered = false)
                             OutlinedTextField(
-                                value = shortIdQuery,
-                                onValueChange = { shortIdQuery = it; shortIdError = null },
-                                placeholder = { Text(strings.searchById, style = MaterialTheme.typography.bodyMedium) },
+                                value = query,
+                                onValueChange = { query = it; shortIdError = null },
+                                placeholder = { Text(strings.searchShortPlaceholder, style = MaterialTheme.typography.bodyMedium) },
                                 trailingIcon = {
-                                    if (shortIdQuery.isNotBlank()) {
-                                        TextButton(onClick = { findById() }, enabled = !shortIdSearching, modifier = Modifier.heightIn(min = 48.dp)) {
-                                            Text(if (shortIdSearching) strings.finding else strings.find)
+                                    if (query.isNotBlank()) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = { query = ""; shortIdError = null }, modifier = Modifier.size(48.dp)) {
+                                                Icon(Icons.Filled.Close, contentDescription = strings.clearSearch, modifier = Modifier.size(18.dp))
+                                            }
+                                            TextButton(onClick = { findById() }, enabled = !shortIdSearching, modifier = Modifier.heightIn(min = 48.dp)) {
+                                                Text(if (shortIdSearching) strings.finding else strings.find)
+                                            }
                                         }
                                     }
                                 },
@@ -360,7 +440,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 PageTitle(strings.browseTitle)
                                 if (!loading && error == null) {
-                                    MetaText(strings.filteredOfPool(filtered.size, pool.size), Modifier.padding(top = 2.dp))
+                                    MetaText(countText, Modifier.padding(top = 2.dp).semantics { liveRegion = LiveRegionMode.Polite })
                                 }
                             }
                             if (showChrome) {
@@ -371,94 +451,140 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                     onClick = { sheetOpen = true },
                                     badge = activeFacetCount,
                                 )
+                                ToolbarIcon(view.icon(), strings.viewButtonDesc(view.label(strings)), onClick = { viewSheetOpen = true })
                             }
                         }
                     }
                 }
                 shortIdError?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 6.dp)) }
+                if (searchOpen && showChrome && !loading) {
+                    MetaText(countText, Modifier.padding(start = 4.dp, top = 2.dp).semantics { liveRegion = LiveRegionMode.Polite })
+                }
 
                 if (showChrome) {
-                    val chips: @Composable (Modifier) -> Unit = { mod ->
-                        Row(
-                            mod.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
-                            BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
-                            if (activeFacetCount > 0) {
-                                BrowseChip(strings.clearAllFilters, selected = false, onClick = ::clearFacets, leading = Icons.Filled.Close, isAction = true)
-                            }
-                        }
+                    // Matching | All profiles
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp).horizontalScroll(rememberScrollState()).selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BrowseChip(strings.matching, selected = mode == 0, onClick = { mode = 0 })
+                        BrowseChip(strings.allProfiles, selected = mode == 1, onClick = { mode = 1 })
                     }
-                    val toggle: @Composable (Modifier) -> Unit = { mod ->
-                        ViewToggle(
-                            table = tableView,
-                            onChange = { tableView = it },
-                            gridLabel = strings.grid,
-                            tableLabel = strings.table,
-                            modifier = mod,
+                    // Sort chip, then one removable chip per applied filter value, then Reset all (from two chips up).
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .semantics { contentDescription = strings.appliedFilters },
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BrowseChip(
+                            strings.sortChip(sort.label(strings)),
+                            selected = false,
+                            onClick = { sortSheetOpen = true },
+                            leading = Icons.AutoMirrored.Filled.Sort,
+                            trailing = Icons.Filled.ExpandMore,
+                            isAction = true,
                         )
-                    }
-                    if (com.d2m.app.ui.theme.isLargeText()) {
-                        // Large system text: the chips get the full width and the view toggle sits on its own row,
-                        // instead of both fighting for one line (which clipped "All profiles").
-                        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                            chips(Modifier.fillMaxWidth())
-                            toggle(Modifier.padding(top = 4.dp))
+                        appliedChips.forEach { c ->
+                            BrowseChip(
+                                c.label, selected = true, onClick = c.onRemove, outlinedAccent = true, trailing = Icons.Filled.Close,
+                                isAction = true, actionDescription = strings.removeFilter(c.label),
+                            )
                         }
-                    } else {
-                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            chips(Modifier.weight(1f))
-                            toggle(Modifier.padding(start = 8.dp))
+                        if (appliedChips.size >= 2) {
+                            BrowseChip(strings.resetAll, selected = false, onClick = ::clearFacets, isAction = true)
                         }
                     }
                 }
             }
 
             // ---- results ---------------------------------------------------
-            Box(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp)) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
                 when {
                     notClaimed -> D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
 
-                    loading -> if (tableView) BrowseTableSkeleton() else BrowseSkeleton()
+                    loading -> when (view) {
+                        BrowseView.LIST -> BrowseRowSkeleton()
+                        BrowseView.CARDS -> BrowseSkeleton()
+                        BrowseView.COMPARE -> BrowseTableSkeleton()
+                    }
 
                     error != null -> D2MErrorBanner(error!!, onRetry = { refreshTick++ }, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    filtered.isEmpty() && pool.isNotEmpty() -> D2MEmptyState(
+                    sorted.isEmpty() && pool.isNotEmpty() -> D2MEmptyState(
                         title = strings.nothingMatchesFiltersTitle,
                         subtitle = strings.nothingMatchesFiltersBody,
                         action = {
-                            D2MActionButton(strings.clearFilters, onClick = ::clearFacets, emphasis = D2MActionEmphasis.SECONDARY, height = 48.dp, modifier = Modifier.padding(horizontal = 24.dp))
+                            D2MActionButton(strings.clearFilters, onClick = ::clearAllAndQuery, emphasis = D2MActionEmphasis.SECONDARY, height = 48.dp, modifier = Modifier.padding(horizontal = 24.dp))
                         },
                     )
 
-                    filtered.isEmpty() -> D2MEmptyState(
+                    sorted.isEmpty() -> D2MEmptyState(
                         title = strings.noProfilesYetTitle,
                         subtitle = if (mode == 0) strings.noProfilesMatchingBody else strings.noProfilesAllBody,
                     )
 
-                    tableView -> BrowseTable(
-                        rows = filtered,
+                    view == BrowseView.COMPARE -> BrowseTable(
+                        rows = sorted,
                         onOpenProfile = onOpenProfile,
                         shortlistOverrides = shortlistOverrides,
-                        onToggleShortlist = ::toggleShortlist,
+                        onToggleShortlist = { s, now -> toggleShortlist(s, now) },
                         resolvePhotoUrl = apiClient::resolveMediaUrl,
                         refreshing = refreshing,
                         onRefresh = { refreshing = true; refreshTick++ },
                     )
 
+                    view == BrowseView.LIST -> {
+                        val listState = rememberLazyListState()
+                        PrefetchPhotos(
+                            count = sorted.size,
+                            firstVisibleIndex = { listState.firstVisibleItemIndex },
+                            urlAt = { i -> sorted.getOrNull(i)?.photoUrl?.let(apiClient::resolveMediaUrl) },
+                            ahead = 8,
+                            perRow = 1,
+                        )
+                        PullToRefreshBox(
+                            isRefreshing = refreshing,
+                            onRefresh = { refreshing = true; refreshTick++ },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize().semantics { contentDescription = strings.profilesListLabel },
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                            ) {
+                                listItems(sorted, key = { it.candidateId }, contentType = { "row" }) { s ->
+                                    // Read inside the item: a toggle recomposes this row only.
+                                    val shortlisted = shortlistOverrides[s.candidateId] ?: s.isShortlisted
+                                    Column {
+                                        ProfileRow(
+                                            suggestion = s,
+                                            resolvePhotoUrl = apiClient::resolveMediaUrl,
+                                            onOpen = { onOpenProfile(s.candidateId) },
+                                            isShortlisted = shortlisted,
+                                            onToggleShortlist = { toggleShortlist(s, !shortlisted) },
+                                        )
+                                        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(d2m.borderSoft))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     else -> {
-                        var shownCount by remember(filtered) { mutableStateOf(PAGE_SIZE) }
-                        val shown = remember(filtered, shownCount) { filtered.take(shownCount) }
+                        var shownCount by remember(sorted) { mutableStateOf(PAGE_SIZE) }
+                        val shown = remember(sorted, shownCount) { sorted.take(shownCount) }
                         val gridState = rememberLazyGridState()
 
                         // Grow the window when the user is within ~3 rows of its end.
-                        LaunchedEffect(filtered, shown.size) {
+                        LaunchedEffect(sorted, shown.size) {
                             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
                                 .distinctUntilChanged()
                                 .collect { last ->
-                                    if (last >= shown.size - 6 && shown.size < filtered.size) shownCount += PAGE_SIZE
+                                    if (last >= shown.size - 6 && shown.size < sorted.size) shownCount += PAGE_SIZE
                                 }
                         }
                         PrefetchPhotos(
@@ -494,7 +620,7 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                                         onToggleShortlist = { toggleShortlist(s, !shortlisted) },
                                     )
                                 }
-                                if (shown.size < filtered.size) {
+                                if (shown.size < sorted.size) {
                                     item(span = { GridItemSpan(maxLineSpan) }, key = "more", contentType = "more") {
                                         Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
                                             MetaText(strings.loadMore)
@@ -518,6 +644,16 @@ fun ParentBrowseScreen(onOpenProfile: (String) -> Unit) {
                 ageBounds = ageBounds,
                 ageRange = ageRange,
                 onAgeChange = { ageRange = it },
+            )
+        }
+        if (sortSheetOpen) {
+            BrowseSortSheet(value = sort, strings = strings, onChange = { sort = it }, onDismiss = { sortSheetOpen = false })
+        }
+        if (viewSheetOpen) {
+            BrowseViewSheet(
+                value = view, strings = strings,
+                onChange = { view = it; BrowseStateHolder.saveView(it) },
+                onDismiss = { viewSheetOpen = false },
             )
         }
     }
@@ -564,6 +700,9 @@ private fun BrowseChip(
     outlinedAccent: Boolean = false,
     /** A one-shot action ("Clear filters") rather than one of a set of options: announced as a button, not as selected/not selected. */
     isAction: Boolean = false,
+    trailing: ImageVector? = null,
+    /** Spoken label for an action chip whose visible text alone is ambiguous ("Remove filter City: Chennai"). */
+    actionDescription: String? = null,
 ) {
     val shape = RoundedCornerShape(percent = 50)
     val bg = if (selected && !outlinedAccent) d2m.accent else if (selected) d2m.accentSoft else MaterialTheme.colorScheme.surface
@@ -573,7 +712,9 @@ private fun BrowseChip(
         Modifier
             .heightIn(min = 48.dp)
             .then(
-                if (isAction) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onClick)
+                if (isAction) Modifier
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onClick)
+                    .then(if (actionDescription != null) Modifier.semantics { contentDescription = actionDescription } else Modifier)
                 else Modifier.selectable(selected = selected, interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.RadioButton, onClick = onClick),
             ),
         contentAlignment = Alignment.Center,
@@ -590,6 +731,7 @@ private fun BrowseChip(
         ) {
             if (leading != null) Icon(leading, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
             Text(label, style = MaterialTheme.typography.labelLarge, color = fg, maxLines = 1)
+            if (trailing != null) Icon(trailing, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -622,32 +764,8 @@ private fun BrowseSkeleton() {
     }
 }
 
-/** Compact two-segment Grid | Table switch: icon-only segments (labels are the accessibility text), 48dp tall touch targets. */
+/** List-view placeholder: the loaded rows' geometry, so nothing jumps when data lands. */
 @Composable
-private fun ViewToggle(
-    table: Boolean,
-    onChange: (Boolean) -> Unit,
-    gridLabel: String,
-    tableLabel: String,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(percent = 50)
-    Row(
-        modifier.height(36.dp).clip(shape).border(BorderStroke(1.dp, d2m.border), shape).background(MaterialTheme.colorScheme.surface).selectableGroup(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        listOf(false to (Icons.Filled.GridView to gridLabel), true to (Icons.Filled.TableRows to tableLabel)).forEach { (isTable, pair) ->
-            val selected = table == isTable
-            Box(
-                Modifier
-                    .width(44.dp).fillMaxHeight()
-                    .background(if (selected) d2m.accent else Color.Transparent)
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onChange(isTable) })
-                    .semantics { contentDescription = pair.second },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(pair.first, contentDescription = null, tint = if (selected) d2m.accentOn else d2m.textPrimary, modifier = Modifier.size(20.dp))
-            }
-        }
-    }
+private fun BrowseRowSkeleton() {
+    Column(Modifier.fillMaxSize()) { repeat(7) { ProfileRowSkeleton() } }
 }

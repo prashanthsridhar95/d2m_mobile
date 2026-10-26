@@ -37,6 +37,38 @@ interface ParentBrowseStrings {
 
     val waitingOnChildTitle: String
     val waitingOnChildBody: String
+
+    // ---- Browse sync with web (sort, views, chips, undo)
+    val sortLabel: String
+    val sortSheetTitle: String
+    val sortBestMatch: String
+    val sortCompatibilityDesc: String
+    val sortAgeAsc: String
+    val sortAgeDesc: String
+    val sortNameAsc: String
+    fun sortChip(current: String): String
+    val viewSheetTitle: String
+    val viewList: String
+    val viewCards: String
+    val viewCompare: String
+    val viewListHint: String
+    val viewCardsHint: String
+    val viewCompareHint: String
+    fun viewButtonDesc(view: String): String
+    fun profilesCount(count: Int): String
+    fun ofTotal(total: Int): String
+    fun chipAge(min: Int, max: Int): String
+    fun chipNot(value: String): String
+    fun removeFilter(label: String): String
+    val resetAll: String
+    val appliedFilters: String
+    val searchShortPlaceholder: String
+    val clearSearch: String
+    val undo: String
+    fun shortlistAddedToast(name: String): String
+    fun shortlistRemovedToast(name: String): String
+    val couldntUpdateShortlist: String
+    val profilesListLabel: String
 }
 
 object ParentBrowseStringsEn : ParentBrowseStrings {
@@ -74,6 +106,37 @@ object ParentBrowseStringsEn : ParentBrowseStrings {
     override val closeSearch = "Close search"
     override val clearAllFilters = "Clear all"
     override val loadMore = "Loading more…"
+
+    override val sortLabel = "Sort"
+    override val sortSheetTitle = "Sort profiles by"
+    override val sortBestMatch = "Best match"
+    override val sortCompatibilityDesc = "Compatibility (highest)"
+    override val sortAgeAsc = "Age (youngest first)"
+    override val sortAgeDesc = "Age (oldest first)"
+    override val sortNameAsc = "Name (A-Z)"
+    override fun sortChip(current: String) = "Sort: $current"
+    override val viewSheetTitle = "How to show profiles"
+    override val viewList = "List"
+    override val viewCards = "Cards"
+    override val viewCompare = "Compare columns"
+    override val viewListHint = "Compact and easy to scan"
+    override val viewCardsHint = "Big photos, one profile at a time"
+    override val viewCompareHint = "Advanced: a wide table you scroll sideways"
+    override fun viewButtonDesc(view: String) = "View: $view. Change view"
+    override fun profilesCount(count: Int) = "$count profile${if (count == 1) "" else "s"}"
+    override fun ofTotal(total: Int) = "of $total"
+    override fun chipAge(min: Int, max: Int) = "Age $min–$max"
+    override fun chipNot(value: String) = "Not $value"
+    override fun removeFilter(label: String) = "Remove filter $label"
+    override val resetAll = "Reset all"
+    override val appliedFilters = "Sort and applied filters"
+    override val searchShortPlaceholder = "Name or reg. no."
+    override val clearSearch = "Clear search"
+    override val undo = "Undo"
+    override fun shortlistAddedToast(name: String) = "$name added to shortlist"
+    override fun shortlistRemovedToast(name: String) = "$name removed from shortlist"
+    override val couldntUpdateShortlist = "Couldn't update your shortlist."
+    override val profilesListLabel = "Profiles"
 }
 
 object ParentBrowseStringsHi : ParentBrowseStrings {
@@ -111,6 +174,37 @@ object ParentBrowseStringsHi : ParentBrowseStrings {
     override val closeSearch = "खोज बंद करें"
     override val clearAllFilters = "सब हटाएं"
     override val loadMore = "और लोड हो रहा है…"
+
+    override val sortLabel = "क्रमबद्ध करें"
+    override val sortSheetTitle = "प्रोफ़ाइलों को इस आधार पर क्रमबद्ध करें"
+    override val sortBestMatch = "सर्वश्रेष्ठ मैच"
+    override val sortCompatibilityDesc = "अनुकूलता (सबसे अधिक)"
+    override val sortAgeAsc = "उम्र (सबसे कम उम्र पहले)"
+    override val sortAgeDesc = "उम्र (सबसे अधिक उम्र पहले)"
+    override val sortNameAsc = "नाम (A-Z)"
+    override fun sortChip(current: String) = "क्रमबद्ध करें: $current"
+    override val viewSheetTitle = "प्रोफ़ाइलें कैसे दिखाएं"
+    override val viewList = "सूची"
+    override val viewCards = "कार्ड"
+    override val viewCompare = "कॉलम की तुलना"
+    override val viewListHint = "संक्षिप्त और देखने में आसान"
+    override val viewCardsHint = "बड़ी तस्वीरें, एक बार में एक प्रोफ़ाइल"
+    override val viewCompareHint = "उन्नत: एक चौड़ी तालिका जिसे आप बगल में स्क्रोल करते हैं"
+    override fun viewButtonDesc(view: String) = "दृश्य: $view। दृश्य बदलें"
+    override fun profilesCount(count: Int) = "$count प्रोफ़ाइलें"
+    override fun ofTotal(total: Int) = "$total में से"
+    override fun chipAge(min: Int, max: Int) = "उम्र $min–$max"
+    override fun chipNot(value: String) = "$value नहीं"
+    override fun removeFilter(label: String) = "फ़िल्टर हटाएं $label"
+    override val resetAll = "सब रीसेट करें"
+    override val appliedFilters = "क्रम और लगाए गए फ़िल्टर"
+    override val searchShortPlaceholder = "नाम या पंजीकरण सं."
+    override val clearSearch = "खोज साफ़ करें"
+    override val undo = "पूर्ववत करें"
+    override fun shortlistAddedToast(name: String) = "$name को शॉर्टलिस्ट में जोड़ा गया"
+    override fun shortlistRemovedToast(name: String) = "$name को शॉर्टलिस्ट से हटाया गया"
+    override val couldntUpdateShortlist = "आपकी शॉर्टलिस्ट अपडेट नहीं हो सकी।"
+    override val profilesListLabel = "प्रोफ़ाइलें"
 }
 
 object ParentBrowseStringsTa : ParentBrowseStrings {
@@ -148,4 +242,35 @@ object ParentBrowseStringsTa : ParentBrowseStrings {
     override val closeSearch = "தேடலை மூடு"
     override val clearAllFilters = "அனைத்தையும் அழி"
     override val loadMore = "மேலும் ஏற்றப்படுகிறது…"
+
+    override val sortLabel = "வரிசைப்படுத்து"
+    override val sortSheetTitle = "சுயவிவரங்களை இதன்படி வரிசைப்படுத்தவும்"
+    override val sortBestMatch = "சிறந்த பொருத்தம்"
+    override val sortCompatibilityDesc = "இணக்கம் (அதிகம்)"
+    override val sortAgeAsc = "வயது (இளையவர் முதலில்)"
+    override val sortAgeDesc = "வயது (மூத்தவர் முதலில்)"
+    override val sortNameAsc = "பெயர் (A-Z)"
+    override fun sortChip(current: String) = "வரிசைப்படுத்து: $current"
+    override val viewSheetTitle = "சுயவிவரங்களை எப்படி காட்டுவது"
+    override val viewList = "பட்டியல்"
+    override val viewCards = "அட்டைகள்"
+    override val viewCompare = "நெடுவரிசைகளை ஒப்பிடு"
+    override val viewListHint = "சுருக்கமானது, பார்க்க எளிதானது"
+    override val viewCardsHint = "பெரிய புகைப்படங்கள், ஒரு நேரத்தில் ஒரு சுயவிவரம்"
+    override val viewCompareHint = "மேம்பட்டது: பக்கவாட்டில் நகர்த்தும் அகலமான அட்டவணை"
+    override fun viewButtonDesc(view: String) = "காட்சி: $view. காட்சியை மாற்று"
+    override fun profilesCount(count: Int) = "$count சுயவிவரங்கள்"
+    override fun ofTotal(total: Int) = "$total இல்"
+    override fun chipAge(min: Int, max: Int) = "வயது $min–$max"
+    override fun chipNot(value: String) = "$value அல்ல"
+    override fun removeFilter(label: String) = "வடிகட்டியை நீக்கு $label"
+    override val resetAll = "அனைத்தையும் மீட்டமை"
+    override val appliedFilters = "வரிசை மற்றும் பயன்படுத்திய வடிகட்டிகள்"
+    override val searchShortPlaceholder = "பெயர் அல்லது பதிவு எண்"
+    override val clearSearch = "தேடலை அழி"
+    override val undo = "செயல்தவிர்"
+    override fun shortlistAddedToast(name: String) = "$name ஷார்ட்லிஸ்ட்டில் சேர்க்கப்பட்டது"
+    override fun shortlistRemovedToast(name: String) = "$name ஷார்ட்லிஸ்ட்டிலிருந்து நீக்கப்பட்டது"
+    override val couldntUpdateShortlist = "உங்கள் ஷார்ட்லிஸ்ட்டை புதுப்பிக்க முடியவில்லை."
+    override val profilesListLabel = "சுயவிவரங்கள்"
 }

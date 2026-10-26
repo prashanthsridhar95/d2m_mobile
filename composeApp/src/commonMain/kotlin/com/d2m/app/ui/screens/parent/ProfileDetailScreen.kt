@@ -262,15 +262,28 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
     // Optimistic shortlist toggle for the sticky bar's heart. Seeded from the
     // fetched candidate; rolls back if the call fails.
     var shortlistedOverride by remember(candidateId) { mutableStateOf<Boolean?>(null) }
-    fun toggleShortlist(current: Boolean) {
+    val browseStrings = LocalStrings.current.parentBrowse
+    val snackbar = com.d2m.app.ui.components.LocalD2MSnackbar.current
+    // Optimistic flip, rolled back with a message on error; a successful toggle offers a 6s Undo (web parity).
+    // Runs on a screen-independent scope so Undo still lands if the user has already left this profile.
+    fun toggleShortlist(current: Boolean, silent: Boolean = false) {
         val pid = identity.childPrimaryId ?: viewerPrimaryId ?: return
         val now = !current
         shortlistedOverride = now
-        scope.launch {
+        val name = candidate?.candidateName ?: strings.thisProfile
+        com.d2m.app.ui.screens.parent.BrowseStateHolder.appScope.launch {
             try {
                 if (now) suggestionsRepo.addToShortlist(pid, candidateId) else suggestionsRepo.removeFromShortlist(pid, candidateId)
+                if (!silent) {
+                    snackbar.show(
+                        message = if (now) browseStrings.shortlistAddedToast(name) else browseStrings.shortlistRemovedToast(name),
+                        actionLabel = browseStrings.undo,
+                        onAction = { toggleShortlist(now, silent = true) },
+                    )
+                }
             } catch (_: Exception) {
                 shortlistedOverride = current
+                snackbar.showError(browseStrings.couldntUpdateShortlist)
             }
         }
     }
@@ -451,6 +464,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 modifier = Modifier.fillMaxWidth(),
                                 showAboutMe = identity.role == D2MRole.CHILD,
                                 viewerPrimaryId = viewerPrimaryId,
+                                bioAccordion = true,
                             )
                         }
                     }
@@ -545,7 +559,8 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 modifier = Modifier.weight(1f),
                                 onClick = { messageParent() },
                             )
-                            D2MActionButton(
+                            // Already consented / sponsor-pushed: expressing interest is moot, so web hides the button.
+                            if (cand.source != "consent_unlocked" && cand.source != "sponsor_pushed") D2MActionButton(
                                 text = when {
                                     actionInFlight -> strings.suggesting
                                     suggestedDone -> strings.suggested
