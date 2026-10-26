@@ -24,6 +24,12 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.theme.D2MStroke
 import com.d2m.app.ui.theme.d2m
@@ -54,8 +60,21 @@ fun D2MStepper(
     activeIndex: Int,
     modifier: Modifier = Modifier,
     onStepClick: ((Int) -> Unit)? = null,
+    /** Spoken progress, e.g. "Step 2 of 5, About your child". Exposed as a progress bar with a range. */
+    progressDescription: String? = null,
 ) {
-    Column(modifier.fillMaxWidth()) {
+    Column(
+        modifier.fillMaxWidth().then(
+            if (progressDescription != null) {
+                Modifier.semantics {
+                    progressBarRangeInfo = ProgressBarRangeInfo((activeIndex + 1).toFloat(), 1f..steps.size.toFloat(), (steps.size - 2).coerceAtLeast(0))
+                    stateDescription = progressDescription
+                }
+            } else {
+                Modifier
+            },
+        ),
+    ) {
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.Bottom,
@@ -66,7 +85,7 @@ fun D2MStepper(
                 val stepClick = onStepClick?.takeIf { isDone }
                 Column(
                     modifier = Modifier
-                        .then(if (stepClick != null) Modifier.clickable { stepClick(i) } else Modifier)
+                        .then(if (stepClick != null) Modifier.clickable(role = Role.Button) { stepClick(i) } else Modifier)
                         .padding(end = 18.dp),
                 ) {
                     Row(
@@ -133,5 +152,24 @@ private fun StepMark(index: Int, isActive: Boolean, isDone: Boolean) {
                 color = if (isActive) d2m.accentOn else d2m.label,
             )
         }
+    }
+}
+
+/** Thin visible progress bar for the stepper's current position (decorative: the stepper carries the semantics). */
+@Composable
+fun D2MStepProgressBar(fraction: Float, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .background(d2m.border, CircleShape)
+            .clearAndSetSemantics {},
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(4.dp)
+                .background(d2m.accent, CircleShape),
+        )
     }
 }

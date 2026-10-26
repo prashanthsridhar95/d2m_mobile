@@ -14,7 +14,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import com.d2m.app.ui.components.D2MOtpField
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.auth.GoogleSignInResult
 import com.d2m.app.data.auth.rememberGoogleSignInLauncher
@@ -162,6 +168,9 @@ private fun LoginPane(
     var password by remember { mutableStateOf("") }
     var authLoading by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    val focusManager = LocalFocusManager.current
 
     var idInput by remember { mutableStateOf("") }
     var idIsParent by remember { mutableStateOf(true) }
@@ -210,29 +219,54 @@ private fun LoginPane(
         } else if (!authenticated) {
             Text(strings.logInWithWedlock, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
-            D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; authError = null }, keyboardType = KeyboardType.Text)
-            D2MTextField(label = strings.passwordLabel, value = password, onValueChange = { password = it; authError = null }, isPassword = true)
+            // Validation lives in one place so the keyboard's Go key and the button behave identically.
+            fun submit() {
+                emailError = if (isValidEmailOrPhone(email)) null else strings.errEmailOrPhone
+                passwordError = if (password.isBlank()) strings.errPasswordRequired else null
+                if (emailError != null || passwordError != null || authLoading) return
+                scope.launch {
+                    authLoading = true
+                    authError = null
+                    try {
+                        val tokens = wedLockApi.login(emailOrPhone = email.trim(), password = password)
+                        identityStore.setWedlockAccessToken(tokens.accessToken)
+                        if (!resolveAndEnter()) authenticated = true
+                    } catch (e: Exception) {
+                        authError = friendlyError(e, strings.errLoginFailed)
+                    } finally {
+                        authLoading = false
+                    }
+                }
+            }
+
+            D2MTextField(
+                label = strings.emailLabel,
+                value = email,
+                onValueChange = { email = it; authError = null; emailError = null },
+                keyboardType = KeyboardType.Email,
+                capitalization = KeyboardCapitalization.None,
+                autoCorrect = false,
+                imeAction = ImeAction.Next,
+                onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                contentType = ContentType.EmailAddress,
+                error = emailError,
+            )
+            D2MTextField(
+                label = strings.passwordLabel,
+                value = password,
+                onValueChange = { password = it; authError = null; passwordError = null },
+                isPassword = true,
+                imeAction = ImeAction.Go,
+                onImeAction = { focusManager.clearFocus(); submit() },
+                error = passwordError,
+            )
 
             authError?.let { D2MErrorBanner(it) }
 
             D2MButton(
                 text = if (authLoading) strings.logInBusy else strings.logIn,
                 enabled = email.isNotBlank() && password.isNotBlank() && !authLoading,
-                onClick = {
-                    scope.launch {
-                        authLoading = true
-                        authError = null
-                        try {
-                            val tokens = wedLockApi.login(emailOrPhone = email, password = password)
-                            identityStore.setWedlockAccessToken(tokens.accessToken)
-                            if (!resolveAndEnter()) authenticated = true
-                        } catch (e: Exception) {
-                            authError = friendlyError(e, strings.errLoginFailed)
-                        } finally {
-                            authLoading = false
-                        }
-                    }
-                },
+                onClick = { submit() },
             )
 
             MetaText(strings.or, Modifier.padding(top = 4.dp))
@@ -328,32 +362,85 @@ private fun RegisterPane(
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var fieldError by remember { mutableStateOf<String?>(null) }
     val strings = LocalStrings.current.login
+    val focusManager = LocalFocusManager.current
+
+    fun sendCode() {
+        if (!isValidEmail(email)) { fieldError = strings.errEmailInvalid; return }
+        if (loading) return
+        scope.launch {
+            loading = true
+            error = null
+            try {
+                wedLockApi.sendRegistrationOtp(email.trim())
+                step = 1
+            } catch (e: Exception) {
+                error = friendlyError(e, strings.errSendCodeFailed)
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun verifyCode() {
+        if (otp.length != 6) { fieldError = strings.errOtpDigits; return }
+        if (loading) return
+        scope.launch {
+            loading = true
+            error = null
+            try {
+                wedLockApi.verifyRegistrationOtp(email.trim(), otp)
+                step = 2
+            } catch (e: Exception) {
+                error = friendlyError(e, strings.errOtpInvalid)
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun createAccount() {
+        if (password.length < 8) { fieldError = strings.errPasswordShort; return }
+        if (loading) return
+        scope.launch {
+            loading = true
+            error = null
+            try {
+                wedLockApi.registerParent(email.trim(), password)
+                val tokens = wedLockApi.login(emailOrPhone = email.trim(), password = password)
+                identityStore.setWedlockAccessToken(tokens.accessToken)
+                onRegistered()
+            } catch (e: Exception) {
+                error = friendlyError(e, strings.errCreateAccountFailed)
+            } finally {
+                loading = false
+            }
+        }
+    }
 
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(strings.setUpAsParent, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
 
         when (step) {
             0 -> {
-                D2MTextField(label = strings.emailLabel, value = email, onValueChange = { email = it; error = null }, keyboardType = KeyboardType.Text)
+                D2MTextField(
+                    label = strings.emailLabel,
+                    value = email,
+                    onValueChange = { email = it; error = null; fieldError = null },
+                    keyboardType = KeyboardType.Email,
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrect = false,
+                    imeAction = ImeAction.Go,
+                    onImeAction = { focusManager.clearFocus(); sendCode() },
+                    contentType = ContentType.EmailAddress,
+                    error = fieldError,
+                )
                 error?.let { D2MErrorBanner(it) }
                 D2MButton(
                     text = if (loading) strings.sendCodeBusy else strings.sendCode,
                     enabled = email.isNotBlank() && !loading,
-                    onClick = {
-                        scope.launch {
-                            loading = true
-                            error = null
-                            try {
-                                wedLockApi.sendRegistrationOtp(email)
-                                step = 1
-                            } catch (e: Exception) {
-                                error = friendlyError(e, strings.errSendCodeFailed)
-                            } finally {
-                                loading = false
-                            }
-                        }
-                    },
+                    onClick = { sendCode() },
                 )
 
                 MetaText(strings.or, Modifier.padding(top = 4.dp))
@@ -375,62 +462,58 @@ private fun RegisterPane(
             }
             1 -> {
                 Text(strings.otpSentTo(email), style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
-                D2MTextField(label = strings.verificationCodeLabel, value = otp, onValueChange = { otp = it; error = null }, keyboardType = KeyboardType.Number)
+                D2MOtpField(
+                    label = strings.verificationCodeLabel,
+                    value = otp,
+                    onValueChange = { otp = it; error = null; fieldError = null },
+                    error = fieldError,
+                    onDone = { focusManager.clearFocus(); verifyCode() },
+                )
                 error?.let { D2MErrorBanner(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     D2MButton(
                         text = if (loading) strings.verifyBusy else strings.verify,
                         enabled = otp.length == 6 && !loading,
-                        onClick = {
-                            scope.launch {
-                                loading = true
-                                error = null
-                                try {
-                                    wedLockApi.verifyRegistrationOtp(email, otp)
-                                    step = 2
-                                } catch (e: Exception) {
-                                    error = friendlyError(e, strings.errOtpInvalid)
-                                } finally {
-                                    loading = false
-                                }
-                            }
-                        },
+                        onClick = { verifyCode() },
                     )
-                    D2MButton(text = strings.back, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { step = 0; otp = ""; error = null })
+                    D2MButton(text = strings.back, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = { step = 0; otp = ""; error = null; fieldError = null })
                 }
             }
             2 -> {
                 D2MTextField(
                     label = strings.passwordLabel,
                     value = password,
-                    onValueChange = { password = it; error = null },
+                    onValueChange = { password = it; error = null; fieldError = null },
                     isPassword = true,
+                    isNewPassword = true,
                     hint = strings.passwordHint,
+                    imeAction = ImeAction.Go,
+                    onImeAction = { focusManager.clearFocus(); createAccount() },
+                    error = fieldError,
                 )
                 error?.let { D2MErrorBanner(it) }
                 D2MButton(
                     text = if (loading) strings.createAccountBusy else strings.createAccount,
-                    enabled = password.length >= 8 && !loading,
-                    onClick = {
-                        scope.launch {
-                            loading = true
-                            error = null
-                            try {
-                                wedLockApi.registerParent(email, password)
-                                val tokens = wedLockApi.login(emailOrPhone = email, password = password)
-                                identityStore.setWedlockAccessToken(tokens.accessToken)
-                                onRegistered()
-                            } catch (e: Exception) {
-                                error = friendlyError(e, strings.errCreateAccountFailed)
-                            } finally {
-                                loading = false
-                            }
-                        }
-                    },
+                    enabled = password.isNotEmpty() && !loading,
+                    onClick = { createAccount() },
                 )
             }
         }
     }
+}
+
+private fun isValidEmail(v: String): Boolean {
+    val t = v.trim()
+    val at = t.indexOf('@')
+    return at > 0 && at == t.lastIndexOf('@') && t.indexOf('.', at) > at + 1 && !t.endsWith(".") && t.none { it.isWhitespace() }
+}
+
+/** Email, or a phone number of at least 10 digits (WedLock accepts either as the login id). */
+private fun isValidEmailOrPhone(v: String): Boolean {
+    val t = v.trim()
+    if ('@' in t) return isValidEmail(t)
+    val digits = t.count { it.isDigit() }
+    return digits >= 10 && t.all { it.isDigit() || it in "+-() " }
 }
 
 // Small helper so this file doesn't need an extra import block per screen --

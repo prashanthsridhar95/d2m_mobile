@@ -42,6 +42,16 @@ interface LoginStrings {
     val errOtpInvalid: String
     val errCreateAccountFailed: String
     val errGoogleSignIn: String
+    val show: String
+    val hide: String
+    val passwordShown: String
+    val passwordHidden: String
+    val errEmailOrPhone: String
+    val errEmailInvalid: String
+    val errPasswordRequired: String
+    val errPasswordShort: String
+    val errOtpDigits: String
+    val roleOpens: String
 
     // RolePickerScreen.kt
     val whoIsThisFor: String
@@ -92,6 +102,16 @@ object LoginStringsEn : LoginStrings {
     override val errOtpInvalid = "That code didn't check out."
     override val errCreateAccountFailed = "Couldn't create that account."
     override val errGoogleSignIn = "Couldn't sign in with Google."
+    override val show = "Show"
+    override val hide = "Hide"
+    override val passwordShown = "Password visible"
+    override val passwordHidden = "Password hidden"
+    override val errEmailOrPhone = "Enter a valid email address or 10-digit phone number."
+    override val errEmailInvalid = "Enter a valid email address."
+    override val errPasswordRequired = "Enter your password."
+    override val errPasswordShort = "Password must be at least 8 characters."
+    override val errOtpDigits = "Enter the 6-digit code."
+    override val roleOpens = "Opens next step"
 
     override val whoIsThisFor = "Who's this for?"
     override val roleParentTitle = "I'm a parent, signing up for my child"
@@ -141,6 +161,16 @@ object LoginStringsHi : LoginStrings {
     override val errOtpInvalid = "वह कोड सही नहीं निकला।"
     override val errCreateAccountFailed = "वह खाता नहीं बनाया जा सका।"
     override val errGoogleSignIn = "Google से साइन इन नहीं हो सका।"
+    override val show = "दिखाएँ"
+    override val hide = "छिपाएँ"
+    override val passwordShown = "पासवर्ड दिख रहा है"
+    override val passwordHidden = "पासवर्ड छिपा है"
+    override val errEmailOrPhone = "मान्य ईमेल पता या 10 अंकों का फ़ोन नंबर दर्ज करें।"
+    override val errEmailInvalid = "मान्य ईमेल पता दर्ज करें।"
+    override val errPasswordRequired = "अपना पासवर्ड दर्ज करें।"
+    override val errPasswordShort = "पासवर्ड कम से कम 8 अक्षर का होना चाहिए।"
+    override val errOtpDigits = "6 अंकों का कोड दर्ज करें।"
+    override val roleOpens = "अगला चरण खुलता है"
 
     override val whoIsThisFor = "यह किसके लिए है?"
     override val roleParentTitle = "मैं एक पैरेंट हूं, अपने बच्चे के लिए साइन अप कर रहा/रही हूं"
@@ -190,6 +220,16 @@ object LoginStringsTa : LoginStrings {
     override val errOtpInvalid = "அந்தக் குறியீடு சரியில்லை."
     override val errCreateAccountFailed = "அந்தக் கணக்கை உருவாக்க முடியவில்லை."
     override val errGoogleSignIn = "Google மூலம் உள்நுழைய முடியவில்லை."
+    override val show = "காட்டு"
+    override val hide = "மறை"
+    override val passwordShown = "கடவுச்சொல் தெரிகிறது"
+    override val passwordHidden = "கடவுச்சொல் மறைக்கப்பட்டுள்ளது"
+    override val errEmailOrPhone = "சரியான மின்னஞ்சல் முகவரி அல்லது 10 இலக்க தொலைபேசி எண்ணை உள்ளிடவும்."
+    override val errEmailInvalid = "சரியான மின்னஞ்சல் முகவரியை உள்ளிடவும்."
+    override val errPasswordRequired = "உங்கள் கடவுச்சொல்லை உள்ளிடவும்."
+    override val errPasswordShort = "கடவுச்சொல் குறைந்தது 8 எழுத்துகள் இருக்க வேண்டும்."
+    override val errOtpDigits = "6 இலக்கக் குறியீட்டை உள்ளிடவும்."
+    override val roleOpens = "அடுத்த படியைத் திறக்கும்"
 
     override val whoIsThisFor = "இது யாருக்காக?"
     override val roleParentTitle = "நான் ஒரு பெற்றோர், என் குழந்தைக்காக பதிவு செய்கிறேன்"

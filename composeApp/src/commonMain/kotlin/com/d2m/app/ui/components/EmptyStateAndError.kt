@@ -19,7 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,19 +100,34 @@ fun D2MEmptyState(
  * on. Also gains a hairline so it reads as a surface rather than a wash.
  */
 @Composable
-fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun D2MErrorBanner(
+    message: String,
+    onRetry: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    /** Compact retry case: keeps the small banner (with a Retry link) instead of the full-screen state. */
+    inline: Boolean = false,
+    title: String? = null,
+    /** True while a retry is in flight: Retry becomes a spinner and the banner announces itself as busy. */
+    retrying: Boolean = false,
+    onDismiss: (() -> Unit)? = null,
+) {
     // A failure that offers Retry is a whole-screen failure (the content never loaded): show the full-screen state,
     // not a small red card. Inline banners without a retry -- form and action errors -- keep the compact look below.
-    if (onRetry != null) {
+    if (onRetry != null && !inline) {
         SomethingWentWrong(onRetry, modifier)
         return
     }
     val danger = LocalD2MStatusPalette.current.danger
+    val busyLabel = LocalStrings.current.common.loading
+    val dismissLabel = LocalStrings.current.common.close
     val shape = RoundedCornerShape(D2MRadius.md)
     Row(
         modifier = modifier
             // Announced when it appears (form / action errors) without moving focus.
-            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Assertive }
+            .semantics(mergeDescendants = true) {
+                liveRegion = LiveRegionMode.Assertive
+                if (retrying) stateDescription = busyLabel
+            }
             .fillMaxWidth()
             // height(IntrinsicSize.Min) is what lets the 3dp edge below
             // stretch to the banner's own height. Without it a Row's
@@ -125,9 +148,28 @@ fun D2MErrorBanner(message: String, onRetry: (() -> Unit)? = null, modifier: Mod
                 .clearAndSetSemantics {},
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            if (title != null) Text(title, color = danger.fg, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(message, color = danger.fg, style = MaterialTheme.typography.bodyMedium)
             if (onRetry != null) {
-                LinkText(LocalStrings.current.sharedComponents.retry, onRetry, Modifier.padding(top = 2.dp))
+                if (retrying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(top = 6.dp).size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = danger.fg,
+                    )
+                } else {
+                    LinkText(LocalStrings.current.sharedComponents.retry, onRetry, Modifier.padding(top = 2.dp))
+                }
+            }
+        }
+        if (onDismiss != null) {
+            Box(
+                Modifier
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = dismissLabel, onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = dismissLabel, tint = danger.fg, modifier = Modifier.size(18.dp))
             }
         }
     }

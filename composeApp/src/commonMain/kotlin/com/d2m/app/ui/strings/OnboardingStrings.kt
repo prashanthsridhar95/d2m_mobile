@@ -39,6 +39,8 @@ interface OnboardingStrings {
     val back: String
     val continueAction: String
     val saving: String
+    fun stepProgress(n: Int, total: Int, name: String): String
+    val draftSaved: String
     val confirmProfile: String
     val errCouldntSaveProfile: String
 
@@ -117,6 +119,8 @@ object OnboardingStringsEn : OnboardingStrings {
     override val back = "Back"
     override val continueAction = "Continue"
     override val saving = "Saving…"
+    override fun stepProgress(n: Int, total: Int, name: String) = "Step $n of $total, $name"
+    override val draftSaved = "Draft saved"
     override val confirmProfile = "Confirm profile"
     override val errCouldntSaveProfile = "Couldn't save this profile."
 
@@ -193,6 +197,8 @@ object OnboardingStringsHi : OnboardingStrings {
     override val back = "वापस"
     override val continueAction = "जारी रखें"
     override val saving = "सेव हो रहा है…"
+    override fun stepProgress(n: Int, total: Int, name: String) = "चरण $n / $total, $name"
+    override val draftSaved = "ड्राफ़्ट सेव हो गया"
     override val confirmProfile = "प्रोफ़ाइल की पुष्टि करें"
     override val errCouldntSaveProfile = "यह प्रोफ़ाइल सेव नहीं हो सकी।"
 
@@ -269,6 +275,8 @@ object OnboardingStringsTa : OnboardingStrings {
     override val back = "பின்செல்"
     override val continueAction = "தொடரவும்"
     override val saving = "சேமிக்கப்படுகிறது…"
+    override fun stepProgress(n: Int, total: Int, name: String) = "படி $n / $total, $name"
+    override val draftSaved = "வரைவு சேமிக்கப்பட்டது"
     override val confirmProfile = "சுயவிவரத்தை உறுதிப்படுத்தவும்"
     override val errCouldntSaveProfile = "இந்த சுயவிவரத்தைச் சேமிக்க முடியவில்லை."
 
