@@ -56,6 +56,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.d2m.app.data.model.CustomFieldSelection
@@ -451,7 +453,7 @@ private fun ViewersSheet(primaryId: String, link: ShareLinkOut, onDismiss: () ->
         contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Text(strings.viewersTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(strings.viewersTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
             Text(
                 strings.linkViewCount(link.viewCount),
                 style = MaterialTheme.typography.bodyMedium,
