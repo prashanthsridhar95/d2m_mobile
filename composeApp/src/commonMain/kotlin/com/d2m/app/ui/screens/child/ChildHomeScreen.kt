@@ -355,7 +355,10 @@ fun ChildHomeScreen(
                 if (requestsLoaded && (receivedFiltered.isNotEmpty() || pendingConsentList.isNotEmpty())) {
                     item(key = "waiting", contentType = "card") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SubHeading(strings.waitingOnYouTitle)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                SubHeading(strings.waitingOnYouTitle, modifier = Modifier.weight(1f, fill = false))
+                                CountDot(receivedFiltered.size + pendingConsentList.size)
+                            }
                             D2MCard(modifier = Modifier.fillMaxWidth()) {
                                 Column {
                                     receivedFiltered.forEachIndexed { index, r ->
@@ -366,11 +369,9 @@ fun ChildHomeScreen(
                                             title = r.candidateName,
                                             subtitle = strings.wantsToMatch,
                                             onClick = { onOpenProfile(r.candidateId) },
-                                            trailing = {
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton(strings.accept, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(r.candidateId, "accept") })
-                                                    D2MButton(strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleMatchAction(r.candidateId, "reject") })
-                                                }
+                                            stackedActions = {
+                                                D2MButton(strings.accept, modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp), enabled = !busy, onClick = { handleMatchAction(r.candidateId, "accept") })
+                                                D2MButton(strings.decline, modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp), variant = D2MButtonVariant.OUTLINE, enabled = !busy, onClick = { handleMatchAction(r.candidateId, "reject") })
                                             },
                                         )
                                     }
@@ -380,11 +381,9 @@ fun ChildHomeScreen(
                                         SummaryRow(
                                             avatar = { GlyphCircle("💛", 44.dp) },
                                             title = strings.consentRowTitle(c.prospectName ?: strings.consentFallbackName),
-                                            trailing = {
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    D2MButton(strings.grant, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(c.requestId, "grant") })
-                                                    D2MButton(strings.deny, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy, onClick = { handleDecide(c.requestId, "deny") })
-                                                }
+                                            stackedActions = {
+                                                D2MButton(strings.grant, modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp), enabled = !busy, onClick = { handleDecide(c.requestId, "grant") })
+                                                D2MButton(strings.deny, modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp), variant = D2MButtonVariant.OUTLINE, enabled = !busy, onClick = { handleDecide(c.requestId, "deny") })
                                             },
                                         )
                                     }
@@ -581,8 +580,11 @@ private fun SummaryRow(
     title: String,
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
+    // Full-width action pair dropped under the row text (phones) instead of squeezing the name.
+    stackedActions: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
+  Column(Modifier.fillMaxWidth()) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -601,6 +603,14 @@ private fun SummaryRow(
         }
         if (trailing != null) trailing()
     }
+    if (stackedActions != null) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 12.dp),
+            content = stackedActions,
+        )
+    }
+  }
 }
 
 /** Avatar circle with a real photo (cropped) or an initial fallback -- mirrors PhotoCircle.jsx. */

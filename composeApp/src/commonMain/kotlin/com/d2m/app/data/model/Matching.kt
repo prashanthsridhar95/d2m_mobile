@@ -21,6 +21,21 @@ data class ThreadOut(
     val createdAt: String? = null,
     val pendingSeriousModeRequestId: String? = null,
     val pendingSeriousModeRequestedBy: String? = null,
+    // "We met" call gate, already resolved relative to the asking primary by the backend.
+    val metConfirmedByMe: Boolean = false,
+    val metConfirmedByOther: Boolean = false,
+    val callsUnlocked: Boolean = false,
+)
+
+@Serializable
+data class ConfirmMetIn(val primaryId: String)
+
+@Serializable
+data class ConfirmMetOut(
+    val threadId: String,
+    val metConfirmedByMe: Boolean = false,
+    val metConfirmedByOther: Boolean = false,
+    val callsUnlocked: Boolean = false,
 )
 
 @Serializable
