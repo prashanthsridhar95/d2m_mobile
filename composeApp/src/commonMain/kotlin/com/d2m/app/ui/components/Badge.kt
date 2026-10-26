@@ -66,7 +66,8 @@ fun D2MBadge(
         D2MBadgeTone.WARNING -> { bg = palette.warning.bg; fg = palette.warning.fg }
         D2MBadgeTone.DANGER -> { bg = palette.danger.bg; fg = palette.danger.fg }
         D2MBadgeTone.NEUTRAL -> { bg = palette.neutral.bg; fg = palette.neutral.fg }
-        D2MBadgeTone.GOLD -> { bg = d2m.gold; fg = Color(0xFFFFFDF8); borderColor = d2m.gold }
+        // goldStrong, not gold: light text on #B48629 is 3.3:1 (fails AA); on goldStrong it is ~5.4:1 (the web darkened its --gold the same way)
+        D2MBadgeTone.GOLD -> { bg = d2m.goldStrong; fg = Color(0xFFFFFDF8); borderColor = d2m.goldStrong }
         D2MBadgeTone.GOLD_OUTLINE -> { bg = Color.Transparent; fg = d2m.goldStrong; borderColor = d2m.gold }
         D2MBadgeTone.ACCENT -> { bg = d2m.accent; fg = d2m.accentOn; borderColor = d2m.accent }
     }
