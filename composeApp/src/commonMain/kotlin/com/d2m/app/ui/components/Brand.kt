@@ -47,7 +47,7 @@ fun BrandMark(size: Dp = 30.dp, modifier: Modifier = Modifier) {
 
 @Composable
 fun D2MBrand(
-    name: String = "D2M",
+    name: String = "Soul'd",
     tagline: String? = null,
     markSize: Dp = 30.dp,
     onDark: Boolean = false,

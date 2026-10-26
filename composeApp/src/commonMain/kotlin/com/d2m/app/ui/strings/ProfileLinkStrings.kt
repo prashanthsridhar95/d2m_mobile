@@ -152,7 +152,7 @@ object ProfileLinkStringsEn : ProfileLinkStrings {
     override val guestVouchCreateError = "That didn't go through -- try again."
     override val guestVouchDone = "Thanks -- sent for approval. It'll show here once they confirm it."
 
-    override val footerNote = "Shared via D2M -- this is a read-only preview, not the full app."
+    override val footerNote = "Shared via Soul'd -- this is a read-only preview, not the full app."
 }
 
 object ProfileLinkStringsHi : ProfileLinkStrings {
@@ -229,7 +229,7 @@ object ProfileLinkStringsHi : ProfileLinkStrings {
     override val guestVouchCreateError = "वह सबमिट नहीं हो सका -- फिर प्रयास करें।"
     override val guestVouchDone = "धन्यवाद -- अनुमोदन के लिए भेज दिया गया। उनकी पुष्टि होते ही यह यहां दिखेगा।"
 
-    override val footerNote = "D2M के माध्यम से शेयर किया गया -- यह केवल पढ़ने के लिए एक पूर्वावलोकन है, पूरा ऐप नहीं।"
+    override val footerNote = "Soul'd के माध्यम से शेयर किया गया -- यह केवल पढ़ने के लिए एक पूर्वावलोकन है, पूरा ऐप नहीं।"
 }
 
 object ProfileLinkStringsTa : ProfileLinkStrings {
@@ -306,5 +306,5 @@ object ProfileLinkStringsTa : ProfileLinkStrings {
     override val guestVouchCreateError = "அது சமர்ப்பிக்கப்படவில்லை -- மீண்டும் முயற்சிக்கவும்."
     override val guestVouchDone = "நன்றி -- ஒப்புதலுக்கு அனுப்பப்பட்டது. அவர்கள் உறுதிசெய்தவுடன் இங்கே தெரியும்."
 
-    override val footerNote = "D2M மூலம் பகிரப்பட்டது -- இது படிக்க மட்டுமான முன்னோட்டம், முழு ஆப் அல்ல."
+    override val footerNote = "Soul'd மூலம் பகிரப்பட்டது -- இது படிக்க மட்டுமான முன்னோட்டம், முழு ஆப் அல்ல."
 }

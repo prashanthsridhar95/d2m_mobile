@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>D2M</string>
+	<string>Soul'd</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -30,30 +30,17 @@
 				<string>d2m</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.d2m.app.google-signin</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<!-- Reversed form of GoogleSignInConfig.IOS_CLIENT_ID (835063984447-cbblmgiad01ce020fmmr1bmbvdd8e42a),
-				     required by GIDSignIn so the Google auth flow can hand
-				     control back to this app. From the downloaded iOS
-				     client plist's own REVERSED_CLIENT_ID key -- standard
-				     GoogleSignIn-iOS setup step. -->
-				<string>com.googleusercontent.apps.835063984447-cbblmgiad01ce020fmmr1bmbvdd8e42a</string>
-			</array>
-		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>D2M needs camera access for video calls and to take a profile photo.</string>
+	<string>Soul'd needs camera access for video calls and to take a profile photo.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>D2M needs microphone access for voice and video calls.</string>
+	<string>Soul'd needs microphone access for voice and video calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>D2M needs photo library access to share photos and videos in chat and to choose a profile photo.</string>
+	<string>Soul'd needs photo library access to share photos and videos in chat and to choose a profile photo.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>voip</string>

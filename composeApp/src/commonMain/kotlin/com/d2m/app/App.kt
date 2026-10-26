@@ -490,7 +490,7 @@ fun App() {
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "D2M",
+                        "Soul'd",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )

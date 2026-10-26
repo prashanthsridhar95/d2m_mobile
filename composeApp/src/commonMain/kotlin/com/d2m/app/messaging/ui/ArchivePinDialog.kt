@@ -91,7 +91,7 @@ fun ArchivePinDialog(messagingRepo: MessagingRepository) {
                 )
                 Text(
                     if (isSetup) {
-                        "Choose a recovery PIN. It encrypts a backup of your conversations that only you can unlock -- not even D2M can read it. You'll need this PIN to see your message history if you ever log in from a new device."
+                        "Choose a recovery PIN. It encrypts a backup of your conversations that only you can unlock -- not even Soul'd can read it. You'll need this PIN to see your message history if you ever log in from a new device."
                     } else {
                         "This account already has a backup from another device. Enter your recovery PIN to restore your full message history here."
                     },

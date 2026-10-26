@@ -262,7 +262,7 @@ fun SettingsScreen(
             }
 
             Text(
-                "D2M",
+                "Soul'd",
                 style = MaterialTheme.typography.labelMedium,
                 color = mutedText(0.35f),
                 textAlign = TextAlign.Center,

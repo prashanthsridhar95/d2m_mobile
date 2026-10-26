@@ -88,7 +88,7 @@ object SettingsStringsEn : SettingsStrings {
     override val statusRejected = "Rejected"
     override val statusNotStarted = "Not started"
     override val logOutConfirmTitle = "Log out?"
-    override val logOutConfirmBody = "You'll need to sign in again to use D2M."
+    override val logOutConfirmBody = "You'll need to sign in again to use Soul'd."
 }
 
 object SettingsStringsHi : SettingsStrings {
@@ -133,7 +133,7 @@ object SettingsStringsHi : SettingsStrings {
     override val statusRejected = "अस्वीकृत"
     override val statusNotStarted = "शुरू नहीं हुआ"
     override val logOutConfirmTitle = "लॉग आउट करें?"
-    override val logOutConfirmBody = "D2M इस्तेमाल करने के लिए आपको फिर से साइन इन करना होगा।"
+    override val logOutConfirmBody = "Soul'd इस्तेमाल करने के लिए आपको फिर से साइन इन करना होगा।"
 }
 
 object SettingsStringsTa : SettingsStrings {
@@ -178,5 +178,5 @@ object SettingsStringsTa : SettingsStrings {
     override val statusRejected = "நிராகரிக்கப்பட்டது"
     override val statusNotStarted = "தொடங்கவில்லை"
     override val logOutConfirmTitle = "வெளியேறவா?"
-    override val logOutConfirmBody = "D2M ஐப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்."
+    override val logOutConfirmBody = "Soul'd ஐப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்."
 }

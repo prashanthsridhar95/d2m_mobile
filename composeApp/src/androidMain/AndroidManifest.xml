@@ -34,7 +34,7 @@
         android:name=".D2MApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="D2M"
+        android:label="Soul'd"
         android:theme="@style/Theme.D2M"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true">

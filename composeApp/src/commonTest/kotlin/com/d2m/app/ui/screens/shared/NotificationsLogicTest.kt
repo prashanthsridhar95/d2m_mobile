@@ -21,14 +21,14 @@ class NotificationsLogicTest {
         assertEquals("Serious Mode ended", notificationTitle("serious_mode_revoked", s))
         assertEquals("Shortlist update", notificationTitle("shortlisted_profile_updated", s))
         // unknown types read as plain text, never the raw key or payload
-        assertEquals("Calls unlocked", notificationTitle("calls_unlocked", s))
-        assertEquals("Ashwin", notificationBody(n("calls_unlocked", "counterpart_name" to "Ashwin", "thread_id" to "t"), s))
-        assertEquals("", notificationBody(n("calls_unlocked", "thread_id" to "t"), s))
+        assertEquals("Calling unlocked", notificationTitle("calls_unlocked", s))
+        assertEquals("You and Ashwin have both confirmed you met -- calling is now open.", notificationBody(n("calls_unlocked", "counterpart_name" to "Ashwin", "thread_id" to "t"), s))
+        assertEquals("You've both confirmed you met -- calling is now open.", notificationBody(n("calls_unlocked", "thread_id" to "t"), s))
     }
 
     @Test fun bodiesTruncateIdsLikeWeb() {
-        assertEquals("Candidate 12345678…", notificationBody(n("mutual_match", "candidate_id" to "1234567890"), s))
-        assertEquals("From abcdefgh… -- see Requests", notificationBody(n("request_received", "sender_id" to "abcdefghij"), s))
+        assertEquals("Tap to view the profile.", notificationBody(n("mutual_match", "candidate_id" to "1234567890"), s))
+        assertEquals("Someone sent you a request -- see Requests.", notificationBody(n("request_received", "sender_id" to "abcdefghij"), s))
         assertEquals("Ravi opened one of your profile share links.", notificationBody(n("share_link_viewed", "viewer_name" to "Ravi"), s))
         assertEquals(s.previewViewerAnonymous, notificationBody(n("share_link_viewed"), s))
         assertEquals("", notificationBody(n("consent_request"), s))

@@ -114,7 +114,7 @@ object IosCallKitBridge {
     fun setup() {
         KoinBootstrap.ensureStarted()
 
-        val config = CXProviderConfiguration("D2M").apply {
+        val config = CXProviderConfiguration("Soul'd").apply {
             supportsVideo = true
             // NSUInteger-backed properties bridge to ULong in Kotlin/Native,
             // not Long -- confirmed directly ("Assignment type mismatch:

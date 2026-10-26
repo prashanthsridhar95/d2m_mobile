@@ -45,7 +45,7 @@ targets:
       path: iosApp/Info.plist
       properties:
         CFBundleDevelopmentRegion: en
-        CFBundleDisplayName: D2M
+        CFBundleDisplayName: Soul'd
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
@@ -77,9 +77,9 @@ targets:
         # microphone or photo library with no usage string present. Without
         # NSMicrophoneUsageDescription every audio/video call would hard-crash
         # the app the moment WebRtcEngine.ios.kt opens the mic.
-        NSCameraUsageDescription: D2M needs camera access for video calls and to take a profile photo.
-        NSMicrophoneUsageDescription: D2M needs microphone access for voice and video calls.
-        NSPhotoLibraryUsageDescription: D2M needs photo library access to share photos and videos in chat and to choose a profile photo.
+        NSCameraUsageDescription: Soul'd needs camera access for video calls and to take a profile photo.
+        NSMicrophoneUsageDescription: Soul'd needs microphone access for voice and video calls.
+        NSPhotoLibraryUsageDescription: Soul'd needs photo library access to share photos and videos in chat and to choose a profile photo.
 
         # Matches the Android manifest's background work: "voip" keeps a
         # PushKit-delivered call alive when backgrounded, "audio" keeps call

@@ -132,7 +132,7 @@ interface SharedComponentsStrings {
 object SharedComponentsStringsEn : SharedComponentsStrings {
     override val featured = "Featured"
     override val foundingMember = "Founding member"
-    override val foundingMemberTooltip = "One of the first members to join D2M."
+    override val foundingMemberTooltip = "One of the first members to join Soul'd."
     override val verifiedTooltip = "This profile's identity has been verified with a government ID and a selfie."
     override fun matchTooltipYesShared(label: String) = "$label: you both picked the same answer"
     override fun matchTooltipNoShared(label: String) = "$label: you picked different answers"
@@ -246,7 +246,7 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
 object SharedComponentsStringsHi : SharedComponentsStrings {
     override val featured = "फीचर्ड"
     override val foundingMember = "संस्थापक सदस्य"
-    override val foundingMemberTooltip = "D2M में शामिल होने वाले शुरुआती सदस्यों में से एक।"
+    override val foundingMemberTooltip = "Soul'd में शामिल होने वाले शुरुआती सदस्यों में से एक।"
     override val verifiedTooltip = "इस प्रोफ़ाइल की पहचान सरकारी ID और सेल्फी से सत्यापित की गई है।"
     override fun matchTooltipYesShared(label: String) = "$label: आप दोनों ने एक ही जवाब चुना"
     override fun matchTooltipNoShared(label: String) = "$label: आप दोनों के जवाब अलग-अलग हैं"
@@ -360,7 +360,7 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
 object SharedComponentsStringsTa : SharedComponentsStrings {
     override val featured = "சிறப்பு"
     override val foundingMember = "நிறுவன உறுப்பினர்"
-    override val foundingMemberTooltip = "D2M இல் இணைந்த முதல் உறுப்பினர்களில் ஒருவர்."
+    override val foundingMemberTooltip = "Soul'd இல் இணைந்த முதல் உறுப்பினர்களில் ஒருவர்."
     override val verifiedTooltip = "இந்த சுயவிவரத்தின் அடையாளம் அரசு ஆவணம் மற்றும் செல்ஃபி மூலம் சரிபார்க்கப்பட்டுள்ளது."
     override fun matchTooltipYesShared(label: String) = "$label: நீங்கள் இருவரும் ஒரே பதிலைத் தேர்ந்தெடுத்துள்ளீர்கள்"
     override fun matchTooltipNoShared(label: String) = "$label: நீங்கள் இருவரும் வெவ்வேறு பதில்களைத் தேர்ந்தெடுத்துள்ளீர்கள்"
