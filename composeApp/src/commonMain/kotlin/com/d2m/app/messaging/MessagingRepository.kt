@@ -284,6 +284,23 @@ class MessagingRepository(
     }
 
     /**
+     * Like [ensureConnected], but doesn't trust an existing "connected"
+     * state: tears the current socket down and reconnects first. A socket
+     * can look alive (isConnected=true) long after the OS or network killed
+     * it, in which case the server has already stopped delivering over it
+     * and fell back to push -- so an FCM-woken handler that merely checked
+     * [ensureConnected] never drained the queued message / replayed call
+     * invite, and the user got a notification for something that never
+     * showed up in the chat (or a call that never rang). Used by the push
+     * handlers and on return to the foreground.
+     */
+    suspend fun refreshConnection(httpClient: HttpClient, timeoutMs: Long = 6_000): Boolean {
+        if (!started) return ensureConnected(httpClient, timeoutMs)
+        wsClient.reconnectNow()
+        return withTimeoutOrNull(timeoutMs) { wsClient.isConnected.first { it } } ?: false
+    }
+
+    /**
      * "Mark as read" notification action support (MarkReadReceiver.kt) --
      * sends a real read receipt for one specific message (the same protocol
      * effect opening the chat and reading it has: turns the SENDER's tick

@@ -137,6 +137,18 @@ fun App() {
     LaunchedEffect(identity.primaryId, identity.sponsorId) {
         if (identity.primaryId != null || identity.sponsorId != null) {
             runCatching { messagingRepo.start(apiClient.client) }
+            // Coming back to the foreground is the moment a socket that
+            // looks connected is most likely dead (phone slept / network
+            // changed); force a fresh one so queued messages and call
+            // invites are delivered instead of only ever showing as a
+            // notification.
+            launch {
+                var wasForeground = AppForegroundState.isForeground.value
+                AppForegroundState.isForeground.collect { fg ->
+                    if (fg && !wasForeground) runCatching { messagingRepo.refreshConnection(apiClient.client) }
+                    wasForeground = fg
+                }
+            }
             // Reported directly: "When app is not alive, I don't receive
             // notification (even now)." Root cause: this used to live in the
             // LaunchedEffect(Unit) below, firing exactly once at first

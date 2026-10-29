@@ -17,6 +17,8 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlin.time.Clock
 
 /**
  * Direct port of messaging-framework/packages/client-web/src/wsClient.ts:
@@ -33,6 +35,10 @@ class MessagingWsClient {
     private var job: Job? = null
     private var heartbeatJob: Job? = null
     private var closedByUs = false
+    private var skipNextDelay = false
+    private var currentSessionJob: Job? = null
+    private var lastRxAt = 0L
+    private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     var onEvent: (ServerToClient) -> Unit = {}
@@ -59,20 +65,38 @@ class MessagingWsClient {
                 try {
                     val url = "$wsBaseUrl/ws?user=${encodeQueryParam(username)}"
                     println("MessagingWsClient: connecting to $url")
-                    client.webSocketSession(urlString = url).let { s ->
+                    // The whole live session runs in its own child job so
+                    // reconnectNow()/the liveness watchdog can tear down a
+                    // half-open socket (phone slept, network switched) that
+                    // the OS never told us is dead -- previously such a
+                    // zombie session kept isConnected=true forever, so
+                    // pushes/ensureConnected() believed they were online
+                    // while the server had already given up on us and was
+                    // sending notifications instead of messages/call invites.
+                    val sessionJob = scope.launch {
+                        val s = client.webSocketSession(urlString = url)
                         session = s
+                        lastRxAt = nowMs()
                         _isConnected.value = true
                         println("MessagingWsClient: connected (user=$username)")
                         onOpen()
-                        heartbeatJob = scope.launch {
+                        heartbeatJob = launch {
                             while (isActive) {
                                 delay(15_000)
+                                val pingAt = nowMs()
                                 val sent = send(ClientToServer.Ping)
                                 if (!sent) println("MessagingWsClient: heartbeat ping failed to send")
+                                delay(10_000)
+                                if (lastRxAt < pingAt) {
+                                    println("MessagingWsClient: no traffic since ping – socket is dead, reconnecting")
+                                    this@launch.cancel()
+                                    currentSessionJob?.cancel()
+                                }
                             }
                         }
                         try {
                             for (frame in s.incoming) {
+                                lastRxAt = nowMs()
                                 if (frame is Frame.Text) {
                                     val text = frame.readText()
                                     val event = runCatching {
@@ -87,22 +111,42 @@ class MessagingWsClient {
                                     }
                                 }
                             }
+                            println("MessagingWsClient: socket closed, will reconnect")
                         } catch (e: ClosedReceiveChannelException) {
                             println("MessagingWsClient: socket closed (${e.message ?: "normal close"}), will reconnect")
                         } finally {
                             heartbeatJob?.cancel()
+                            runCatching { s.cancel() }
                         }
                     }
+                    currentSessionJob = sessionJob
+                    sessionJob.join()
                 } catch (e: Throwable) {
                     println("MessagingWsClient: connection attempt failed: ${e.message ?: e::class.simpleName}, will retry")
                 }
                 session = null
+                currentSessionJob = null
                 _isConnected.value = false
                 if (closedByUs) break
-                delay(1_500)
+                if (skipNextDelay) skipNextDelay = false else delay(1_500)
             }
             println("MessagingWsClient: reconnect loop exited (closedByUs=$closedByUs)")
         }
+    }
+
+    /**
+     * Drops whatever session exists (live or silently dead) and reconnects
+     * immediately, without the usual 1.5s backoff. Call when the app returns
+     * to the foreground or a push arrives -- the two moments a socket that
+     * "looks" connected is most likely a zombie. Safe to call when no
+     * session exists yet (the connect loop is already retrying).
+     */
+    fun reconnectNow() {
+        if (closedByUs || job?.isActive != true) return
+        println("MessagingWsClient: reconnectNow()")
+        skipNextDelay = true
+        currentSessionJob?.cancel()
+        _isConnected.value = false
     }
 
     /** Returns false (never throws) if there's no live session to send on, or if the send itself fails -- see [isConnected]'s doc comment for why callers that care about delivery (MessagingRepository's send paths) need to check this instead of assuming a lack of exception means it went out. */

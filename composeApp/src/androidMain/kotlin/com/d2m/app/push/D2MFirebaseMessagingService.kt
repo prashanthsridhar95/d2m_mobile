@@ -184,6 +184,7 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
         val identityStore = koin.get<IdentityStore>()
         val parentContactsStore = koin.get<ParentContactsStore>()
         val seriousModeRepository = koin.get<SeriousModeRepository>()
+        val apiClient = koin.get<ApiClient>()
 
         val messageId = message.data["messageId"]
         val ciphertextType = message.data["ciphertextType"]
@@ -191,7 +192,17 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
         val sentAt = message.data["sentAt"]?.toLongOrNull()
 
         val result = runBlocking(Dispatchers.Default) {
-            withTimeoutOrNull(8_000) {
+            withTimeoutOrNull(12_000) {
+                // Bring a fresh socket up in parallel with the decrypt below.
+                // The push payload only carries the ciphertext when it fits in
+                // FCM's 4KB cap (first messages of a session, media and
+                // anything long usually don't); without a live socket the
+                // server's queued copy is never drained, so the user saw a
+                // notification for a message that never showed up in the chat.
+                val connecting = async {
+                    runCatching { messagingRepo.refreshConnection(apiClient.client) }
+                        .onFailure { e -> println("D2MFirebaseMessagingService: refreshConnection failed for chat_message: ${e.message ?: e::class.simpleName}") }
+                }
                 val myUsername = runCatching { messagingRepo.ensurePassiveIdentity() }
                     .onFailure { e -> println("D2MFirebaseMessagingService: ensurePassiveIdentity failed: ${e.message ?: e::class.simpleName}") }
                     .getOrNull()
@@ -220,6 +231,7 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                 // worth it if resolution actually found something real, not
                 // the bare fallback (no point caching "id == id").
                 if (senderName != sender) messagingRepo.cachePeerDisplayName(sender, senderName)
+                connecting.await()
                 preview to senderName
             }
         }
@@ -279,8 +291,8 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                 // coroutine than this one -- so the direct-decrypt block
                 // below is a latency optimization when the payload DOES fit,
                 // never the only path.
-                runCatching { messagingRepo.ensureConnected(apiClient.client) }
-                    .onFailure { e -> println("D2MFirebaseMessagingService: ensureConnected failed for incoming_call: ${e.message ?: e::class.simpleName}") }
+                runCatching { messagingRepo.refreshConnection(apiClient.client) }
+                    .onFailure { e -> println("D2MFirebaseMessagingService: refreshConnection failed for incoming_call: ${e.message ?: e::class.simpleName}") }
                 val myUsername = runCatching { messagingRepo.ensurePassiveIdentity() }.getOrNull()
                 if (myUsername != null && messageId != null && ciphertextType != null && ciphertext != null && sentAt != null) {
                     val envelope = MessageEnvelope(messageId, sender, myUsername, ciphertextType, ciphertext, sentAt, ephemeral = true, callInvite = true)
