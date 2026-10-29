@@ -292,6 +292,16 @@ class CallManager(
         phase = CallPhase.CALLING
         emit()
         println("CallManager.startCall: calling $peerUsername (media=$media, callId=$callId)")
+        // Started up front (not after the invite goes out): a stall while acquiring media / gathering ICE used to leave
+        // the call in CALLING forever with no timeout at all.
+        val myCallId = callId
+        ringJob = scope.launch {
+            delay(RING_TIMEOUT_MS)
+            if (phase == CallPhase.CALLING && callId == myCallId) {
+                println("CallManager.startCall: ring timeout (${RING_TIMEOUT_MS}ms) for $peer, hanging up (callId=$callId)")
+                hangup()
+            }
+        }
 
         try {
             val myPc = newPeerConnection()
@@ -309,13 +319,6 @@ class CallManager(
             if (!sent) error("couldn't reach $peer – check your connection")
             println("CallManager.startCall: invite sent to $peer (callId=$callId)")
 
-            ringJob = scope.launch {
-                delay(RING_TIMEOUT_MS)
-                if (phase == CallPhase.CALLING) {
-                    println("CallManager.startCall: ring timeout (${RING_TIMEOUT_MS}ms) for $peer, hanging up (callId=$callId)")
-                    hangup()
-                }
-            }
             emit()
         } catch (e: Throwable) {
             println("CallManager.startCall: failed to start call to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -329,6 +332,7 @@ class CallManager(
     suspend fun accept() {
         if (phase != CallPhase.INCOMING) return
         val offerSdp = pendingOfferSdp ?: return
+        clearRing()
         phase = CallPhase.CONNECTING
         emit()
         println("CallManager.accept: accepting call from $peer (callId=$callId)")
@@ -459,6 +463,17 @@ class CallManager(
             applyRemoteVideo(signal.video)
             messagingRepository.sendCallSignal(from, CallSignal.Ringing(callId))
             emit()
+            // Don't ring forever: if nobody answers, stop the ring (and the notification/ringtone that follow the
+            // INCOMING phase), tell the caller, and log a missed call.
+            val ringingCallId = callId
+            ringJob = scope.launch {
+                delay(RING_TIMEOUT_MS)
+                if (phase == CallPhase.INCOMING && callId == ringingCallId) {
+                    println("CallManager.handleSignal: incoming ring timeout (${RING_TIMEOUT_MS}ms) from $peer, missing call (callId=$callId)")
+                    messagingRepository.sendCallSignal(peer, CallSignal.Decline(callId, "timeout"))
+                    teardown()
+                }
+            }
             return
         }
 

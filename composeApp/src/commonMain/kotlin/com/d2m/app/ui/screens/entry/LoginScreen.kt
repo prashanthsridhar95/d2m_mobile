@@ -229,7 +229,7 @@ private fun LoginPane(
                     authError = null
                     try {
                         val tokens = wedLockApi.login(emailOrPhone = email.trim(), password = password)
-                        identityStore.setWedlockAccessToken(tokens.accessToken)
+                        identityStore.setWedlockTokens(tokens.accessToken, tokens.refreshToken)
                         if (!resolveAndEnter()) authenticated = true
                     } catch (e: Exception) {
                         authError = friendlyError(e, strings.errLoginFailed)
@@ -409,7 +409,7 @@ private fun RegisterPane(
             try {
                 wedLockApi.registerParent(email.trim(), password)
                 val tokens = wedLockApi.login(emailOrPhone = email.trim(), password = password)
-                identityStore.setWedlockAccessToken(tokens.accessToken)
+                identityStore.setWedlockTokens(tokens.accessToken, tokens.refreshToken)
                 onRegistered()
             } catch (e: Exception) {
                 error = friendlyError(e, strings.errCreateAccountFailed)
@@ -562,7 +562,7 @@ private fun GoogleAuthButton(
                         // See this file's top doc comment for why
                         // accountType is always PARENT_GUARDIAN here.
                         val tokens = wedLockApi.socialAuth(idToken = result.idToken, accountType = "PARENT_GUARDIAN")
-                        identityStore.setWedlockAccessToken(tokens.accessToken)
+                        identityStore.setWedlockTokens(tokens.accessToken, tokens.refreshToken)
                         onSuccess()
                     } catch (e: Exception) {
                         onError(friendlyError(e, strings.errGoogleSignIn))

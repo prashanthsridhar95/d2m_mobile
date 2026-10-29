@@ -170,7 +170,7 @@ fun ClaimFlowScreen(token: String?, onComplete: () -> Unit) {
                                         try {
                                             wedLockApi.registerSelf(wedlockEmail, wedlockPassword)
                                             val tokens = wedLockApi.login(emailOrPhone = wedlockEmail, password = wedlockPassword)
-                                            identityStore.setWedlockAccessToken(tokens.accessToken)
+                                            identityStore.setWedlockTokens(tokens.accessToken, tokens.refreshToken)
                                             step = 2
                                         } catch (e: Exception) {
                                             accountError = friendlyError(e, strings.errCreateAccountFailed)

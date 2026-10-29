@@ -51,6 +51,9 @@ const val NOTIFICATION_CHANNEL_MESSAGES = "d2m_messages_v2"
 // but per Android's channel-immutability rule (see the comment below) that
 // requires yet another id bump, not just changing what v2 already has.
 const val NOTIFICATION_CHANNEL_CALLS = "d2m_calls_v3"
+/** Silent, low-importance channel for the "Calling… / On call" banner of an outgoing or connected call. */
+const val NOTIFICATION_CHANNEL_ONGOING_CALL = "d2m_ongoing_call"
+private const val ONGOING_CALL_NOTIFICATION_ID = 7731
 private const val LEGACY_NOTIFICATION_CHANNEL_MESSAGES = "d2m_messages"
 private const val LEGACY_NOTIFICATION_CHANNEL_CALLS = "d2m_calls"
 private const val LEGACY_NOTIFICATION_CHANNEL_CALLS_V2 = "d2m_calls_v2"
@@ -149,6 +152,13 @@ fun installLocalNotificationBridge(app: Application) {
         },
     )
 
+    notificationManager.createNotificationChannel(
+        NotificationChannel(NOTIFICATION_CHANNEL_ONGOING_CALL, "Ongoing call", NotificationManager.IMPORTANCE_LOW).apply {
+            setSound(null, null)
+            enableVibration(false)
+        },
+    )
+
     var startedActivities = 0
     var isForeground = true
     app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
@@ -181,6 +191,19 @@ fun installLocalNotificationBridge(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val koin = GlobalContext.get()
     var nextNotificationId = 1000
+
+    // Wi-Fi <-> mobile data switches, airplane-mode toggles and coverage gaps leave the old WebSocket silently dead;
+    // reconnect the moment a usable network (re)appears instead of waiting for the next heartbeat timeout.
+    runCatching {
+        val connectivity = app.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                scope.launch {
+                    runCatching { koin.get<MessagingRepository>().refreshConnection(koin.get<com.d2m.app.data.network.ApiClient>().client) }
+                }
+            }
+        })
+    }
 
     // New messages, any peer that isn't the open conversation -- same
     // stream the in-app banner uses (messaging/ui/InAppNotificationLayer.kt),
@@ -262,6 +285,24 @@ fun installLocalNotificationBridge(app: Application) {
                 notificationManager.cancel(lastNotifiedCallId.hashCode())
                 lastNotifiedCallId = null
             }
+
+            // Banner for the caller (and for either side once connected), like a normal phone call: visible on the
+            // lock screen / shade so you can tell a call is being placed or in progress, with a Hang up action.
+            // Posted regardless of foreground -- a phone call banner is always there -- and cancelled the moment the
+            // call ends. The incoming ring has its own notification above.
+            if (view != null && (view.phase == CallPhase.CALLING || view.phase == CallPhase.CONNECTING || view.phase == CallPhase.IN_CALL)) {
+                postOngoingCallNotification(
+                    app,
+                    notificationManager,
+                    view.callId,
+                    messagingRepo.peerDisplayName(view.peerUsername),
+                    view.phase,
+                    view.media == "video",
+                    view.startedAt,
+                )
+            } else {
+                notificationManager.cancel(ONGOING_CALL_NOTIFICATION_ID)
+            }
         }
     }
 }
@@ -339,6 +380,49 @@ fun postIncomingCallNotification(context: Context, notificationManager: Notifica
         .apply { if (canShowFullScreenIntent(context)) setFullScreenIntent(fullScreenIntent, true) }
         .build()
     runCatching { notificationManager.notify(notificationId, notification) }
+}
+
+/** Ongoing-call banner (CallStyle.forOngoingCall) for an outgoing call that is still dialing, or a connected call. Tapping it reopens the app; Hang up ends the call without opening it. */
+private fun postOngoingCallNotification(
+    context: Context,
+    notificationManager: NotificationManager,
+    callId: String,
+    peerName: String,
+    phase: CallPhase,
+    isVideo: Boolean,
+    startedAtMs: Long?,
+) {
+    val openIntent = PendingIntent.getActivity(
+        context,
+        ONGOING_CALL_NOTIFICATION_ID,
+        Intent(context, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    val hangUpIntent = PendingIntent.getBroadcast(
+        context,
+        ONGOING_CALL_NOTIFICATION_ID * 31 + ACTION_HANGUP_CALL.hashCode(),
+        Intent(context, CallActionReceiver::class.java).apply {
+            action = ACTION_HANGUP_CALL
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_NOTIFICATION_ID, ONGOING_CALL_NOTIFICATION_ID)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    val kind = if (isVideo) "video call" else "call"
+    val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ONGOING_CALL)
+        .setSmallIcon(context.applicationInfo.icon)
+        .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName(peerName).build(), hangUpIntent))
+        .setContentTitle(peerName)
+        .setContentText(if (phase == CallPhase.CALLING) "Calling…" else if (phase == CallPhase.CONNECTING) "Connecting…" else "Ongoing $kind")
+        .setContentIntent(openIntent)
+        .setCategory(NotificationCompat.CATEGORY_CALL)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setLocalOnly(false)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+    if (phase == CallPhase.IN_CALL && startedAtMs != null) builder.setUsesChronometer(true).setWhen(startedAtMs)
+    runCatching { notificationManager.notify(ONGOING_CALL_NOTIFICATION_ID, builder.build()) }
 }
 
 private fun canShowFullScreenIntent(context: Context): Boolean {

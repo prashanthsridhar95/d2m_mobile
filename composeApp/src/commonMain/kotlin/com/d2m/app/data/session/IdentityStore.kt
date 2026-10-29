@@ -40,6 +40,7 @@ data class Identity(
     val primaryId: String? = null,
     val childPrimaryId: String? = null,
     val wedlockAccessToken: String? = null,
+    val wedlockRefreshToken: String? = null,
 )
 
 class IdentityStore(private val settings: Settings) {
@@ -52,6 +53,7 @@ class IdentityStore(private val settings: Settings) {
         primaryId = settings[KEY_PRIMARY_ID, ""].takeIf { it.isNotEmpty() },
         childPrimaryId = settings[KEY_CHILD_PRIMARY_ID, ""].takeIf { it.isNotEmpty() },
         wedlockAccessToken = settings[KEY_WEDLOCK_TOKEN, ""].takeIf { it.isNotEmpty() },
+        wedlockRefreshToken = settings[KEY_WEDLOCK_REFRESH, ""].takeIf { it.isNotEmpty() },
     )
 
     fun setParent(sponsorId: String, childPrimaryId: String? = null) {
@@ -80,6 +82,13 @@ class IdentityStore(private val settings: Settings) {
         _identity.value = load()
     }
 
+    /** Stores the full login pair. The refresh token is what lets ApiClient silently renew an expired access token instead of logging the user out. A null [refresh] keeps any refresh token already stored. */
+    fun setWedlockTokens(access: String, refresh: String?) {
+        settings.putString(KEY_WEDLOCK_TOKEN, access)
+        if (!refresh.isNullOrEmpty()) settings.putString(KEY_WEDLOCK_REFRESH, refresh)
+        _identity.value = load()
+    }
+
     fun clearWedlockAccessToken() {
         settings.remove(KEY_WEDLOCK_TOKEN)
         _identity.value = load()
@@ -91,6 +100,7 @@ class IdentityStore(private val settings: Settings) {
         settings.remove(KEY_PRIMARY_ID)
         settings.remove(KEY_CHILD_PRIMARY_ID)
         settings.remove(KEY_WEDLOCK_TOKEN)
+        settings.remove(KEY_WEDLOCK_REFRESH)
         _identity.value = load()
     }
 
@@ -100,6 +110,7 @@ class IdentityStore(private val settings: Settings) {
         const val KEY_PRIMARY_ID = "d2m_primary_id"
         const val KEY_CHILD_PRIMARY_ID = "d2m_child_primary_id"
         const val KEY_WEDLOCK_TOKEN = "d2m_wedlock_token"
+        const val KEY_WEDLOCK_REFRESH = "d2m_wedlock_refresh_token"
     }
 }
 

@@ -3,6 +3,9 @@ package com.d2m.app.data.network
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
@@ -28,6 +31,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 import com.d2m.app.data.session.IdentityStore
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Thin wrapper over Ktor mirroring d2m_web/src/lib/apiClient.js: same base-URL
@@ -85,6 +89,68 @@ class ApiClient(
         // per app, matching this build's "no reason to instantiate two"
         // simplicity bias elsewhere.
         install(WebSockets)
+        // The messaging relay server (messaging-framework) authenticates every REST route and the WebSocket upgrade
+        // with the WedLock IAM access token as `Authorization: Bearer`; without it each call is a 401 and no message
+        // can be sent. Applied per request (so a re-login's new token is picked up by the WS reconnect loop too) and
+        // ONLY to the relay's host, so the token is never sent to other hosts. Calls that already set the header win.
+        install(createClientPlugin("MessagingBearer") {
+            onRequest { request, _ ->
+                if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
+                val relayHost = runCatching { io.ktor.http.Url(com.d2m.app.messaging.MessagingConfig.httpBaseUrl).host }.getOrNull()
+                    ?: return@onRequest
+                if (request.url.host != relayHost) return@onRequest
+                identityStore?.identity?.value?.wedlockAccessToken?.let { request.headers.append(HttpHeaders.Authorization, "Bearer $it") }
+            }
+        })
+    }
+
+    /**
+     * Set by DI (WedLockApi.refresh): returns the new pair, null if WedLock rejected the refresh token, throws on a
+     * transient failure. Kept as a lambda so ApiClient doesn't depend on WedLockApi.
+     */
+    var tokenRefresher: (suspend (refreshToken: String) -> WedLockTokenPair?)? = null
+
+    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+    private var lastTransientRefreshFailureMs = 0L
+
+    /**
+     * Single-flight token renewal after a 401. True if a newer access token is now stored (either we refreshed or a
+     * concurrent call already had). False if there's no refresh token / it was rejected -- the session is truly over --
+     * or the refresh hit a transient error (then [lastTransientRefreshFailureMs] suppresses the logout).
+     */
+    private suspend fun refreshAccessToken(staleToken: String?): Boolean = refreshMutex.withLock {
+        val store = identityStore ?: return@withLock false
+        val current = store.identity.value
+        if (current.wedlockAccessToken != null && current.wedlockAccessToken != staleToken) return@withLock true
+        val refreshToken = current.wedlockRefreshToken ?: return@withLock false
+        val refresher = tokenRefresher ?: return@withLock false
+        try {
+            val pair = refresher(refreshToken) ?: return@withLock false
+            store.setWedlockTokens(pair.accessToken, pair.refreshToken)
+            true
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            lastTransientRefreshFailureMs = nowMillis()
+            false
+        }
+    }
+
+    private fun nowMillis(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    init {
+        // On a 401 for a request that carried our token, renew it once and replay the request with the new token,
+        // so an expired access token is invisible to the user instead of logging them out.
+        client.plugin(HttpSend).intercept { request ->
+            val call = execute(request)
+            val sentAuth = request.headers[HttpHeaders.Authorization]
+            if (call.response.status.value != 401 || sentAuth == null || request.url.buildString().contains("/auth/")) return@intercept call
+            val stale = sentAuth.removePrefix("Bearer ")
+            if (!refreshAccessToken(stale)) return@intercept call
+            val fresh = identityStore?.identity?.value?.wedlockAccessToken ?: return@intercept call
+            request.headers.remove(HttpHeaders.Authorization)
+            request.headers.append(HttpHeaders.Authorization, "Bearer $fresh")
+            execute(request)
+        }
     }
 
     fun url(path: String) = baseUrl.trimEnd('/') + path
@@ -286,6 +352,8 @@ class ApiClient(
     val sessionExpired = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     fun notifySessionExpiredIfAuthenticated(status: Int) {
+        // A transient refresh failure (no network) is not a reason to log out.
+        if (nowMillis() - lastTransientRefreshFailureMs < 30_000) return
         if (status == 401 && identityStore?.identity?.value?.wedlockAccessToken != null) sessionExpired.tryEmit(Unit)
     }
 

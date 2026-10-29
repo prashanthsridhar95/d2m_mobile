@@ -110,6 +110,9 @@ data class WedLockSendOtpResponse(val message: String, val method: String = "ema
 data class WedLockMessageResponse(val message: String)
 
 @Serializable
+data class WedLockRefreshRequestDto(val refreshToken: String)
+
+@Serializable
 data class WedLockTokenPair(val accessToken: String, val refreshToken: String? = null, val tokenType: String = "Bearer")
 
 /** WedLockIAM's SocialAuthResponse -- TokenPair plus isNewUser, see POST /auth/social's response shape in this file's class doc comment. */
@@ -166,6 +169,20 @@ class WedLockApi(
             )
         }
         return response.body()
+    }
+
+    /**
+     * Exchanges a refresh token for a new access token (POST /auth/refresh). Returns null when WedLock definitively
+     * rejects the refresh token (expired/revoked -- the user really must log in again); throws on network/server
+     * errors so callers can tell "try again later" from "session is over".
+     */
+    suspend fun refresh(refreshToken: String): WedLockTokenPair? {
+        val response = client.post(url("/auth/refresh")) {
+            contentType(ContentType.Application.Json)
+            setBody(WedLockRefreshRequestDto(refreshToken))
+        }
+        if (response.status.value in listOf(400, 401, 403, 422)) return null
+        return unwrap(response)
     }
 
     /** Sends a registration OTP to an email address or phone number. Console-mode delivery logs to wedlock_email_otp.log locally. */

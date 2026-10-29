@@ -32,7 +32,8 @@ val appModule = module {
     // comment. Safe despite IdentityStore's own single{} being declared
     // further down: Koin resolves get() lazily on first actual use, not in
     // module-declaration order.
-    single { ApiClient(engine = httpEngine(), identityStore = get()) }
+    // tokenRefresher: silent WedLock token renewal on 401 instead of logging the user out (ApiClient.refreshAccessToken).
+    single { ApiClient(engine = httpEngine(), identityStore = get()).also { api -> api.tokenRefresher = { rt -> get<WedLockApi>().refresh(rt) } } }
     // Separate base URL/service -- see WedLockApi.kt's doc comment on why
     // this isn't routed through the ApiClient above.
     single { WedLockApi(httpEngine()) }
