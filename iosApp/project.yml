@@ -1,0 +1,40 @@
+name: iosApp
+
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+        excludes:
+          - Info.plist
+    info:
+      path: iosApp/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.d2m.app
+        INFOPLIST_FILE: iosApp/Info.plist
+        "FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]":
+          - "$(PROJECT_DIR)/../composeApp/build/bin/iosSimulatorArm64/debugFramework"
+        "FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]":
+          - "$(PROJECT_DIR)/../composeApp/build/bin/iosArm64/debugFramework"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-framework"
+          - UIKit
+          - "-framework"
+          - SwiftUI
+          - "-framework"
+          - ComposeApp
+          - "-lsqlite3"
+        CODE_SIGN_STYLE: Automatic
