@@ -182,6 +182,7 @@ kotlin {
         // default -- this also means WebRtcEngine.ios.kt's imports don't
         // need to change at all for this swap.
         pod("WebRTC-lib") {
+            version = "152.0.0"
             moduleName = "WebRTC"
             packageName = "cocoapods.webrtc"
         }
@@ -411,6 +412,27 @@ val hasReleaseSigningConfig =
 compose.resources {
     // Fonts live in src/commonMain/composeResources/font; Res is generated into this package.
     packageOfResClass = "com.d2m.app.resources"
+}
+
+val normalizeSyntheticPodDeploymentTarget by tasks.registering {
+    dependsOn("podGenIos")
+    doLast {
+        val podfile = layout.buildDirectory.file("cocoapods/synthetic/ios/Podfile").get().asFile
+        if (podfile.exists()) {
+            val source = podfile.readText()
+            val normalized = source
+                .replace(Regex("platform :ios, '[^']+'"), "platform :ios, '15.0'")
+                .replace("deployment_target_major < 12", "deployment_target_major < 15")
+                .replace("deployment_target_major == 12", "deployment_target_major == 15")
+                .replace("version = \"#{12}.#{0}\"", "version = \"#{15}.#{0}\"")
+            if (normalized != source) podfile.writeText(normalized)
+        }
+    }
+}
+
+tasks.matching { it.name == "podInstallSyntheticIos" }.configureEach {
+    dependsOn(normalizeSyntheticPodDeploymentTarget)
+    outputs.upToDateWhen { false }
 }
 
 android {

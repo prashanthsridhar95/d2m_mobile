@@ -7,7 +7,7 @@ PODS:
     - AppAuth/Core
   - ComposeApp (1.0.0):
     - GoogleSignIn (~> 7.1)
-    - WebRTC-lib
+    - WebRTC-lib (= 152.0.0)
   - GoogleSignIn (7.1.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - GTMAppAuth (< 5.0, >= 4.1.1)
@@ -16,7 +16,7 @@ PODS:
     - AppAuth/Core (~> 1.7)
     - GTMSessionFetcher/Core (< 4.0, >= 3.3)
   - GTMSessionFetcher/Core (3.5.0)
-  - WebRTC-lib (151.0.0)
+  - WebRTC-lib (152.0.0)
 
 DEPENDENCIES:
   - ComposeApp (from `../composeApp`)
@@ -35,12 +35,12 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
-  ComposeApp: 263239137c12e485c505717b0352b1e4186c0cc8
+  ComposeApp: d5b9992cbb4910924c06cdbf7b91d377ebae5d59
   GoogleSignIn: d4281ab6cf21542b1cfaff85c191f230b399d2db
   GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
-  WebRTC-lib: e840051db1b2150fb3c2d54eaf2c030b7453a0a7
+  WebRTC-lib: 0ac3d9239a5d2e2de83e6667648b15347be6b6d8
 
-PODFILE CHECKSUM: 5ab0709a1c6afa66202070d5891e1f4dc82ddba8
+PODFILE CHECKSUM: 7c015a420113403fec35a04694f6960594e1d455
 
-COCOAPODS: 1.17.0
+COCOAPODS: 1.15.2

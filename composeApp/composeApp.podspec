@@ -10,7 +10,7 @@ Pod::Spec.new do |spec|
     spec.libraries                = 'c++'
     spec.ios.deployment_target    = '15.0'
     spec.dependency 'GoogleSignIn', '~> 7.1'
-    spec.dependency 'WebRTC-lib'
+    spec.dependency 'WebRTC-lib', '152.0.0'
     if !Dir.exist?('build/cocoapods/framework/ComposeApp.framework') || Dir.empty?('build/cocoapods/framework/ComposeApp.framework')
         raise "
         Kotlin framework 'ComposeApp' doesn't exist yet, so a proper Xcode project can't be generated.

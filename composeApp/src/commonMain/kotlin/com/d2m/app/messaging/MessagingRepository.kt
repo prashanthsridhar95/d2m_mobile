@@ -134,6 +134,27 @@ private data class TurnCredentialsResponse(val iceServers: List<IceServerDto> = 
 data class IceServer(val urls: List<String>, val username: String? = null, val credential: String? = null)
 
 private const val TYPING_TIMEOUT_MS = 3_000L
+private const val SESSION_RECOVERY_COOLDOWN_MS = 10_000L
+
+internal class PeerSessionRecoveryGate(
+    private val cooldownMs: Long = SESSION_RECOVERY_COOLDOWN_MS,
+    private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+) {
+    private val mutex = kotlinx.coroutines.sync.Mutex()
+    private val lastRecoveryAt = mutableMapOf<String, Long>()
+
+    suspend fun tryStart(peerUsername: String): Boolean = mutex.withLock {
+        val now = nowMs()
+        val previous = lastRecoveryAt[peerUsername]
+        if (previous != null && now - previous < cooldownMs) return@withLock false
+        lastRecoveryAt[peerUsername] = now
+        true
+    }
+
+    suspend fun markHealthy(peerUsername: String) = mutex.withLock {
+        lastRecoveryAt.remove(peerUsername)
+    }
+}
 
 class MessagingRepository(
     private val wsClient: MessagingWsClient,
@@ -228,6 +249,8 @@ class MessagingRepository(
     // the disk-backed check and the server's own single-use queue are for).
     private val processedEnvelopeIdsMutex = kotlinx.coroutines.sync.Mutex()
     private val processedEnvelopeIds = LinkedHashSet<String>()
+    private val decryptFailureRecoveryGate = PeerSessionRecoveryGate()
+    private val peerRequestedRecoveryGate = PeerSessionRecoveryGate()
 
     private suspend fun claimEnvelopeForProcessing(id: String): Boolean = processedEnvelopeIdsMutex.withLock {
         if (!processedEnvelopeIds.add(id)) return@withLock false
@@ -781,19 +804,19 @@ class MessagingRepository(
             }
             is ServerToClient.PresenceUpdate -> _presenceByUser.update { it + (event.user to event.online) }
             is ServerToClient.SessionReset -> {
-                // Peer couldn't decrypt us -- forget our side of the session FIRST
-                // (mirrors useMessaging.js's `await crypto.resetPeer(ev.from)` before
-                // resendUndelivered), so the resend below re-establishes a fresh X3DH
-                // session instead of re-encrypting on the exact session the peer just
-                // gave up on. Without this the resend was a no-op in practice: same
-                // stale session in, same stale session out, so the peer's next decrypt
-                // failed too and they'd send another session.reset right back.
-                println("MessagingRepository.handleEvent: SessionReset from ${event.from} – resetting our session and resending")
                 scope.launch {
+                    if (!peerRequestedRecoveryGate.tryStart(event.from)) {
+                        println("MessagingRepository.handleEvent: coalesced duplicate SessionReset from ${event.from}")
+                        return@launch
+                    }
+                    // Reset before either message or call resends. The call callback used
+                    // to run outside this coroutine and could re-encrypt its invite on the
+                    // stale session while resetSession was still waiting for the peer lock.
+                    println("MessagingRepository.handleEvent: SessionReset from ${event.from} – resetting our session and resending")
                     runCatching { cryptoProvider.resetSession(event.from) }
                     resendUndelivered(event.from)
+                    sessionResetHandler?.invoke(event.from)
                 }
-                sessionResetHandler?.invoke(event.from)
             }
             is ServerToClient.ThreadUpdated -> _threadUpdatedEvents.tryEmit(event.from)
             else -> Unit
@@ -895,11 +918,17 @@ class MessagingRepository(
             // to decrypt, so their next decrypt failed too, and they'd send
             // another session.reset right back -- a reset loop that never
             // actually recovers instead of a real re-handshake.
-            println("MessagingRepository.decryptAndPersistIncoming: null plaintext for ${envelope.id}, resetting our session with ${envelope.from} and requesting they reset too")
-            runCatching { cryptoProvider.resetSession(envelope.from) }
-            wsClient.send(ClientToServer.SessionReset(envelope.from))
+            if (decryptFailureRecoveryGate.tryStart(envelope.from)) {
+                println("MessagingRepository.decryptAndPersistIncoming: null plaintext for ${envelope.id}, resetting our session with ${envelope.from} and requesting they reset too")
+                runCatching { cryptoProvider.resetSession(envelope.from) }
+                wsClient.send(ClientToServer.SessionReset(envelope.from))
+            } else {
+                println("MessagingRepository.decryptAndPersistIncoming: coalesced repeated decrypt failure for ${envelope.from}")
+            }
             return null
         }
+        decryptFailureRecoveryGate.markHealthy(envelope.from)
+        peerRequestedRecoveryGate.markHealthy(envelope.from)
         val payload = runCatching {
             messagingProtocolJson.decodeFromString(ChatPayload.serializer(), plaintext)
         }.getOrElse { e ->
