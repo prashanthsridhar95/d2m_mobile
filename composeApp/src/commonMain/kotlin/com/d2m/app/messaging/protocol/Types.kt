@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.protocol
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -81,10 +82,13 @@ data class MessageEnvelope(
  * for every other byte-blob field in this file -- see ArchiveCodec.kt's doc
  * comment.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class JsonWebKey(
-    val kty: String = "EC",
-    val crv: String = "P-256",
+    // @EncodeDefault: the protocol Json omits default values, which used to drop kty/crv from every key sent
+    // to the relay -- WebCrypto (web restore/seal) rejects a JWK without "kty" ("required JWK member kty missing").
+    @EncodeDefault val kty: String = "EC",
+    @EncodeDefault val crv: String = "P-256",
     val x: String,
     val y: String,
     val d: String? = null,

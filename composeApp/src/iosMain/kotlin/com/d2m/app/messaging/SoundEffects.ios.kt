@@ -65,6 +65,11 @@ actual object SoundEffects {
         callPlayer = null
     }
 
+    // TODO(ios): caller-side ringback not implemented yet (no bundled ringback asset); Android/web have it.
+    actual fun playRingbackTone() {}
+
+    actual fun stopRingbackTone() {}
+
     actual fun playMsgTone() = playOneShot("msg_tone")
 
     actual fun playInChatTone() = playOneShot("inchat_tune")

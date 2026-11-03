@@ -25,6 +25,10 @@ package com.d2m.app.messaging
 expect object SoundEffects {
     fun playCallTone()
     fun stopCallTone()
+
+    /** Caller-side standard telephone ringback while an outgoing call is unanswered; idempotent. */
+    fun playRingbackTone()
+    fun stopRingbackTone()
     fun playMsgTone()
     fun playInChatTone()
 }

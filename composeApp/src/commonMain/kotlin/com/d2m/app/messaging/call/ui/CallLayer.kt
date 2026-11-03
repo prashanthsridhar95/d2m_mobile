@@ -155,6 +155,12 @@ fun CallLayer() {
         onDispose { SoundEffects.stopCallTone() }
     }
 
+    // Caller side: standard ringback while our outgoing call is unanswered; any phase change/teardown stops it.
+    DisposableEffect(currentView.phase == CallPhase.CALLING) {
+        if (currentView.phase == CallPhase.CALLING) SoundEffects.playRingbackTone()
+        onDispose { SoundEffects.stopRingbackTone() }
+    }
+
     if (currentView.phase == CallPhase.INCOMING) {
         IncomingCallToast(
             peerName = peerName,
