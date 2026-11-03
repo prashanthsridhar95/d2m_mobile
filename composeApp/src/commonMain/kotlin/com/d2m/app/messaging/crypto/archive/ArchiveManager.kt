@@ -189,7 +189,7 @@ class ArchiveManager(
             myKeypair = generated
             _archivePrompt.value = null
         } catch (e: Throwable) {
-            _archiveError.value = e.message ?: "couldn't set up backup right now"
+            _archiveError.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         } finally {
             _archiveBusy.value = false
         }
@@ -216,7 +216,7 @@ class ArchiveManager(
         val privateKeyPkcs8 = try {
             ArchiveCrypto.unwrapPrivateKeyWithPin(primitives, prompt.bundle, pin)
         } catch (e: Throwable) {
-            _archiveError.value = "That PIN didn't work -- double check it and try again."
+            _archiveError.value = "That PIN didn't work – double check it and try again."
             _archiveBusy.value = false
             return
         }
@@ -229,7 +229,7 @@ class ArchiveManager(
             _archivePrompt.value = null
             restoreFromArchive(privateKeyPkcs8)
         } catch (e: Throwable) {
-            _archiveError.value = "Your PIN was right, but restoring your history hit a problem${e.message?.let { " ($it)" } ?: ""}. Try again in a moment."
+            _archiveError.value = com.d2m.app.data.network.ErrorCopy.somethingWentWrong
         } finally {
             _archiveBusy.value = false
         }

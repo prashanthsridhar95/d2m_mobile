@@ -3,10 +3,14 @@ package com.d2m.app.data.network
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -26,6 +30,8 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import com.d2m.app.data.session.IdentityStore
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Thin wrapper over Ktor mirroring d2m_web/src/lib/apiClient.js: same base-URL
@@ -33,18 +39,25 @@ import kotlinx.serialization.json.JsonNamingStrategy
  * here, ApiCache owns that" split, same resolveMediaUrl for the backend's
  * relative /media/photos/... paths.
  *
- * Auth note: the backend has no session/token layer at all (see
- * session/IdentityStore.kt's doc comment) -- every call here is a plain,
- * unauthenticated request identified only by whatever sponsor_id/primary_id
- * is embedded in the path, exactly like the web app. There is no
- * Authorization header to attach. When real auth lands on the backend, this
- * is the one file that needs a bearer-token interceptor added.
+ * Auth note: d2m_core_engine's /sponsors and /invites/redeem endpoints now
+ * accept an optional `Authorization: Bearer <wedlock_jwt>` header (see
+ * app/routers/identity.py's create_sponsor/redeem_invite) -- a token
+ * obtained via WedLockApi.kt's login()/register flow and stashed in
+ * session/IdentityStore.kt. This client attaches that header, when present,
+ * to every request it makes (applyAuthHeader() below); most requests carry
+ * no such token server-side requirement today, but sending it unconditionally
+ * costs nothing since every other endpoint simply ignores an Authorization
+ * header it doesn't ask for. identityStore is optional (defaults to null)
+ * so anything constructing an ApiClient without a session context -- there
+ * is none in this app today, but this keeps the constructor from forcing
+ * one -- still works unauthenticated exactly as before.
  */
 class ApiError(val status: Int, val detail: String?, message: String) : Exception(message)
 
 class ApiClient(
     private val engine: HttpClient,
     var baseUrl: String = ApiConfig.DEFAULT_BASE_URL,
+    @PublishedApi internal val identityStore: IdentityStore? = null,
 ) {
     // d2m_core_engine's Pydantic schemas (app/schemas.py) are plain BaseModel
     // subclasses with no alias_generator -- every field goes over the wire as
@@ -67,16 +80,88 @@ class ApiClient(
         install(Logging) { level = LogLevel.INFO }
         install(HttpTimeout) {
             requestTimeoutMillis = 20_000
-            connectTimeoutMillis = 10_000
+            connectTimeoutMillis = 8_000
+            // A stalled socket now fails (and gets the GET retry) after 12s of silence instead of waiting out the whole 20s.
+            socketTimeoutMillis = 12_000
         }
         // Installed here (rather than a second client) so MessagingWsClient
         // (Phase 6) can reuse this same client instance -- one HTTP engine
         // per app, matching this build's "no reason to instantiate two"
         // simplicity bias elsewhere.
         install(WebSockets)
+        // The messaging relay server (messaging-framework) authenticates every REST route and the WebSocket upgrade
+        // with the WedLock IAM access token as `Authorization: Bearer`; without it each call is a 401 and no message
+        // can be sent. Applied per request (so a re-login's new token is picked up by the WS reconnect loop too) and
+        // ONLY to the relay's host, so the token is never sent to other hosts. Calls that already set the header win.
+        install(createClientPlugin("MessagingBearer") {
+            onRequest { request, _ ->
+                if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
+                val relayHost = runCatching { io.ktor.http.Url(com.d2m.app.messaging.MessagingConfig.httpBaseUrl).host }.getOrNull()
+                    ?: return@onRequest
+                if (request.url.host != relayHost) return@onRequest
+                identityStore?.identity?.value?.wedlockAccessToken?.let { request.headers.append(HttpHeaders.Authorization, "Bearer $it") }
+            }
+        })
+    }
+
+    /**
+     * Set by DI (WedLockApi.refresh): returns the new pair, null if WedLock rejected the refresh token, throws on a
+     * transient failure. Kept as a lambda so ApiClient doesn't depend on WedLockApi.
+     */
+    var tokenRefresher: (suspend (refreshToken: String) -> WedLockTokenPair?)? = null
+
+    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+    private var lastTransientRefreshFailureMs = 0L
+
+    /**
+     * Single-flight token renewal after a 401. True if a newer access token is now stored (either we refreshed or a
+     * concurrent call already had). False if there's no refresh token / it was rejected -- the session is truly over --
+     * or the refresh hit a transient error (then [lastTransientRefreshFailureMs] suppresses the logout).
+     */
+    private suspend fun refreshAccessToken(staleToken: String?): Boolean = refreshMutex.withLock {
+        val store = identityStore ?: return@withLock false
+        val current = store.identity.value
+        if (current.wedlockAccessToken != null && current.wedlockAccessToken != staleToken) return@withLock true
+        val refreshToken = current.wedlockRefreshToken ?: return@withLock false
+        val refresher = tokenRefresher ?: return@withLock false
+        try {
+            val pair = refresher(refreshToken) ?: return@withLock false
+            store.setWedlockTokens(pair.accessToken, pair.refreshToken)
+            true
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            lastTransientRefreshFailureMs = nowMillis()
+            false
+        }
+    }
+
+    private fun nowMillis(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    init {
+        // On a 401 for a request that carried our token, renew it once and replay the request with the new token,
+        // so an expired access token is invisible to the user instead of logging them out.
+        client.plugin(HttpSend).intercept { request ->
+            val call = execute(request)
+            val sentAuth = request.headers[HttpHeaders.Authorization]
+            if (call.response.status.value != 401 || sentAuth == null || request.url.buildString().contains("/auth/")) return@intercept call
+            val stale = sentAuth.removePrefix("Bearer ")
+            if (!refreshAccessToken(stale)) return@intercept call
+            val fresh = identityStore?.identity?.value?.wedlockAccessToken ?: return@intercept call
+            request.headers.remove(HttpHeaders.Authorization)
+            request.headers.append(HttpHeaders.Authorization, "Bearer $fresh")
+            execute(request)
+        }
     }
 
     fun url(path: String) = baseUrl.trimEnd('/') + path
+
+    /** Attaches the stored WedLock bearer token, if any -- see the class doc comment above. */
+    @PublishedApi
+    internal fun HttpRequestBuilder.applyAuthHeader() {
+        identityStore?.identity?.value?.wedlockAccessToken?.let { token ->
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+    }
 
     /**
      * Backoff for 429s -- the backend's rate limiter (app/rate_limit.py) is a
@@ -101,6 +186,28 @@ class ApiClient(
             }
         }
 
+    /**
+     * One quick retry for idempotent GETs on a transient failure (dropped
+     * connection / timeout on a flaky mobile link, or a gateway 502-504 from the
+     * tunnel). Never used for POST/PUT/DELETE, never retries a real API error
+     * (4xx/500), a decode failure, or cancellation.
+     */
+    @PublishedApi
+    internal suspend inline fun <T> withTransientRetry(block: () -> T): T =
+        try {
+            block()
+        } catch (e: Throwable) {
+            val retryable = when (e) {
+                is kotlinx.coroutines.CancellationException -> false
+                is ApiError -> e.status == 502 || e.status == 503 || e.status == 504
+                is kotlinx.serialization.SerializationException -> false
+                else -> true
+            }
+            if (!retryable) throw e
+            kotlinx.coroutines.delay(250)
+            block()
+        }
+
     /** Resolves the backend's relative /media/photos/... URLs against the configured base, same as resolveMediaUrl() on web. */
     fun resolveMediaUrl(path: String): String {
         if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("blob:") || path.startsWith("data:")) {
@@ -109,35 +216,95 @@ class ApiClient(
         return baseUrl.trimEnd('/') + path
     }
 
-    suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap()): T =
+    // extraHeaders defaults to empty, same additive shape as post/put/delete
+    // below -- added for the public share-link viewer (PublicLinksApi.kt),
+    // the one GET caller that needs a per-call X-D2M-User-Id/X-D2M-Lead-Key
+    // header pair rather than the Authorization bearer token
+    // applyAuthHeader() already attaches unconditionally.
+    suspend inline fun <reified T> get(path: String, params: Map<String, String?> = emptyMap(), extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
-            unwrap(client.get(url(path)) { params.forEach { (k, v) -> if (v != null) parameter(k, v) } })
+            withTransientRetry {
+                unwrap(client.get(url(path)) {
+                    applyAuthHeader()
+                    extraHeaders.forEach { (k, v) -> header(k, v) }
+                    params.forEach { (k, v) -> if (v != null) parameter(k, v) }
+                })
+            }
         }
 
-    suspend inline fun <reified T> post(path: String, body: Any? = null): T =
+    // extraHeaders defaults to empty so every existing call site (none of
+    // which needed a per-call header before the trust subsystem) is
+    // unaffected. Added for the WedLock trust subsystem's step-up re-auth
+    // flow (app/routers/trust.py): a mutating trust call must carry the
+    // short-lived token from POST /trust/reauthenticate as
+    // `X-Step-Up-Token`, and that header is specific to ONE call, not the
+    // whole session -- unlike the Authorization bearer token, which
+    // applyAuthHeader() already attaches to every request unconditionally.
+    // See data/network/TrustApi.kt and ui/components/StepUpConfirmDialog.kt.
+    suspend inline fun <reified T> post(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.post(url(path)) {
+                applyAuthHeader()
                 contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
                 if (body != null) setBody(body)
             })
         }
 
-    suspend inline fun <reified T> put(path: String, body: Any? = null): T =
+    // Like post() above, but hands back the raw HttpResponse instead of just
+    // the decoded body -- for the one caller (PublicLinksApi.identify) that
+    // needs a response HEADER (X-D2M-Lead-Key), not just the JSON body.
+    // Still throws ApiError on a non-2xx status, same as unwrap()'s own
+    // generic path -- callers only reach for this instead of post() when
+    // they specifically need something unwrap() would otherwise discard.
+    suspend fun postRaw(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): HttpResponse =
+        withRateLimitRetry {
+            val response = client.post(url(path)) {
+                applyAuthHeader()
+                contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
+                if (body != null) setBody(body)
+            }
+            if (!response.status.isSuccess()) {
+                notifySessionExpiredIfAuthenticated(response.status.value)
+                val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
+                throw ApiError(status = response.status.value, detail = detail, message = detail ?: friendlyStatusMessage(response.status))
+            }
+            response
+        }
+
+    suspend inline fun <reified T> put(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.put(url(path)) {
+                applyAuthHeader()
                 contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
                 if (body != null) setBody(body)
             })
         }
 
-    suspend inline fun <reified T> delete(path: String): T =
-        withRateLimitRetry { unwrap(client.delete(url(path))) }
+    // body defaults to null, same additive shape as post/put above -- every
+    // existing DELETE call site is unaffected. Added for unlink_family
+    // (TrustApi.kt), the one DELETE in this app that needs a JSON body
+    // (the caller's password) rather than just headers.
+    suspend inline fun <reified T> delete(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
+        withRateLimitRetry {
+            unwrap(client.delete(url(path)) {
+                applyAuthHeader()
+                extraHeaders.forEach { (k, v) -> header(k, v) }
+                if (body != null) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            })
+        }
 
     /** Multipart photo upload -- mirrors postForm() in apiClient.js. */
     suspend inline fun <reified T> postForm(path: String, fileName: String, contentType: String, bytes: ByteArray): T =
         withRateLimitRetry {
             unwrap(
                 client.post(url(path)) {
+                    applyAuthHeader()
                     setBody(MultiPartFormDataContent(formData {
                         append("file", bytes, Headers.build {
                             append(HttpHeaders.ContentType, contentType)
@@ -148,8 +315,51 @@ class ApiClient(
             )
         }
 
+    /**
+     * Generalized multipart upload -- postForm() above only ever sends one
+     * file under a fixed "file" field name (every existing caller needed
+     * exactly that). Identity-verification submission (Phase 3 of the
+     * backlog this session is working) needs two named files (document,
+     * selfie) plus a plain text field (document_type) in one request, same
+     * as the backend's own Form(...) + two File(...) params.
+     */
+    data class MultipartFile(val fieldName: String, val fileName: String, val contentType: String, val bytes: ByteArray)
+
+    suspend inline fun <reified T> postMultipart(path: String, fields: Map<String, String>, files: List<MultipartFile>): T =
+        withRateLimitRetry {
+            unwrap(
+                client.post(url(path)) {
+                    applyAuthHeader()
+                    setBody(MultiPartFormDataContent(formData {
+                        fields.forEach { (name, value) -> append(name, value) }
+                        files.forEach { f ->
+                            append(f.fieldName, f.bytes, Headers.build {
+                                append(HttpHeaders.ContentType, f.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${f.fileName}\"")
+                            })
+                        }
+                    }))
+                }
+            )
+        }
+
+    /**
+     * Emits once whenever the server rejects a request that carried our login token (HTTP 401): the session has expired
+     * or been revoked. App.kt collects it on the main thread, clears the stored session and returns to the login
+     * screen, instead of leaving every screen stuck on "invalid or expired token" with a Retry that can never work.
+     * Not emitted when no token was sent, so a wrong password on the login screen is still an ordinary error there.
+     */
+    val sessionExpired = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun notifySessionExpiredIfAuthenticated(status: Int) {
+        // A transient refresh failure (no network) is not a reason to log out.
+        if (nowMillis() - lastTransientRefreshFailureMs < 30_000) return
+        if (status == 401 && identityStore?.identity?.value?.wedlockAccessToken != null) sessionExpired.tryEmit(Unit)
+    }
+
     suspend inline fun <reified T> unwrap(response: HttpResponse): T {
         if (!response.status.isSuccess()) {
+            notifySessionExpiredIfAuthenticated(response.status.value)
             val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
             throw ApiError(
                 status = response.status.value,
@@ -157,12 +367,15 @@ class ApiClient(
                 message = detail ?: friendlyStatusMessage(response.status),
             )
         }
-        return response.body()
+        // Decode the body off the caller's dispatcher: repositories are routinely
+        // called from LaunchedEffect (Main), and kotlinx.serialization of a
+        // 100-card suggestions list is tens of ms of pure CPU.
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { response.body() }
     }
 
     fun friendlyStatusMessage(status: HttpStatusCode): String = when (status.value) {
         404 -> "Not found."
-        429 -> "Rate limit exceeded -- slow down and try again shortly."
+        429 -> "Rate limit exceeded – slow down and try again shortly."
         in 500..599 -> "Something went wrong on our end. Try again shortly."
         else -> "Request failed (${status.value})."
     }
@@ -186,6 +399,18 @@ expect fun resolveDefaultBaseUrl(): String
 /** Platform HTTP engine -- Android engine on Android, Darwin (NSURLSession-backed) on iOS. */
 expect fun httpEngine(): HttpClient
 
-/** friendlyError(e, fallback) equivalent -- the shared unwrap-to-display-string helper used in every screen's catch block. */
-fun friendlyError(e: Throwable, fallback: String = "Something went wrong."): String =
-    (e as? ApiError)?.detail ?: e.message ?: fallback
+/**
+ * The one line of error copy a user ever sees. App.kt keeps it in the active language (CommonStrings.somethingWentWrong).
+ * Raw server details ("invalid or expired token"), exception messages and status text are for logs, never for the screen.
+ */
+object ErrorCopy {
+    var somethingWentWrong: String = "Something went wrong"
+}
+
+/**
+ * The shared "error -> display string" helper used in every screen's catch block. Always the generic message: the
+ * [fallback] parameter is kept so call sites compile unchanged, but what reaches the user no longer varies with
+ * whatever the server or the exception happened to say.
+ */
+@Suppress("UNUSED_PARAMETER")
+fun friendlyError(e: Throwable, fallback: String = ErrorCopy.somethingWentWrong): String = ErrorCopy.somethingWentWrong

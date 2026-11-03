@@ -38,6 +38,12 @@ class SeriousModeRepository(
         return r
     }
 
+    suspend fun confirmMet(primaryId: String, threadId: String): ConfirmMetOut {
+        val r = api.confirmMet(threadId, primaryId)
+        cache.invalidateKey("threads:$primaryId")
+        return r
+    }
+
     suspend fun getSponsorStatus(primaryId: String): SponsorStatusOut =
         cache.get("sponsor-status:$primaryId", ttlMillis = 30_000) { api.getSponsorStatus(primaryId) }.value
 }

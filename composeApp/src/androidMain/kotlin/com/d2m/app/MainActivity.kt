@@ -2,11 +2,14 @@ package com.d2m.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.d2m.app.messaging.PendingOpenPeer
 import com.d2m.app.messaging.call.PendingCallAccept
 import com.d2m.app.push.EXTRA_ACCEPT_CALL_ID
+import com.d2m.app.push.EXTRA_PEER_USERNAME
 
 /**
  * Referenced by AndroidManifest.xml (.MainActivity) with the claim-link
@@ -26,8 +29,17 @@ import com.d2m.app.push.EXTRA_ACCEPT_CALL_ID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Real, OS-level screenshot/screen-recording block -- also hides
+        // this app's content from the recent-apps switcher thumbnail.
+        // Unlike iOS (see security/ScreenCapture.kt's doc comment: Apple
+        // gives apps no way to block capture, only a detect-after-the-fact
+        // notification), this actually prevents the capture from happening
+        // at all rather than just reacting to it. Set before setContent so
+        // there's no frame where sensitive content renders unprotected.
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         consumeAcceptExtra(intent)
+        consumeOpenPeerExtra(intent)
         setContent {
             App()
         }
@@ -37,11 +49,23 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeAcceptExtra(intent)
+        consumeOpenPeerExtra(intent)
     }
 
     private fun consumeAcceptExtra(intent: Intent?) {
         intent?.getStringExtra(EXTRA_ACCEPT_CALL_ID)?.let { callId ->
             PendingCallAccept.set(callId)
+        }
+    }
+
+    // A tapped chat-notification's plain content Intent (not its Reply/
+    // Mark-as-read actions, which already read this same extra) -- see
+    // PendingOpenPeer.kt's doc comment for the full root cause. Same
+    // consume-on-create-and-on-new-intent shape as consumeAcceptExtra
+    // above, for the same reason (no special launchMode declared).
+    private fun consumeOpenPeerExtra(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_PEER_USERNAME)?.let { peerUsername ->
+            PendingOpenPeer.set(peerUsername)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.call.ui
 
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -58,6 +59,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
+import com.d2m.app.ui.strings.LocalStrings
 
 /**
  * Global call dispatcher -- mounted once at the App.kt shell level (mirrors
@@ -153,6 +155,12 @@ fun CallLayer() {
         onDispose { SoundEffects.stopCallTone() }
     }
 
+    // Caller side: standard ringback while our outgoing call is unanswered; any phase change/teardown stops it.
+    DisposableEffect(currentView.phase == CallPhase.CALLING) {
+        if (currentView.phase == CallPhase.CALLING) SoundEffects.playRingbackTone()
+        onDispose { SoundEffects.stopRingbackTone() }
+    }
+
     if (currentView.phase == CallPhase.INCOMING) {
         IncomingCallToast(
             peerName = peerName,
@@ -167,8 +175,8 @@ fun CallLayer() {
         // first frame `minimized` flips true instead of popping in.
         AnimatedVisibility(
             visible = true,
-            enter = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
-            exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(150)),
+            enter = if (rememberReduceMotion()) fadeIn(tween(80)) else slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
+            exit = if (rememberReduceMotion()) fadeOut(tween(80)) else slideOutVertically(tween(180)) { it } + fadeOut(tween(150)),
         ) {
             MinimizedCallBar(peerName = peerName, onExpand = { minimized = false }, onHangup = { callManager.hangup() })
         }
@@ -212,11 +220,11 @@ private fun IncomingCallToast(peerName: String, isVideo: Boolean, onAccept: () -
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 PulsingAvatar(initial = peerName.take(1).uppercase(), size = 88.dp)
                 Text(peerName, style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(top = 16.dp))
-                Text(if (isVideo) "Incoming video call" else "Incoming audio call", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
+                Text(if (isVideo) LocalStrings.current.messaging.incomingVideoCall else LocalStrings.current.messaging.incomingAudioCall, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.75f))
 
                 Row(modifier = Modifier.padding(top = 48.dp), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                    RoundActionButton(icon = Icons.Filled.CallEnd, background = Color(0xFFE53935), onClick = onDecline, label = "Decline")
-                    RoundActionButton(icon = if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call, background = Color(0xFF43A047), onClick = onAccept, label = "Accept")
+                    RoundActionButton(icon = Icons.Filled.CallEnd, background = Color(0xFFE53935), onClick = onDecline, label = LocalStrings.current.common.decline)
+                    RoundActionButton(icon = if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call, background = Color(0xFF43A047), onClick = onAccept, label = LocalStrings.current.common.accept)
                 }
             }
         }
@@ -233,19 +241,21 @@ private fun IncomingCallToast(peerName: String, isVideo: Boolean, onAccept: () -
  */
 @Composable
 fun PulsingAvatar(initial: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 88.dp) {
-    val infinite = rememberInfiniteTransition(label = "callPulse")
-    val ringScale by infinite.animateFloat(
+    // Reduce motion: no expanding ring at all (the avatar itself still shows who is calling).
+    val reduceMotion = rememberReduceMotion()
+    val infinite = if (reduceMotion) null else rememberInfiniteTransition(label = "callPulse")
+    val ringScale = infinite?.animateFloat(
         initialValue = 1f,
         targetValue = 1.35f,
         animationSpec = infiniteRepeatable(animation = tween(1100), repeatMode = RepeatMode.Restart),
         label = "pulseScale",
-    )
-    val ringAlpha by infinite.animateFloat(
+    )?.value ?: 1f
+    val ringAlpha = infinite?.animateFloat(
         initialValue = 0.45f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(animation = tween(1100), repeatMode = RepeatMode.Restart),
         label = "pulseAlpha",
-    )
+    )?.value ?: 0f
     Box(modifier = modifier.size(size * 1.4f), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
@@ -278,8 +288,8 @@ private fun MinimizedCallBar(peerName: String, onExpand: () -> Unit, onHangup: (
             modifier = Modifier.fillMaxWidth().clickable(onClick = onExpand),
         ) {
             Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("In call with $peerName", style = MaterialTheme.typography.labelLarge, color = Color.White, modifier = Modifier.weight(1f))
-                IconButton(onClick = onHangup) { Icon(Icons.Filled.CallEnd, contentDescription = "Hang up", tint = Color.White) }
+                Text(LocalStrings.current.messaging.inCallWith(peerName), style = MaterialTheme.typography.labelLarge, color = Color.White, modifier = Modifier.weight(1f))
+                IconButton(onClick = onHangup) { Icon(Icons.Filled.CallEnd, contentDescription = LocalStrings.current.messaging.hangUp, tint = Color.White) }
             }
         }
     }

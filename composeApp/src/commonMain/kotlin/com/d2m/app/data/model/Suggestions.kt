@@ -38,6 +38,8 @@ data class SubScoreBreakdown(
 data class SuggestionOut(
     val candidateId: String,
     val candidateName: String,
+    // Registration number (e.g. 2026-00011) -- what cards show instead of the internal id.
+    val shortId: String? = null,
     val rank: Int = 0,
     val scores: SubScoreBreakdown = SubScoreBreakdown(),
     val doshaFlags: List<String> = emptyList(),
@@ -56,6 +58,8 @@ data class SuggestionOut(
     val financialStatus: String? = null,
     val complexion: String? = null,
     val isShortlisted: Boolean = false,
+    val isFoundingMember: Boolean = false,
+    val isVerified: Boolean = false,
 ) {
     // Convenience flat accessors -- every UI call site (MatchCard,
     // DiscoveryScreen, ChildHomeScreen, ProfileDetailScreen, BrowseTable)
@@ -82,6 +86,7 @@ data class SuggestionOut(
 data class BrowseCandidateOut(
     val candidateId: String,
     val candidateName: String,
+    val shortId: String? = null,
     val photoUrl: String? = null,
     val isMatching: Boolean = false,
     val scores: SubScoreBreakdown? = null,
@@ -99,11 +104,19 @@ data class BrowseCandidateOut(
     val financialStatus: String? = null,
     val complexion: String? = null,
     val isShortlisted: Boolean = false,
+    val isFoundingMember: Boolean = false,
+    val isVerified: Boolean = false,
 )
 
 @Serializable
 data class SuggestionActionRequest(
-    val action: String, // "accept" | "reject" | "snooze"
+    val action: String, // "accept" | "pass" | "snooze" ("reject" is a legacy alias of "pass")
+    /** Optional note sent with an "accept" (a like). */
+    val message: String? = null,
+    val replyToPrompt: String? = null,
+    /** Ties an "accept" to the photo / About-me prompt that was liked: "photo" | "prompt" | "profile". */
+    val likedItemType: String? = null,
+    val likedItemId: String? = null,
 )
 
 /**

@@ -1,51 +1,220 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.theme.D2MStroke
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 
-enum class D2MBadgeTone { SUCCESS, INFO, WARNING, DANGER, NEUTRAL }
+/*
+ * Badge, retuned to the comps' FEATURED tag.
+ *
+ * The old badge was a soft-tinted, fully-rounded pill at labelMedium. The
+ * comps' equivalent is a near-rectangular tag with uppercase tracked type
+ * -- the same typographic idea as LabelText, just with a fill behind it --
+ * which is what makes a row of them read as catalogue metadata rather
+ * than as UI chrome.
+ *
+ * GOLD is deliberately the only saturated fill available here, so it stays
+ * scarce and keeps meaning "featured". GOLD_OUTLINE is the same gold hue
+ * with the fill dropped (transparent background, gold border + text) --
+ * "rounded rectangle with only border filled" (reported directly) -- used
+ * for Founding member instead of a solid fill, so it reads as a quieter,
+ * catalogue-grade mark. The status tones (SUCCESS / INFO / WARNING /
+ * DANGER / NEUTRAL) are kept because ~15 call sites map a backend status
+ * onto one, but they now draw from the retuned warm status palette rather
+ * than the old material-ish greens and blues.
+ */
+enum class D2MBadgeTone { SUCCESS, INFO, WARNING, DANGER, NEUTRAL, GOLD, GOLD_OUTLINE, ACCENT }
 
-/** Mirrors components/Badge.jsx's Badge/ScoreBadge/PreviewBadge family -- one pill component, tone-driven. */
 @Composable
-fun D2MBadge(text: String, tone: D2MBadgeTone = D2MBadgeTone.NEUTRAL) {
+fun D2MBadge(
+    text: String,
+    tone: D2MBadgeTone = D2MBadgeTone.NEUTRAL,
+    modifier: Modifier = Modifier,
+) {
     val palette = LocalD2MStatusPalette.current
-    val colors = when (tone) {
-        D2MBadgeTone.SUCCESS -> palette.success
-        D2MBadgeTone.INFO -> palette.info
-        D2MBadgeTone.WARNING -> palette.warning
-        D2MBadgeTone.DANGER -> palette.danger
-        D2MBadgeTone.NEUTRAL -> palette.neutral
+    val bg: Color
+    val fg: Color
+    var borderColor: Color = Color.Transparent
+    when (tone) {
+        D2MBadgeTone.SUCCESS -> { bg = palette.success.bg; fg = palette.success.fg }
+        D2MBadgeTone.INFO -> { bg = palette.info.bg; fg = palette.info.fg }
+        D2MBadgeTone.WARNING -> { bg = palette.warning.bg; fg = palette.warning.fg }
+        D2MBadgeTone.DANGER -> { bg = palette.danger.bg; fg = palette.danger.fg }
+        D2MBadgeTone.NEUTRAL -> { bg = palette.neutral.bg; fg = palette.neutral.fg }
+        // goldStrong, not gold: light text on #B48629 is 3.3:1 (fails AA); on goldStrong it is ~5.4:1 (the web darkened its --gold the same way)
+        D2MBadgeTone.GOLD -> { bg = d2m.goldStrong; fg = Color(0xFFFFFDF8); borderColor = d2m.goldStrong }
+        D2MBadgeTone.GOLD_OUTLINE -> { bg = Color.Transparent; fg = d2m.goldStrong; borderColor = d2m.gold }
+        D2MBadgeTone.ACCENT -> { bg = d2m.accent; fg = d2m.accentOn; borderColor = d2m.accent }
     }
+    val shape = RoundedCornerShape(D2MRadius.sm)
     Text(
-        text = text,
-        color = colors.fg,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier
-            .background(colors.bg, RoundedCornerShape(D2MRadius.pill))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+        text = text.uppercase(),
+        color = fg,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = modifier
+            .background(bg, shape)
+            .border(D2MStroke.hairline, borderColor, shape)
+            .padding(horizontal = 7.dp, vertical = 3.dp),
     )
 }
 
-/** Compatibility-score chip, e.g. "8.2/10" -- mirrors ScoreBadge, tone derived from the score band. */
+/**
+ * "Founding member can be an icon. on hover we shall say what the badge
+ * means" (reported directly) -- was the comps' FEATURED text tag
+ * (D2MBadge, GOLD_OUTLINE tone); now a small rocket-in-a-circle seal ("we
+ * can use something like this", reported directly with a rocket reference
+ * image -- early/launch reads better for "founding" than a generic star),
+ * same solid-circle + icon + tap/hover-tooltip treatment as VerifiedBadge
+ * below (same TooltipBox/PlainTooltip, same Canvas-drawn approach so the
+ * shape matches d2m_web's identical SVG path exactly -- see that
+ * component's own doc comment) so the two read as a matched pair of seals
+ * rather than two different icon styles. Named so call sites still read
+ * as intent ("this profile is featured"), not styling.
+ */
 @Composable
-fun ScoreBadge(score: Double?, maxScore: Double = 10.0) {
-    if (score == null) return
-    val ratio = score / maxScore
-    val tone = when {
-        ratio >= 0.75 -> D2MBadgeTone.SUCCESS
-        ratio >= 0.5 -> D2MBadgeTone.INFO
-        else -> D2MBadgeTone.WARNING
+@OptIn(ExperimentalMaterial3Api::class)
+fun FeaturedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
+    val circleColor = d2m.gold
+    val rocketColor = Color(0xFFFFFDF8)
+    val label = LocalStrings.current.sharedComponents.foundingMember
+    val tooltipText = LocalStrings.current.sharedComponents.foundingMemberTooltip
+    TapTip(text = tooltipText, modifier = modifier, minTarget = 28.dp, shape = androidx.compose.foundation.shape.CircleShape) {
+        Canvas(modifier = Modifier.size(size)) {
+            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+            val w = this.size.width
+            val h = this.size.height
+            val body = Path().apply {
+                moveTo(w * 0.5f, h * 0.1667f)
+                cubicTo(w * 0.5625f, h * 0.1667f, w * 0.6458f, h * 0.3333f, w * 0.6458f, h * 0.5208f)
+                lineTo(w * 0.6042f, h * 0.7083f)
+                lineTo(w * 0.3958f, h * 0.7083f)
+                lineTo(w * 0.3542f, h * 0.5208f)
+                cubicTo(w * 0.3542f, h * 0.3333f, w * 0.4375f, h * 0.1667f, w * 0.5f, h * 0.1667f)
+                close()
+            }
+            val leftFin = Path().apply {
+                moveTo(w * 0.375f, h * 0.5833f)
+                lineTo(w * 0.2292f, h * 0.75f)
+                lineTo(w * 0.375f, h * 0.75f)
+                close()
+            }
+            val rightFin = Path().apply {
+                moveTo(w * 0.625f, h * 0.5833f)
+                lineTo(w * 0.7708f, h * 0.75f)
+                lineTo(w * 0.625f, h * 0.75f)
+                close()
+            }
+            drawPath(body, color = rocketColor)
+            drawPath(leftFin, color = rocketColor)
+            drawPath(rightFin, color = rocketColor)
+            // Window -- drawn in the circle's own fill so it reads as a
+            // hole without needing a path-subtraction/mask, same simple
+            // layering the checkmark-over-circle in VerifiedBadge uses.
+            drawCircle(color = circleColor, radius = w * 0.0667f, center = Offset(w * 0.5f, h * 0.4167f))
+        }
     }
-    D2MBadge(text = "${formatScore(score)}/${formatScore(maxScore)}", tone = tone)
+}
+
+/**
+ * "Verified" -- styled like the small circular checkmark seal Meta's own
+ * apps use next to a name, rather than a text pill (reported directly:
+ * "verified badge can be similar to verified badge in meta apps"). Icon
+ * only, no label text -- same reason Instagram/Facebook never caption
+ * theirs. Uses this app's own accent color rather than Meta's blue, so it
+ * still reads as this app's own mark, not a borrowed one. Drawn on a
+ * Canvas (not an Icons.Filled.Check glyph) so the checkmark is centered
+ * and weighted to match d2m_web's identical SVG path exactly. The
+ * surrounding Row(verticalAlignment = CenterVertically) every call site
+ * already uses is what keeps this centered against the name text --
+ * unlike CSS flex, Compose Rows never default to baseline, so no extra
+ * alignment fix is needed here the way d2m_web's own header row needed.
+ *
+ * "on hover, explain what the tick means" (reported directly) -- wrapped
+ * in Material3's TooltipBox/PlainTooltip rather than a hand-rolled
+ * bubble: it already supports both long-press (the real mobile
+ * equivalent of hover on a touchscreen) and pointer hover (trackpad/
+ * mouse input), matching d2m_web's BubbleTooltip explanation without
+ * needing a second, platform-specific implementation.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VerifiedBadge(size: Dp = 16.dp, modifier: Modifier = Modifier) {
+    val circleColor = d2m.accent
+    val checkColor = d2m.accentOn
+    val tooltipText = LocalStrings.current.sharedComponents.verifiedTooltip
+    TapTip(text = tooltipText, modifier = modifier, minTarget = 28.dp, shape = androidx.compose.foundation.shape.CircleShape) {
+        Canvas(modifier = Modifier.size(size)) {
+            drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+            val w = this.size.width
+            val h = this.size.height
+            val path = Path().apply {
+                moveTo(w * 0.292f, h * 0.5125f)
+                lineTo(w * 0.425f, h * 0.6458f)
+                lineTo(w * 0.708f, h * 0.3583f)
+            }
+            drawPath(
+                path = path,
+                color = checkColor,
+                style = Stroke(width = this.size.minDimension * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
+        }
+    }
+}
+
+/**
+ * Compatibility rating as a small squared tag.
+ *
+ * Deliberately different from D2MBadge in two ways -- sentence case, and a
+ * numeric readout rather than a word. Those two differences are the whole
+ * reason both can sit in the same card header row without reading as the
+ * same thing: a badge is catalogue metadata, this is a computed rating.
+ * The old version was a near-identical soft pill.
+ */
+@Composable
+fun ScoreBadge(score: Double?, maxScore: Double = 10.0, modifier: Modifier = Modifier) {
+    if (score == null) return
+    val palette = LocalD2MStatusPalette.current
+    val ratio = score / maxScore
+    val colors = when {
+        ratio >= 0.75 -> palette.success
+        ratio >= 0.5 -> palette.info
+        ratio >= 0.35 -> palette.warning
+        else -> palette.neutral
+    }
+    val shape = RoundedCornerShape(D2MRadius.sm)
+    Text(
+        text = "${formatScore(score)}/${formatScore(maxScore)}",
+        color = colors.fg,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = modifier
+            .background(colors.bg, shape)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 private fun formatScore(v: Double): String =

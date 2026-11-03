@@ -1,20 +1,47 @@
 package com.d2m.app.ui.components
 
+
+import com.d2m.app.platform.rememberReduceMotion
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,22 +49,51 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
-import com.d2m.app.ui.theme.mutedText
+import com.d2m.app.ui.theme.d2m
 
 /**
- * Shared candidate card, mirrors components/MatchCard.jsx -- one component
- * for Home/Browse/Discover/detail-entry, `detailed` (bigger, sub-lines,
- * shortlist star) vs `compact` (thumbnail row). UnavailableMatchCard's "gone
- * Serious with someone else" state is a separate composable below rather
- * than a third variant flag, matching the web component's own split.
+ * Shared candidate card. Rebuilt in the retheme pass as the Browse comp's
+ * profile card, which is a genuinely different object from what was here.
+ *
+ * Before: a square AsyncImage over a name row and two muted sub-lines, in
+ * a Material Card with its default elevation and 12dp corners. A missing
+ * photograph was an empty tinted box.
+ *
+ * After, following the comp: a full-bleed photograph band at the top of
+ * the card (4:3, with the comps' warm captioned placeholder when there is
+ * no photo -- see ProfilePhoto.kt for why the missing case gets equal
+ * treatment), the registration id in tracked small caps, the name in the
+ * display serif, one meta line of "age · place", a rule, the facts as
+ * unruled DataRows, and a full-width outline "View profile" action.
+ *
+ * Two things that reads better for, beyond matching the reference:
+ *  - The photograph is what families actually scan by, and it was
+ *    previously competing with the name for the same space.
+ *  - An explicit action means the card no longer has to teach that it is
+ *    tappable. The card stays tappable too, so nothing is lost.
+ *
+ * DETAILED is the list card; COMPACT stays a row for the contexts where a
+ * photograph band would be wasted height (a specific request or
+ * suggestion list, which is a different reading task from scanning many
+ * candidates at once).
  */
-enum class MatchCardVariant { DETAILED, COMPACT }
+enum class MatchCardVariant {
+    DETAILED,
+    COMPACT,
+
+    /** Big portrait photo card for horizontally paged carousels (parent Home): name/age/place over a scrim, heart on the photo. */
+    FEATURE,
+
+    /** Photo-forward grid tile (parent Browse, two across): same overlay treatment as FEATURE at a smaller scale. */
+    TILE,
+}
 
 @Composable
 fun MatchCard(
@@ -48,76 +104,588 @@ fun MatchCard(
     variant: MatchCardVariant = MatchCardVariant.DETAILED,
     isShortlisted: Boolean = false,
     onToggleShortlist: (() -> Unit)? = null,
+    tag: String? = null,
 ) {
-    Card(modifier = modifier.clickable(onClick = onClick)) {
-        when (variant) {
-            MatchCardVariant.DETAILED -> Column(modifier = Modifier.padding(12.dp)) {
-                Box {
-                    AsyncImage(
-                        model = suggestion.photoUrl?.let(resolvePhotoUrl),
-                        contentDescription = suggestion.candidateName,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(1f).background(mutedText(0.1f), RoundedCornerShape(D2MRadius.md)),
-                    )
-                    if (onToggleShortlist != null) {
-                        IconButton(onClick = onToggleShortlist, modifier = Modifier.align(Alignment.TopEnd)) {
-                            Icon(
-                                imageVector = if (isShortlisted) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                                contentDescription = "Shortlist",
-                                tint = if (isShortlisted) Color(0xFFD4A24E) else Color.White,
+    val strings = LocalStrings.current.sharedComponents
+    val photo = suggestion.photoUrl?.let(resolvePhotoUrl)
+    // "27 · Chennai" -- assembled from whatever the backend actually sent
+    // rather than a fixed template, so a profile with no age renders
+    // "Chennai" and not " · Chennai".
+    val meta = listOfNotNull(
+        suggestion.age?.toString(),
+        suggestion.nativity ?: suggestion.city,
+    ).joinToString(" · ")
+
+    when (variant) {
+        MatchCardVariant.FEATURE, MatchCardVariant.TILE -> PhotoOverlayCard(
+            suggestion = suggestion,
+            photo = photo,
+            ratio = if (variant == MatchCardVariant.FEATURE) 1f else 3f / 4f,
+            large = variant == MatchCardVariant.FEATURE,
+            onClick = onClick,
+            isShortlisted = isShortlisted,
+            onToggleShortlist = onToggleShortlist,
+            tag = tag,
+            modifier = modifier,
+        )
+
+        MatchCardVariant.DETAILED -> D2MCard(modifier) {
+            Column(Modifier.clickable(onClick = onClick)) {
+                ProfilePhoto(
+                    photoUrl = photo,
+                    contentDescription = strings.photographOf(suggestion.candidateName),
+                    ratio = 4f / 3f,
+                    caption = if (photo == null) strings.noPhotographOnFile else null,
+                    glyphSize = 40.dp,
+                    overlay = {
+                        if (tag != null) {
+                            D2MBadge(
+                                tag,
+                                D2MBadgeTone.GOLD,
+                                Modifier.align(Alignment.TopStart).padding(10.dp),
                             )
                         }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "${suggestion.candidateName}${suggestion.age?.let { ", $it" } ?: ""}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    ScoreBadge(suggestion.compositeScore)
-                }
-                if (suggestion.city != null) {
-                    Text(suggestion.city, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
-                }
-                val subline = listOfNotNull(suggestion.gothram, suggestion.sect, suggestion.moonNakshatra).joinToString(" · ")
-                if (subline.isNotEmpty()) {
-                    Text(subline, style = MaterialTheme.typography.labelMedium, color = mutedText(0.45f))
-                }
-            }
-
-            MatchCardVariant.COMPACT -> Row(
-                modifier = Modifier.fillMaxWidth().padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                AsyncImage(
-                    model = suggestion.photoUrl?.let(resolvePhotoUrl),
-                    contentDescription = suggestion.candidateName,
-                    modifier = Modifier.size(56.dp).background(mutedText(0.1f), RoundedCornerShape(D2MRadius.sm)),
+                        if (onToggleShortlist != null) {
+                            ShortlistStar(
+                                shortlisted = isShortlisted,
+                                onToggle = onToggleShortlist,
+                                onPhoto = true,
+                                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                            )
+                        }
+                    },
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("${suggestion.candidateName}${suggestion.age?.let { ", $it" } ?: ""}", fontWeight = FontWeight.Bold)
-                    if (suggestion.city != null) {
-                        Text(suggestion.city, style = MaterialTheme.typography.labelMedium, color = mutedText(0.55f))
+
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // the registration number, never the internal id
+                        if (suggestion.shortId != null) RefNoText(suggestion.shortId, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
+                        ScoreBadge(suggestion.compositeScore)
+                    }
+                    Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SubHeading(suggestion.candidateName)
+                        if (suggestion.isFoundingMember) {
+                            FeaturedBadge(modifier = Modifier.padding(start = 8.dp))
+                        }
+                        if (suggestion.isVerified) {
+                            VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
+                    if (meta.isNotEmpty()) MetaText(meta, Modifier.padding(top = 2.dp))
+                }
+
+                val facts = buildList {
+                    listOfNotNull(suggestion.gothram, suggestion.sect).joinToString(", ")
+                        .takeIf { it.isNotEmpty() }?.let { add(strings.matchRowGothram to it) }
+                    suggestion.moonNakshatra?.let { n ->
+                        add(strings.matchRowStar to (suggestion.moonPada?.let { "$n, pada $it" } ?: n))
+                    }
+                    suggestion.occupationTitle?.let { add(strings.matchRowWork to it) }
+                    suggestion.employer?.takeIf { it.isNotBlank() }?.let { add(strings.matchRowOrganisation to it) }
+                }
+                if (facts.isNotEmpty()) {
+                    D2MDivider(Modifier.padding(top = 12.dp))
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp)) {
+                        facts.forEach { (l, v) -> DataRow(l, v) }
                     }
                 }
-                ScoreBadge(suggestion.compositeScore)
+
+                if (suggestion.doshaFlags.isNotEmpty()) {
+                    Text(
+                        text = strings.doshaFlagsNoted(suggestion.doshaFlags.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = d2m.label,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    )
+                }
+
+                // The comps' card closes on a full-width outline action.
+                D2MActionButton(
+                    text = strings.viewProfile,
+                    onClick = onClick,
+                    emphasis = D2MActionEmphasis.SECONDARY,
+                    height = 48.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp),
+                )
+            }
+        }
+
+        // Mirrors web's MatchCard.jsx compact-row redesign (own doc comment
+        // there has the full history): a left accent bar in the rating's
+        // own colour (levelColor -- the exact colour the pill below uses,
+        // not a second, disagreeing tone system), a bigger circular photo
+        // with the star anchored on its own corner instead of adrift in a
+        // side column, a place-only line (age already reads in the name),
+        // and the rating pushed to the row's actual right edge instead of
+        // stacked under the star where a wide row just went empty past it.
+        //
+        // The accent bar is a drawBehind rect on this Row, not a sibling
+        // Box measured via Modifier.height(IntrinsicSize.Min) (an earlier
+        // version of this did that). Intrinsic measurement asks every
+        // child -- including ProfileThumb's AsyncImage -- for its
+        // preferred size in a separate pre-pass before normal layout runs,
+        // and Coil's AsyncImage can report a small/zero intrinsic size
+        // while an image is still loading; that collapsed the *whole row*
+        // (photo included -- Modifier.size() still clamps to whatever
+        // height the row's own intrinsic pass settled on) down to a
+        // squashed oval on whichever card happened to still be loading its
+        // photo at that instant. Confirmed live: one row out of five
+        // rendered exactly that way. drawBehind runs in the draw phase
+        // against the row's real, already-resolved final size, so it can't
+        // be wrong before that size exists.
+        MatchCardVariant.COMPACT -> D2MCard(modifier) {
+            val level = suggestion.compositeScore?.let { overallRating(it) }
+            val place = suggestion.nativity ?: suggestion.city
+            val accentColor = level?.let { levelColor(it) }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        if (accentColor != null) {
+                            drawRect(color = accentColor, size = Size(3.dp.toPx(), size.height))
+                        }
+                    }
+                    .clickable(onClick = onClick)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // The avatar is clipped to a circle, so the shortlist badge cannot live inside it: it sits in this unclipped
+                // box, centred on the avatar's lower-right rim (as on web), half on the photo and half off it.
+                Box(Modifier.size(76.dp)) {
+                    ProfileThumb(
+                        photoUrl = photo,
+                        contentDescription = strings.photographOf(suggestion.candidateName),
+                        size = 68.dp,
+                        shape = RoundedCornerShape(percent = 50),
+                    )
+                    if (onToggleShortlist != null) {
+                        ShortlistStar(
+                            shortlisted = isShortlisted,
+                            onToggle = onToggleShortlist,
+                            onPhoto = true,
+                            modifier = Modifier.align(Alignment.TopStart).padding(start = 40.dp, top = 40.dp),
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    SubHeading(
+                        suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: ""),
+                        maxLines = 2,
+                    )
+                    if (place != null) MetaText(place, Modifier.padding(top = 2.dp))
+                    // the registration number, never the internal id (same line the web's shortlist rows carry)
+                    suggestion.shortId?.let { MetaText(it, Modifier.padding(top = 2.dp)) }
+                    if (suggestion.doshaFlags.isNotEmpty()) {
+                        Text(
+                            text = strings.doshaFlags(suggestion.doshaFlags.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = d2m.meta,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                }
+                if (level != null) D2MLevelPill(level)
             }
         }
     }
 }
 
-/** A tracked candidate who's since gone Serious with someone else -- mirrors UnavailableMatchCard.jsx. */
+/**
+ * The shortlist toggle. Squared rather than a bare icon so it reads as a
+ * control on top of an arbitrary photograph, and gold when set -- gold is
+ * this design's "marked/featured" colour, and a maroon star would compete
+ * with the card's own primary action.
+ *
+ * Circular when onPhoto -- mirrors web's own fix for the identical
+ * complaint ("the star button next to the profile image doesn't look
+ * nice"): a squared badge sitting half on/half off a circular thumb reads
+ * as a sticker stuck at an angle. Round echoes the shape it overlays,
+ * whether that's a circular thumb (MatchCard's COMPACT row) or a
+ * rectangular photo band (DETAILED) -- a round icon-button on a photo is
+ * the standard "save"/"favourite" shape either way. Off a photo (the
+ * "Profile status" card's inline star, if this app grows one) it stays
+ * squared, sitting among the app's other square controls in a plain row.
+ */
 @Composable
-fun UnavailableMatchCard(name: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(name, fontWeight = FontWeight.Bold, color = mutedText(0.45f))
-            Text("No longer available -- they've gone Serious with someone else", style = MaterialTheme.typography.labelMedium, color = mutedText(0.45f))
+fun ShortlistStar(
+    shortlisted: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    onPhoto: Boolean = false,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val label = if (shortlisted) strings.removeFromShortlist else strings.addToShortlist
+    if (onPhoto) {
+        // The web's badge: a small cream disc with a gold ring and a gold star, 28dp (a 36dp touch target around it).
+        Box(
+            modifier
+                .size(36.dp)
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onToggle)
+                .semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(percent = 50))
+                    .border(1.5.dp, d2m.gold, RoundedCornerShape(percent = 50)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = null,
+                    tint = if (shortlisted) d2m.goldStrong else d2m.gold,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
+    } else {
+        // Off a photo, in a plain row: a squared outline control, bookmark like everywhere else.
+        val shape = RoundedCornerShape(D2MRadius.sm)
+        Box(
+            modifier
+                .size(40.dp)
+                .clip(shape)
+                .background(if (shortlisted) d2m.goldSoft else MaterialTheme.colorScheme.surface, shape)
+                .border(1.5.dp, d2m.gold, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            IconButton(onClick = onToggle, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = label,
+                    tint = if (shortlisted) d2m.goldStrong else d2m.gold,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A tracked candidate who has since gone Serious with someone else.
+ * A sibling shape to MatchCard rather than a third variant: an unavailable
+ * card genuinely isn't interactive (no tap, no star, no score worth
+ * showing), so folding it in would mean threading a disabled-everything
+ * branch through every conditional above.
+ */
+@Composable
+fun UnavailableMatchCard(name: String, modifier: Modifier = Modifier, photoUrl: String? = null) {
+    val strings = LocalStrings.current.sharedComponents
+    D2MCard(modifier) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ProfileThumb(photoUrl, null)
+            Column(Modifier.weight(1f)) {
+                SubHeading(name)
+                MetaText(
+                    strings.noLongerAvailable,
+                    Modifier.padding(top = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Shared body of the FEATURE and TILE variants: full-bleed portrait photo,
+ * a bottom scrim carrying name/age/place, the compatibility pill top-left
+ * and the shortlist heart top-right. One composable so the carousel card
+ * and the grid tile can never drift apart. Fixed aspect ratio, so a photo
+ * arriving late (or never) cannot change the item's size.
+ */
+@Composable
+private fun PhotoOverlayCard(
+    suggestion: SuggestionOut,
+    photo: String?,
+    ratio: Float,
+    large: Boolean,
+    onClick: () -> Unit,
+    isShortlisted: Boolean,
+    onToggleShortlist: (() -> Unit)?,
+    tag: String?,
+    modifier: Modifier = Modifier,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val shape = RoundedCornerShape(if (large) 20.dp else 14.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val reduceMotion = rememberReduceMotion()
+    val scale = animateFloatAsState(if (pressed && !reduceMotion) 0.97f else 1f, label = "card-press")
+    val level = remember(suggestion.compositeScore) { suggestion.compositeScore?.takeIf { it > 0.0 }?.let { overallRating(it) } }
+    val place = suggestion.nativity ?: suggestion.city
+    val title = suggestion.candidateName + (suggestion.age?.let { ", $it" } ?: "")
+
+    Box(
+        modifier
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+            .clip(shape)
+            .border(1.dp, d2m.border, shape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), onClick = onClick),
+    ) {
+        ProfilePhoto(
+            photoUrl = photo,
+            contentDescription = strings.photographOf(suggestion.candidateName),
+            ratio = ratio,
+            caption = if (photo == null && large) strings.noPhotographOnFile else null,
+            glyphSize = if (large) 56.dp else 40.dp,
+        )
+        // scrim + text
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC1A120C))))
+                .padding(start = if (large) 16.dp else 10.dp, end = if (large) 16.dp else 10.dp, top = 36.dp, bottom = if (large) 14.dp else 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (suggestion.isVerified) VerifiedBadge(modifier = Modifier.padding(start = 6.dp))
+            }
+            if (place != null) {
+                Text(
+                    place,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (large) {
+                val work = suggestion.occupationTitle
+                if (work != null) {
+                    Text(
+                        work,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.align(Alignment.TopStart).padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (tag != null) D2MBadge(tag, D2MBadgeTone.GOLD)
+            if (level != null) D2MLevelPill(level)
+        }
+        if (onToggleShortlist != null) {
+            ShortlistHeart(
+                shortlisted = isShortlisted,
+                onToggle = onToggleShortlist,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+    }
+}
+
+/**
+ * Heart toggle for photo cards: 48dp touch target around a 36dp round
+ * chip, a short haptic tick and a springy pop on every toggle. The caller
+ * owns the (optimistic) state; this only reports the tap.
+ */
+@Composable
+fun ShortlistHeart(
+    shortlisted: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** No white chip behind the icon -- for use on a plain surface (table rows) instead of over a photo. */
+    flat: Boolean = false,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val haptic = LocalHapticFeedback.current
+    val pop = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
+    Box(
+        modifier
+            .size(48.dp)
+            .toggleable(
+                value = shortlisted,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Switch,
+                onValueChange = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggle()
+                    if (!reduceMotion) scope.launch {
+                        pop.animateTo(1.3f, tween(90))
+                        pop.animateTo(1f, spring(dampingRatio = 0.4f))
+                    }
+                },
+            )
+            // Name + state ("Shortlist", "Shortlisted") instead of a label that flips to the opposite action.
+            .semantics { stateDescription = if (shortlisted) strings.shortlisted else strings.notShortlisted },
+        contentAlignment = Alignment.Center,
+    ) {
+        // A small status badge, not a button-sized disc: 28dp chip, 16dp bookmark. The tap target stays 48dp (above).
+        // On a photo: shortlisted = white chip + accent filled bookmark; not shortlisted = dark scrim + white outline.
+        // `flat` (table rows on a plain surface) drops the chip entirely.
+        val chip = when {
+            flat -> Color.Transparent
+            shortlisted -> Color.White.copy(alpha = 0.95f)
+            else -> Color.Black.copy(alpha = 0.32f)
+        }
+        val tint = when {
+            shortlisted -> d2m.goldStrong
+            flat -> d2m.gold
+            else -> Color.White
+        }
+        Box(
+            Modifier
+                .size(if (flat) 36.dp else 28.dp)
+                .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
+                .background(chip, RoundedCornerShape(percent = 50)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (shortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                contentDescription = strings.shortlist,
+                tint = tint,
+                modifier = Modifier.size(if (flat) 20.dp else 16.dp),
+            )
+        }
+    }
+}
+
+/** 5'8" -- same rounding as the table's height column. */
+internal fun formatHeightFtIn(cm: Int): String {
+    val totalIn = kotlin.math.round(cm / 2.54).toInt()
+    return "${totalIn / 12}'${totalIn % 12}\""
+}
+
+/** The facts shown under a row's name, in web's default column order (gothram, sect, nakshatra), capped at [limit] and skipping empties. */
+fun profileRowFacts(s: SuggestionOut, limit: Int = 3): List<String> =
+    listOfNotNull(s.gothram, s.sect, s.moonNakshatra).filter { it.isNotBlank() }.take(limit)
+
+/**
+ * Compact list row for Browse (web's PhoneBrowse ProfileRow): 64dp thumb; name with Featured/Verified badges; an
+ * "age · height · city" line; the level pill plus up to three chosen facts; a chevron. Tapping the row opens the
+ * profile. The shortlist star is a separate >= 48dp target beside it, so toggling never opens the profile by accident.
+ */
+@Composable
+fun ProfileRow(
+    suggestion: SuggestionOut,
+    resolvePhotoUrl: (String) -> String,
+    onOpen: () -> Unit,
+    isShortlisted: Boolean,
+    onToggleShortlist: () -> Unit,
+    modifier: Modifier = Modifier,
+    facts: List<String> = profileRowFacts(suggestion),
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val name = suggestion.candidateName
+    val meta = listOfNotNull(
+        suggestion.age?.toString(),
+        suggestion.heightCm?.takeIf { it > 0 }?.let(::formatHeightFtIn),
+        (suggestion.city ?: suggestion.nativity)?.takeIf { it.isNotBlank() },
+    ).joinToString(" · ").ifEmpty { "—" }
+    val score = suggestion.compositeScore?.takeIf { it > 0.0 }
+    val haptic = LocalHapticFeedback.current
+
+    Row(modifier.fillMaxWidth().heightIn(min = 80.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .weight(1f)
+                .clickable(role = Role.Button, onClick = onOpen)
+                .semantics(mergeDescendants = true) { contentDescription = strings.openProfileNamed(name) }
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ProfileThumb(photoUrl = suggestion.photoUrl?.let(resolvePhotoUrl), contentDescription = null, size = 64.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = d2m.textPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (suggestion.isFoundingMember) FeaturedBadge(size = 15.dp)
+                    if (suggestion.isVerified) VerifiedBadge(size = 15.dp)
+                }
+                Text(meta, style = MaterialTheme.typography.bodyMedium, color = d2m.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (score != null || facts.isNotEmpty()) {
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (score != null) D2MLevelPill(overallRating(score))
+                        // One dotted run, so it wraps as a sentence instead of dropping single words onto separate lines.
+                        if (facts.isNotEmpty()) Text(facts.joinToString(" \u00B7 "), style = MaterialTheme.typography.bodySmall, color = d2m.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                tint = d2m.faint, modifier = Modifier.size(22.dp),
+            )
+        }
+        // Separate star target (>= 48dp), with the profile's name in its label.
+        Box(
+            Modifier
+                .size(56.dp)
+                .toggleable(
+                    value = isShortlisted,
+                    role = Role.Switch,
+                    onValueChange = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleShortlist()
+                    },
+                )
+                .semantics {
+                    contentDescription = if (isShortlisted) strings.removeFromShortlistNamed(name) else strings.addToShortlistNamed(name)
+                    stateDescription = if (isShortlisted) strings.shortlisted else strings.notShortlisted
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (isShortlisted) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                contentDescription = null,
+                tint = if (isShortlisted) d2m.goldStrong else d2m.gold,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+    }
+}
+
+/** List-view placeholder: the row's own geometry (64dp thumb, three text bars, star dot). */
+@Composable
+fun ProfileRowSkeleton(modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 80.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        D2MSkeleton(width = 64.dp, height = 64.dp, radius = 12.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            D2MSkeleton(width = 140.dp, height = 15.dp)
+            D2MSkeleton(width = 100.dp, height = 12.dp)
+            D2MSkeleton(width = 180.dp, height = 12.dp)
+        }
+        D2MSkeleton(width = 28.dp, height = 28.dp, radius = 14.dp)
     }
 }

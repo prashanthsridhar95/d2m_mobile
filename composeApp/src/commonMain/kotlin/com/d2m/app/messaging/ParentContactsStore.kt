@@ -4,7 +4,10 @@ import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- deprecated kotlinx.datetime.Clock
+// typealias, actually resolves to kotlin.time.Clock in the 0.7.1 that this
+// project really compiles against.
+import kotlin.time.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString

@@ -5,44 +5,79 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.d2m.app.data.network.ApiClient
+import com.d2m.app.data.network.AuditApi
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.SeriousModeRepository
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.ParentContactsStore
+import com.d2m.app.messaging.PendingOpenPeer
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.call.ui.CallLayer
 import com.d2m.app.messaging.ui.InAppNotificationLayer
 import com.d2m.app.push.PlatformPushInitializer
 import com.d2m.app.push.ui.rememberBatteryOptimizationRequester
 import com.d2m.app.push.ui.rememberNotificationPermissionLauncher
+import com.d2m.app.security.observeAppBackgrounded
+import com.d2m.app.security.observeScreenCapture
+import com.d2m.app.security.observeScreenshotTaken
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.LocalPhotoImageLoader
+import com.d2m.app.ui.components.StepUpConfirmDialogHost
+import com.d2m.app.ui.components.StepUpController
+import com.d2m.app.ui.components.WatermarkOverlay
 import com.d2m.app.ui.navigation.ChildTabs
-import com.d2m.app.ui.navigation.D2MBottomBar
+import com.d2m.app.ui.navigation.D2MShellBottomBar
+import com.d2m.app.ui.navigation.navigateToTab
+import com.d2m.app.ui.components.D2MSnackbarHost
+import com.d2m.app.ui.components.LocalD2MSnackbar
+import com.d2m.app.ui.components.rememberD2MSnackbarState
 import com.d2m.app.ui.navigation.D2MNavGraph
 import com.d2m.app.ui.navigation.ParentTabs
+import com.d2m.app.ui.navigation.BackBarRoutes
+import com.d2m.app.ui.navigation.D2MBackBar
 import com.d2m.app.ui.navigation.Routes
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.LocaleStore
+import com.d2m.app.ui.strings.stringsFor
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import kotlinx.coroutines.launch
@@ -72,8 +107,16 @@ fun App() {
     val chatUiState: ChatUiState = koinInject()
     val messagingRepo: MessagingRepository = koinInject()
     val apiClient: ApiClient = koinInject()
+    val auditApi: AuditApi = koinInject()
     val seriousModeRepo: SeriousModeRepository = koinInject()
     val parentContactsStore: ParentContactsStore = koinInject()
+    val stepUpController: StepUpController = koinInject()
+    // Authenticated profile-photo ImageLoader (data/network/PhotoImageLoader.kt)
+    // -- provided once here so every ProfilePhoto/ProfileThumb below picks it
+    // up via LocalPhotoImageLoader instead of the app-wide Coil default.
+    val photoImageLoader: ImageLoader = koinInject()
+    val localeStore: LocaleStore = koinInject()
+    val locale by localeStore.locale.collectAsState()
     val identity by identityStore.identity.collectAsState()
     val conversationOpen by chatUiState.conversationOpen.collectAsState()
     val messagingStartupError by messagingRepo.startupError.collectAsState()
@@ -94,6 +137,18 @@ fun App() {
     LaunchedEffect(identity.primaryId, identity.sponsorId) {
         if (identity.primaryId != null || identity.sponsorId != null) {
             runCatching { messagingRepo.start(apiClient.client) }
+            // Coming back to the foreground is the moment a socket that
+            // looks connected is most likely dead (phone slept / network
+            // changed); force a fresh one so queued messages and call
+            // invites are delivered instead of only ever showing as a
+            // notification.
+            launch {
+                var wasForeground = AppForegroundState.isForeground.value
+                AppForegroundState.isForeground.collect { fg ->
+                    if (fg && !wasForeground) runCatching { messagingRepo.refreshConnection(apiClient.client) }
+                    wasForeground = fg
+                }
+            }
             // Reported directly: "When app is not alive, I don't receive
             // notification (even now)." Root cause: this used to live in the
             // LaunchedEffect(Unit) below, firing exactly once at first
@@ -171,9 +226,61 @@ fun App() {
         requestBatteryOptimizationExemption()
     }
 
+    // Warms suggestions/dashboard/notifications and the first photos as soon
+    // as an identity exists, so the first tab opens on cached data.
+    val genericError = LocalStrings.current.common.errorGeneric
+    SideEffect { com.d2m.app.data.network.ErrorCopy.somethingWentWrong = genericError }
+
+    val prefetcher: com.d2m.app.domain.repository.Prefetcher = koinInject()
+    LaunchedEffect(Unit) { prefetcher.start() }
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
+
+    // Session expired/revoked (the server answered 401 to a request that carried our token): clear the stored session
+    // and go back to Login, discarding the back stack, rather than leaving screens stuck on an error.
+    LaunchedEffect(apiClient) {
+        apiClient.sessionExpired.collect {
+            if (identityStore.identity.value.role != null) {
+                identityStore.clear()
+                navController.navigate(Routes.LOGIN) { popUpTo(0) }
+            }
+        }
+    }
     val currentRoute = backStackEntry?.destination?.route
+
+    // Screenshot/recording hardening (security/ScreenCapture.kt) -- both
+    // effects are permanent no-ops on Android, where FLAG_SECURE
+    // (MainActivity.onCreate) already blocks capture outright at the OS
+    // level; only iOS's actuals do anything, since Apple gives apps no way
+    // to prevent a screenshot or recording, only to react to one.
+    var isRecordingCaptured by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val remove = observeScreenCapture { captured -> isRecordingCaptured = captured }
+        onDispose { remove() }
+    }
+    // rememberUpdatedState so this doesn't need to re-subscribe to the OS
+    // notification (and risk missing an event mid-resubscribe) every time
+    // the route changes -- the callback below always reads the CURRENT
+    // route at the moment a screenshot actually happens.
+    val latestRoute by rememberUpdatedState(currentRoute)
+    DisposableEffect(Unit) {
+        val remove = observeScreenshotTaken {
+            scope.launch {
+                auditApi.recordScreenView("SCREENSHOT_DETECTED:${latestRoute ?: "unknown"}")
+            }
+        }
+        onDispose { remove() }
+    }
+    // Blanks the screen the instant iOS is about to background the app --
+    // before the OS takes its app-switcher snapshot, unlike the
+    // screenshot observer above, which only ever fires after the fact.
+    // No-op on Android, same reasoning as observeScreenCapture above.
+    var isBackgrounded by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val remove = observeAppBackgrounded { backgrounded -> isBackgrounded = backgrounded }
+        onDispose { remove() }
+    }
 
     // Read once at composition start -- NavHost's startDestination is fixed
     // at graph-build time, matching how DevIdentity's persisted role is only
@@ -197,8 +304,17 @@ fun App() {
     // alone can't tell us that (the thread list and an open conversation are
     // both the MATCHES route, see MatchesScreen.kt/ChatUiState.kt), so this
     // also factors in the shared conversationOpen flag.
+    val tabRoutes = remember(tabs) { tabs?.map { it.route }?.toSet().orEmpty() }
     val showBottomBar = tabs != null && tabs.any { it.route == currentRoute } && !conversationOpen
 
+    val snackbarState = rememberD2MSnackbarState()
+    CompositionLocalProvider(
+        LocalPhotoImageLoader provides photoImageLoader,
+        LocalStrings provides stringsFor(locale),
+        LocalAppLocale provides locale,
+        LocalD2MSnackbar provides snackbarState,
+    ) {
+    val strings = LocalStrings.current.sharedComponents
     D2MTheme(flow = D2MFlow.ENTRY) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
@@ -216,24 +332,31 @@ fun App() {
                 // this Scaffold's own chrome, and each screen's header --
                 // stays completely still.
                 contentWindowInsets = WindowInsets.systemBars,
+                snackbarHost = {
+                    // On a profile the pinned action bar (~100dp) sits at the bottom: lift the toast above it so an
+                    // Undo toast never covers the very buttons beside it.
+                    val liftForActionBar = currentRoute == Routes.PROFILE_DETAIL
+                    D2MSnackbarHost(snackbarState, Modifier.padding(bottom = if (liftForActionBar) 96.dp else 0.dp))
+                },
                 bottomBar = {
                     if (showBottomBar && tabs != null) {
-                        D2MBottomBar(
+                        D2MShellBottomBar(
                             tabs = tabs,
                             currentRoute = currentRoute,
-                            onTabSelected = { tab ->
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onTabSelected = { tab -> navController.navigateToTab(tab.route) },
                         )
                     }
                 },
             ) { innerPadding ->
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    D2MNavGraph(navController = navController, startDestination = startDestination)
+                Column(modifier = Modifier.padding(innerPadding)) {
+                    // Pushed screens without a header of their own (settings, profile editor, trust, verification, gallery,
+                    // sharing, parent messages, parent notifications) get one slim back bar; tabs never do.
+                    if (currentRoute in BackBarRoutes && currentRoute !in tabRoutes && !conversationOpen) {
+                        D2MBackBar(onBack = { navController.popBackStack() })
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        D2MNavGraph(navController = navController, startDestination = startDestination, tabRoutes = tabRoutes)
+                    }
                 }
             }
 
@@ -242,6 +365,14 @@ fun App() {
             // d2m_web's CallLayer.jsx sitting above its router. Renders
             // nothing while idle -- see CallLayer.kt.
             CallLayer()
+
+            // Reusable trust-subsystem step-up ("confirm your password")
+            // dialog -- mounted once here, same reasoning as CallLayer
+            // above, so any screen/ViewModel can just call
+            // stepUpController.confirmStepUp() without wiring its own
+            // Dialog. Renders nothing while no confirmation is pending --
+            // see ui/components/StepUpConfirmDialog.kt.
+            StepUpConfirmDialogHost(stepUpController)
 
             // Instagram-style in-app message banner (point 4 of the
             // notification request) -- mounted the same way as CallLayer so
@@ -266,13 +397,27 @@ fun App() {
                     onOpenPeer = { peerUsername ->
                         chatUiState.requestOpenPeer(peerUsername)
                         val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
-                        navController.navigate(target) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToTab(target)
                     },
                 )
+            }
+
+            // Tapping an OS-level chat notification (not the in-app banner
+            // above, which already worked) -- MainActivity.kt/iOSApp.swift
+            // write the tapped peer here once the Activity/App actually
+            // opens (see PendingOpenPeer.kt's doc comment for why that
+            // hand-off is necessary at all), and this is the exact same
+            // requestOpenPeer()+navigate() the in-app banner's own tap
+            // already does, just a different entry point into it. Reported
+            // directly: "From notifications, message is not getting sent."
+            val pendingPeerFromNotification by PendingOpenPeer.pendingPeerUsername.collectAsState()
+            LaunchedEffect(pendingPeerFromNotification, identity.role) {
+                val peerUsername = pendingPeerFromNotification ?: return@LaunchedEffect
+                if (identity.role == null) return@LaunchedEffect
+                chatUiState.requestOpenPeer(peerUsername)
+                val target = if (identity.role == D2MRole.PARENT) Routes.PARENT_MESSAGES else Routes.MATCHES
+                navController.navigateToTab(target)
+                PendingOpenPeer.clear()
             }
 
             // Standing banner (not a toast -- doesn't auto-dismiss) for when
@@ -300,6 +445,70 @@ fun App() {
                     )
                 }
             }
+
+            // Forensic screen watermark (d2m_web's WatermarkOverlay.jsx
+            // counterpart) -- drawn above everything else here, including
+            // the error banner above, so it's captured in any screenshot.
+            if (identity.role != null) {
+                WatermarkOverlay(screen = currentRoute ?: "unknown")
+            }
+
+            // Live screen-recording cover (iOS only -- see
+            // security/ScreenCapture.kt's doc comment on why Android has
+            // nothing to cover, FLAG_SECURE already blocked the capture).
+            // Opaque and LAST in this Box, above even the watermark: the
+            // watermark is meant to be captured if something leaks despite
+            // this, but while a recording is actively running, hiding the
+            // content outright is strictly better than relying on someone
+            // noticing a faint overlay in the recorded footage.
+            if (isRecordingCaptured) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(32.dp),
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            strings.screenRecordingDetected,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            strings.profileContentHiddenWhileRecording,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+
+            // App-switcher cover (iOS only -- see security/ScreenCapture.kt's
+            // observeAppBackgrounded doc comment). LAST of all, above even
+            // the recording cover: this one has no animation and no delay,
+            // because whatever's on screen the instant this composes IS
+            // what iOS snapshots for the app-switcher a moment later. Plain
+            // wordmark rather than the recording cover's explanatory text --
+            // nobody actually reads this frame, it exists purely to be
+            // what gets captured, not to be looked at.
+            if (isBackgrounded) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Soul'd",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
+    }
     }
 }

@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Basic Compose Multiplatform UI test (uses commonTest's `compose.uiTest`
@@ -32,7 +34,7 @@ class D2MButtonTest {
 
         onNodeWithText("Save").assertIsEnabled().performClick()
 
-        assert(clicked) { "Expected onClick to have fired." }
+        assertTrue(clicked, "Expected onClick to have fired.")
     }
 
     @Test
@@ -46,6 +48,6 @@ class D2MButtonTest {
 
         onNodeWithText("Save").assertIsNotEnabled().performClick()
 
-        assert(!clicked) { "Disabled button should not fire onClick." }
+        assertFalse(clicked, "Disabled button should not fire onClick.")
     }
 }

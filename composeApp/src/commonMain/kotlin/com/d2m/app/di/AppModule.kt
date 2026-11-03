@@ -7,6 +7,7 @@ import com.d2m.app.data.network.*
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.data.session.createSettings
 import com.d2m.app.domain.repository.*
+import com.d2m.app.ui.strings.LocaleStore
 import com.d2m.app.messaging.ChatUiState
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.ParentContactsStore
@@ -22,38 +23,72 @@ import com.d2m.app.messaging.crypto.archive.createArchivePrimitives
 import com.d2m.app.messaging.transport.MessagingWsClient
 import com.d2m.app.messaging.ui.createGifImageLoader
 import com.d2m.app.push.PushTokenRegistrar
-import com.russhwolf.settings.Settings
 import org.koin.dsl.module
 
 val appModule = module {
     single { ApiCache() }
-    single { ApiClient(engine = httpEngine()) }
+    // identityStore = get() lets ApiClient attach the stored WedLock bearer
+    // token to every d2m_core_engine request -- see ApiClient.kt's doc
+    // comment. Safe despite IdentityStore's own single{} being declared
+    // further down: Koin resolves get() lazily on first actual use, not in
+    // module-declaration order.
+    // tokenRefresher: silent WedLock token renewal on 401 instead of logging the user out (ApiClient.refreshAccessToken).
+    single { ApiClient(engine = httpEngine(), identityStore = get()).also { api -> api.tokenRefresher = { rt -> get<WedLockApi>().refresh(rt) } } }
+    // Separate base URL/service -- see WedLockApi.kt's doc comment on why
+    // this isn't routed through the ApiClient above.
+    single { WedLockApi(httpEngine()) }
 
     single { IdentityApi(get()) }
+    // Forensic watermark audit ping (data/network/AuditApi.kt) -- consumed
+    // by ui/components/WatermarkOverlay.kt.
+    single { AuditApi(get(), get()) }
     single { SuggestionsApi(get()) }
     single { BufferApi(get()) }
     single { SeriousModeApi(get()) }
     single { ConsentApi(get()) }
     single { OffboardingApi(get()) }
     single { AdminApi(get()) }
+    single { StaffGalleryApi(get()) }
     single { NotificationsApi(get()) }
     single { DashboardApi(get()) }
     single { PanchangamApi(get()) }
     single { GeocodingApi(httpEngine()) }
+    single { ShareLinksApi(get()) }
+    // Public (unauthenticated) share-link viewer -- see PublicLinksApi.kt's
+    // own doc comment on how this differs from ShareLinksApi above.
+    single { PublicLinksApi(get()) }
+    // WedLock trust subsystem (vouches/trusted connections/endorsements) --
+    // Round 1 slice, see app/routers/trust.py + data/network/TrustApi.kt.
+    single { TrustApi(get()) }
+    // Chat message/media "Report" -- app/routers/blocking.py's
+    // message-reports route, see data/network/BlockingApi.kt.
+    single { BlockingApi(get()) }
 
     single { IdentityRepository(get(), get()) }
-    single { SuggestionsRepository(get(), get(), get()) }
+    single { SuggestionsRepository(get(), get(), get(), get(), get()) }
+    single { DelayedActionCommitter(get()) }
     single { SeriousModeRepository(get(), get()) }
     single { ConsentRepository(get(), get()) }
     single { NotificationsRepository(get(), get()) }
     single { DashboardRepository(get(), get()) }
+    single { ShareLinksRepository(get(), get()) }
+    single { PublicLinksRepository(get()) }
+    single { TrustRepository(get(), get()) }
+    single { ShareLinkFieldsCache(createSettings()) }
+    single { LeadKeyCache(createSettings()) }
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }
     single { AdminRepository(get()) }
+    single { StaffGalleryRepository(get()) }
 
-    single<Settings> { createSettings() }
-    single { IdentityStore(get()) }
+    single { IdentityStore(createSettings()) }
+    single { LocaleStore(createSettings()) }
     single { com.d2m.app.ui.screens.onboarding.OnboardingResultHolder() }
+    // Reusable "confirm your password" step-up dialog controller -- see
+    // ui/components/StepUpConfirmDialog.kt's doc comment. Mounted once at
+    // the App.kt shell level (StepUpConfirmDialogHost), used from any
+    // screen via koinInject().
+    single { com.d2m.app.ui.components.StepUpController(get()) }
 
     single { PushTokenRegistrar(get(), get()) }
     single { com.d2m.app.push.PlatformPushInitializer() }
@@ -67,10 +102,13 @@ val appModule = module {
     single<CryptoProvider> { createCryptoProvider(get(), createSettings()) }
 
     // Cross-device message-history backup (messaging/crypto/archive/) --
-    // P-256 ECDH/AES-GCM/PBKDF2, real on Android (same createSettings()-backed
-    // local-cache pattern as SignalSessionStore, separate namespace -- see
-    // ArchiveKeyStore's doc comment), no iOS actual yet (same precedent as
-    // CryptoProvider above).
+    // P-256 ECDH/AES-GCM/PBKDF2, real on BOTH platforms (same
+    // createSettings()-backed local-cache pattern as SignalSessionStore,
+    // separate namespace -- see ArchiveKeyStore's doc comment). The iOS
+    // actual became load-bearing the moment CryptoProvider above went real
+    // there: an iOS device now has an actual Signal identity, so
+    // ArchiveManager.checkAfterConnect reaches the PIN setup/restore path
+    // that used to be unreachable.
     single<ArchivePrimitives> { createArchivePrimitives() }
     single { ArchiveKeyStore(createSettings()) }
     single { ArchiveManager(get(), get()) }
@@ -103,4 +141,14 @@ val appModule = module {
     // Built once, not per-composition -- see messaging/ui/GifImageLoader.kt.
     // Reported directly: "GIF sent/received should be autoplaying."
     single { createGifImageLoader() }
+
+    // Authenticated profile-photo loader -- see data/network/PhotoImageLoader.kt's
+    // doc comment on why this is a separate ImageLoader/HttpClient from the
+    // app-wide Coil default (GifPicker.kt's Giphy fetches, chat media) rather
+    // than a global singleton swap.
+    single { createPhotoImageLoader(get()) }
+    // Warms the photo loader's memory cache for upcoming cards -- see PhotoPrefetcher / rememberPhotoPrefetch.
+    single { PhotoPrefetcher(get(), photoPlatformContext(), get<ApiClient>()::resolveMediaUrl) }
+    // Login/app-start cache warm-up -- see domain/repository/Prefetcher.kt.
+    single { Prefetcher(get(), get(), get(), get(), get(), get(), get(), get()) }
 }

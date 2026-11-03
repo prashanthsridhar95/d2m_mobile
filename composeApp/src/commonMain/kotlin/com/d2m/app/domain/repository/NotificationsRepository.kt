@@ -20,6 +20,12 @@ class NotificationsRepository(
         return r
     }
 
+    suspend fun markAllRead(accountId: String): List<NotificationOut> {
+        val r = api.markAllRead(accountId)
+        cache.invalidateKey("notifications:$accountId")
+        return r
+    }
+
     suspend fun getPreferences(accountId: String): NotificationPreferenceOut =
         api.getPreferences(accountId)
 

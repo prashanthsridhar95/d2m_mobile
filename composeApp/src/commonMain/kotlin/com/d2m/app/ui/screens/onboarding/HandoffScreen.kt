@@ -14,9 +14,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MEmptyState
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
+import com.d2m.app.platform.claimLink
+import com.d2m.app.platform.shareText
 import org.koin.compose.koinInject
 
 /**
@@ -29,29 +33,29 @@ import org.koin.compose.koinInject
  * The native share sheet replaces web's copy-link/WhatsApp-button pair --
  * see plan §4: a strictly better mobile-native choice, since the OS share
  * sheet already includes WhatsApp, Messages, email, etc. Wiring the actual
- * platform share intent is a small expect/actual (see platform/ShareSheet.kt)
- * left as a follow-up alongside the other platform actuals in this build.
+ * platform share intent is the expect/actual in platform/ShareSheet.kt.
  */
 @Composable
 fun HandoffScreen(onBrowseProfiles: () -> Unit) {
     val resultHolder: OnboardingResultHolder = koinInject()
     val handoff by resultHolder.current.collectAsState()
+    val strings = LocalStrings.current.onboarding
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
             val h = handoff
             if (h == null) {
-                D2MEmptyState("No invite to show", "Start setup again to generate a new one.")
+                D2MEmptyState(strings.noInviteTitle, strings.noInviteBody)
             } else {
-                Text("Sent to ${h.childName}.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                PageTitle(strings.sentTo(h.childName))
                 Text(
-                    "A private claim link is ready to share -- theirs to open whenever they're ready. Expires ${h.inviteExpiresAt}.",
+                    strings.claimLinkReady(h.inviteExpiresAt),
                     color = mutedText(0.55f),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
                 )
-                D2MButton(text = "Share invite", onClick = { /* platform share sheet -- see doc comment */ })
-                D2MButton(text = "Browse profiles", variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = onBrowseProfiles, modifier = Modifier.padding(top = 8.dp))
+                D2MButton(text = strings.shareInvite, onClick = { shareText(claimLink(h.inviteToken)) })
+                D2MButton(text = strings.browseProfiles, variant = com.d2m.app.ui.components.D2MButtonVariant.OUTLINE, onClick = onBrowseProfiles, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }

@@ -11,6 +11,12 @@ class NotificationsApi(private val api: ApiClient) {
     suspend fun markRead(accountId: String, notificationId: String): NotificationOut =
         api.post("/accounts/$accountId/notifications/$notificationId/read")
 
+    /** "Notification panel needs a Mark all read button", reported
+     *  directly -- one request for every still-unread row, one commit
+     *  server-side, rather than looping markRead per notification. */
+    suspend fun markAllRead(accountId: String): List<NotificationOut> =
+        api.post("/accounts/$accountId/notifications/mark-all-read")
+
     suspend fun getPreferences(accountId: String): NotificationPreferenceOut =
         api.get("/accounts/$accountId/notification-preferences")
 

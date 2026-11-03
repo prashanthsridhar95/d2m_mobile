@@ -9,12 +9,19 @@ package com.d2m.app.messaging.crypto.signal
  * differ per platform; only the raw curve/cipher/MAC primitives need a real
  * crypto library binding.
  *
- * `CryptoPrimitives.android.kt` is a real implementation (BouncyCastle,
- * permissively licensed -- see that file's doc comment for why Signal's own
- * AGPLv3 `libsignal` was deliberately not used). No iOS implementation
- * exists yet -- `createCryptoProvider()` binds `StubUnencryptedCryptoProvider`
- * on iOS instead of touching this interface at all, same "not implemented
- * yet, needs real platform work" precedent as WebRtcEngine.ios.kt.
+ * BOTH platforms implement this for real now.
+ * `CryptoPrimitives.android.kt` uses BouncyCastle (permissively licensed --
+ * see that file's doc comment for why Signal's own AGPLv3 `libsignal` was
+ * deliberately not used) plus `Ed25519Math.kt`.
+ * `CryptoPrimitives.ios.kt` uses Apple's CommonCrypto/Security for the
+ * RNG/HMAC/AES half, and the pure-Kotlin `Curve25519.kt` (commonMain) for
+ * the X25519/XEdDSA half, because Apple exposes no Curve25519 API that
+ * Kotlin/Native can bind to.
+ *
+ * The two are pinned to each other by `CurveInteropAndroidTest.kt`, which
+ * asserts they produce identical bytes -- see that file, since "each side is
+ * self-consistent" is emphatically NOT enough for a protocol whose entire
+ * job is letting the two platforms talk.
  *
  * All key/signature byte conventions here match
  * `@privacyresearch/libsignal-protocol-typescript` (d2m_web's crypto

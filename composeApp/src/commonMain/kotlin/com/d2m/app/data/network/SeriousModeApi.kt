@@ -29,6 +29,9 @@ class SeriousModeApi(private val api: ApiClient) {
     suspend fun unmatch(threadId: String, primaryId: String): UnmatchOut =
         api.post("/threads/$threadId/unmatch", UnmatchIn(primaryId))
 
+    suspend fun confirmMet(threadId: String, primaryId: String): ConfirmMetOut =
+        api.post("/threads/$threadId/confirm-met", ConfirmMetIn(primaryId))
+
     suspend fun getSponsorStatus(primaryId: String): SponsorStatusOut =
         api.get("/primaries/$primaryId/sponsor-status")
 }

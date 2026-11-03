@@ -9,7 +9,22 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
+import com.d2m.app.ui.components.D2MErrorState
+import com.d2m.app.ui.components.SkeletonList
+import com.d2m.app.ui.components.bounceClickable
+import com.d2m.app.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -63,22 +78,51 @@ import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.messaging.ui.mediaLabel
+import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.data.model.UnionStatusOut
+import com.d2m.app.domain.repository.OffboardingRepository
+import com.d2m.app.domain.repository.SuggestionsRepository
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.D2MCheckboxRow
+import com.d2m.app.ui.components.D2MButton
+import com.d2m.app.ui.components.D2MButtonSize
+import com.d2m.app.ui.components.D2MButtonVariant
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.D2MTabs
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.MatchesStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- deprecated kotlinx.datetime.Clock
+// typealias, actually resolves to kotlin.time.Clock in the 0.7.1 that this
+// project really compiles against.
+import kotlin.time.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 
-/** Same two-tone gradient d2m_web hardcodes for every match avatar (MatchesScreen.jsx's `linear-gradient(135deg,#DCEEEA,#FBEAD2)`) -- there's no real profile photo on a Thread on either platform (ThreadOut/app/schemas.py's ThreadOut has no photo field at all), so this gradient squircle IS the design, not a placeholder standing in for a missing photo. */
-private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+/*
+ * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
+ * (#DCEEEA -> #FBEAD2), left over from the old per-flow palettes and the
+ * one place in this app with a colour baked in rather than read from the
+ * theme. It's now the same warm sunken surface a missing photograph gets
+ * everywhere else (see ProfilePhoto.kt), so an avatar with no photo and a
+ * card with no photo read as the same material. A composable accessor
+ * rather than a top-level val, since a CompositionLocal can only be read
+ * inside composition.
+ */
+@Composable
+private fun avatarPlaceholder() = d2m.surfaceSunken
 
 private val SHORT_MONTH_NAMES = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -96,7 +140,7 @@ private fun localDateOf(epochMillis: Long): LocalDate =
  * (private to that file, so re-implemented here rather than exported across
  * an unrelated module boundary for one shared helper).
  */
-private fun fmtThreadListTime(epochMillis: Long): String {
+private fun fmtThreadListTime(epochMillis: Long, yesterdayLabel: String): String {
     if (epochMillis <= 0) return ""
     val now = Clock.System.now().toEpochMilliseconds()
     val date = localDateOf(epochMillis)
@@ -106,7 +150,7 @@ private fun fmtThreadListTime(epochMillis: Long): String {
         val amPm = if (dt.hour < 12) "AM" else "PM"
         return "$hour12:${dt.minute.toString().padStart(2, '0')} $amPm"
     }
-    if (date == localDateOf(now - 86_400_000L)) return "Yesterday"
+    if (date == localDateOf(now - 86_400_000L)) return yesterdayLabel
     return "${SHORT_MONTH_NAMES[date.monthNumber - 1]} ${date.dayOfMonth}"
 }
 
@@ -137,15 +181,52 @@ private fun fmtThreadListTime(epochMillis: Long): String {
  * it full-width with a back button, same single-pane-at-a-time pattern as
  * any phone messaging app (and as web itself falls back to below 720px).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
+fun MatchesScreen(
+    onOpenProfile: (String) -> Unit = {},
+    onOpenGallery: () -> Unit = {},
+    /** A matched thread's header opens the read-only matched profile (falls back to [onOpenProfile]). */
+    onOpenMatchedProfile: (String) -> Unit = onOpenProfile,
+) {
     val identityStore = org.koin.compose.koinInject<IdentityStore>()
     val seriousModeRepo = org.koin.compose.koinInject<SeriousModeRepository>()
     val chatUiState = org.koin.compose.koinInject<ChatUiState>()
     val callManager = org.koin.compose.koinInject<CallManager>()
     val messagingRepo = org.koin.compose.koinInject<MessagingRepository>()
+    val suggestionsRepo = org.koin.compose.koinInject<SuggestionsRepository>()
+    val offboardingRepo = org.koin.compose.koinInject<OffboardingRepository>()
     val identity by identityStore.identity.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    var pulling by remember { mutableStateOf(false) }
+    val unreadByPeer by messagingRepo.unreadByPeer.collectAsState()
+
+    // "Integrate offboarding flow" (reported directly) -- the union-confirm
+    // + Success Gallery opt-in banner, mirroring web's MatchesScreen.jsx
+    // treatment exactly (see that file's own loadUnionStatus/
+    // handleConfirmUnion/handleGalleryToggle). OffboardingRepository was
+    // already fully wired on this platform with zero UI callers before
+    // this -- this is that wiring.
+    var unionStatus by remember { mutableStateOf<UnionStatusOut?>(null) }
+    var unionBusy by remember { mutableStateOf(false) }
+    var unionError by remember { mutableStateOf<String?>(null) }
+    // "We met" call gate (web: chat-next-step strip + met-info dialog).
+    var metDialogOpen by remember { mutableStateOf(false) }
+    var metBusy by remember { mutableStateOf(false) }
+
+    // "Include request sent/request received profiles sections in matches
+    // tab" (reported directly) -- a Thread only exists once BOTH sides
+    // have accepted, so a pending one-sided Accept has nowhere to show up
+    // in this screen today. Same two endpoints HomeScreen already renders
+    // inline on its own activity feed, surfaced here as their own tab
+    // instead -- this screen's list is already a flat list of one kind of
+    // thing (threads), and a request isn't a thread yet.
+    var matchesTab by remember { mutableStateOf(0) } // 0 = matches, 1 = received, 2 = sent
+    var receivedRequests by remember { mutableStateOf<List<SuggestionOut>?>(null) }
+    var sentRequests by remember { mutableStateOf<List<SuggestionOut>?>(null) }
+    var requestsError by remember { mutableStateOf<String?>(null) }
+    var requestBusyId by remember { mutableStateOf<String?>(null) }
 
     var threads by remember { mutableStateOf<List<ThreadOut>>(emptyList()) }
     // "open profile & trigger system back - moves to matches page - should
@@ -164,6 +245,93 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     var actionError by remember { mutableStateOf<String?>(null) }
 
     val primaryId = identity.primaryId
+    val strings = LocalStrings.current.matches
+
+    // getReceivedRequests/getSentRequests can lag a beat behind an actual
+    // mutual match -- same staleness web's HomeScreen.jsx/MatchesScreen.jsx
+    // already work around via their own matchedIds/receivedFiltered.
+    // Cross-checked against threads (the authoritative "are we matched"
+    // source this screen already loads) so an already-matched candidate
+    // never lingers in Received/Sent with live Accept/Decline buttons.
+    // Reported directly: "After accepting a request, in message screen,
+    // request is being shown."
+    val matchedIds = remember(threads) {
+        threads.filter { it.status != "closed" }.map { it.otherParticipantId }.toSet()
+    }
+    val receivedFiltered = remember(receivedRequests, matchedIds) {
+        receivedRequests?.filter { it.candidateId !in matchedIds } ?: emptyList()
+    }
+    val sentFiltered = remember(sentRequests, matchedIds) {
+        sentRequests?.filter { it.candidateId !in matchedIds } ?: emptyList()
+    }
+
+    // Union status only means anything once a thread is exclusive, and
+    // getUnionStatus is a read-only peek (never creates a row) -- safe to
+    // refetch every time the active exclusive thread changes.
+    suspend fun loadUnionStatus() {
+        val pid = primaryId
+        val t = selected
+        if (pid == null || t == null) return
+        try {
+            unionStatus = offboardingRepo.getUnionStatus(pid, t.otherParticipantId)
+        } catch (e: Exception) {
+            // leave the previous value in place -- a stale-but-present
+            // status is less confusing than the banner vanishing on a
+            // transient error.
+        }
+    }
+
+    LaunchedEffect(selected?.threadId, selected?.status, primaryId) {
+        val t = selected
+        if (t == null || t.status != "exclusive") {
+            unionStatus = null
+            return@LaunchedEffect
+        }
+        loadUnionStatus()
+    }
+
+    fun confirmUnion() {
+        val pid = primaryId ?: return
+        val t = selected ?: return
+        unionBusy = true
+        unionError = null
+        scope.launch {
+            try {
+                offboardingRepo.confirmUnion(pid, t.otherParticipantId)
+                loadUnionStatus()
+            } catch (e: Exception) {
+                unionError = friendlyError(e, strings.errConfirmUnion)
+            } finally {
+                unionBusy = false
+            }
+        }
+    }
+
+    fun toggleGalleryOptIn(consent: Boolean) {
+        val pid = primaryId ?: return
+        val t = selected ?: return
+        unionBusy = true
+        unionError = null
+        scope.launch {
+            try {
+                offboardingRepo.galleryOptIn(pid, t.otherParticipantId, consent)
+                loadUnionStatus()
+            } catch (e: Exception) {
+                unionError = friendlyError(e, strings.errUpdateGalleryOptin)
+            } finally {
+                unionBusy = false
+            }
+        }
+    }
+
+    val iAmUnionA = unionStatus?.primaryAId == primaryId
+    val myUnionConfirmed = unionStatus?.let { if (iAmUnionA) it.confirmedA else it.confirmedB } ?: false
+    // Banner only ever appears once someone has actually asked -- see
+    // web's MatchesScreen.jsx comment on the same gate: getUnionStatus
+    // synthesizes a "pending" row (both sides false) for every exclusive
+    // thread whether or not anyone's touched Confirm Union yet.
+    val otherUnionConfirmed = unionStatus?.let { if (iAmUnionA) it.confirmedB else it.confirmedA } ?: false
+    val myGalleryConsent = unionStatus?.let { if (iAmUnionA) it.galleryConsentA else it.galleryConsentB } ?: false
 
     // Was `threads = seriousModeRepo.getThreads(...)` with no guard -- every
     // caller below wraps its own action in runCatching but then calls this
@@ -177,8 +345,19 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             threads = seriousModeRepo.getThreads(primaryId, forceRefresh = true)
             threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
-            actionError = friendlyError(e, "Couldn't refresh your matches.")
+            actionError = friendlyError(e, strings.errRefreshMatches)
         }
+    }
+
+    // "Serious mode/Union/We met request not getting updated in real time
+    // inside chat," reported directly -- messaging-framework pushes a
+    // thread.updated event the moment a Serious Mode milestone changes on
+    // either side (see d2m_core_engine's serious_mode_service.py). Just
+    // calls the same refresh() this screen already runs on load/manual
+    // pull -- no new fetch logic, just no longer waiting for one of those
+    // to happen on its own.
+    LaunchedEffect(Unit) {
+        messagingRepo.threadUpdatedEvents.collect { refresh() }
     }
 
     LaunchedEffect(primaryId) {
@@ -201,9 +380,28 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             // real name is known before any notification for them can arrive.
             threads.forEach { messagingRepo.rememberPeerName(it.otherParticipantId, it.otherParticipantName) }
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load your matches.")
+            error = friendlyError(e, strings.errLoadMatches)
         } finally {
             loading = false
+        }
+    }
+
+    suspend fun refreshReceived() {
+        if (primaryId == null) return
+        try {
+            receivedRequests = suggestionsRepo.getReceivedRequests(primaryId)
+        } catch (e: Exception) {
+            requestsError = friendlyError(e, strings.errLoadReceivedRequests)
+        }
+    }
+
+    LaunchedEffect(primaryId) {
+        if (primaryId == null) return@LaunchedEffect
+        refreshReceived()
+        try {
+            sentRequests = suggestionsRepo.getSentRequests(primaryId)
+        } catch (e: Exception) {
+            requestsError = friendlyError(e, strings.errLoadSentRequests)
         }
     }
 
@@ -272,21 +470,151 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
     // unfiltered (rememberPeerName/pendingOpenPeer above still need every
     // match, closed or not); only the rendered list hides them.
     val visibleThreads = remember(threads) { threads.filterNot { it.status == "closed" } }
+    // Most recent conversation first; brand-new matches (no messages yet) pin
+    // to the top so they get a first hello. Re-sorts when a message arrives
+    // (unreadByPeer changes), not on every frame.
+    val sortedThreads = remember(visibleThreads, unreadByPeer) {
+        visibleThreads.sortedByDescending {
+            messagingRepo.lastMessageAt(d2mIdToMessagingUsername(it.otherParticipantId)) ?: Long.MAX_VALUE
+        }
+    }
 
     D2MTheme(flow = D2MFlow.CHILD) {
       Box(modifier = Modifier.fillMaxSize()) {
         val t = selected
         if (t == null) {
             // Thread list, full width -- default pane.
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text("Matches", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                when {
-                    loading -> Text("Loading…", color = mutedText(0.55f), modifier = Modifier.padding(top = 12.dp))
-                    error != null -> D2MErrorBanner(error!!, modifier = Modifier.padding(top = 12.dp))
-                    visibleThreads.isEmpty() -> D2MEmptyState("No matches yet", "Once you and someone else both accept, they'll show up here.")
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
-                        items(visibleThreads) { thread ->
-                            ThreadRow(thread = thread, onClick = { chatUiState.setActiveThreadId(thread.threadId) })
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+                    PageTitle(strings.pageTitle)
+                    D2MTabs(
+                        titles = listOf(strings.tabMatches, strings.tabReceived, strings.tabSent),
+                        selectedIndex = matchesTab,
+                        onSelect = { if (it != matchesTab) { haptics.light(); matchesTab = it } },
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                PullToRefreshBox(
+                    isRefreshing = pulling,
+                    onRefresh = {
+                        scope.launch {
+                            pulling = true
+                            refresh()
+                            refreshReceived()
+                            runCatching { sentRequests = suggestionsRepo.getSentRequests(primaryId ?: return@runCatching) }
+                            pulling = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                    ) {
+                        when (matchesTab) {
+                            0 -> when {
+                                loading -> item(key = "sk0", contentType = "skeleton") { SkeletonList(count = 7) }
+                                error != null -> item(key = "err0", contentType = "state") {
+                                    D2MErrorState(error!!, onRetry = {
+                                        scope.launch { loading = true; error = null; runCatching { refresh() }; loading = false }
+                                    })
+                                }
+                                sortedThreads.isEmpty() -> item(key = "empty0", contentType = "state") {
+                                    D2MEmptyState(strings.noMatchesTitle, strings.noMatchesBody)
+                                }
+                                else -> items(sortedThreads, key = { it.threadId }, contentType = { "thread" }) { thread ->
+                                    ThreadRow(
+                                        thread = thread,
+                                        unread = unreadByPeer[d2mIdToMessagingUsername(thread.otherParticipantId)] ?: 0,
+                                        onClick = { chatUiState.setActiveThreadId(thread.threadId) },
+                                    )
+                                }
+                            }
+                            1 -> {
+                                requestsError?.let { msg -> item(key = "reqErr", contentType = "banner") { D2MErrorBanner(msg, modifier = Modifier.padding(vertical = 8.dp)) } }
+                                when {
+                                    receivedRequests == null -> item(key = "sk1", contentType = "skeleton") { SkeletonList(count = 5) }
+                                    receivedFiltered.isEmpty() -> item(key = "empty1", contentType = "state") {
+                                        D2MEmptyState(strings.noRequestsWaitingTitle, strings.noRequestsWaitingBody)
+                                    }
+                                    else -> items(receivedFiltered, key = { it.candidateId }, contentType = { "received" }) { r ->
+                                        val busy = requestBusyId == r.candidateId
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .bounceClickable(onClick = { onOpenProfile(r.candidateId) }, pressedScale = 0.985f, enforceMinimumTarget = false)
+                                                .padding(vertical = 10.dp),
+                                        ) {
+                                            InitialAvatar(r.candidateName, 56.dp)
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(r.candidateName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(strings.wantsToMatch, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            D2MButton(
+                                                text = strings.accept, size = D2MButtonSize.SM, enabled = !busy,
+                                                onClick = {
+                                                    val pid = primaryId ?: return@D2MButton
+                                                    requestBusyId = r.candidateId
+                                                    scope.launch {
+                                                        try {
+                                                            suggestionsRepo.act(pid, r.candidateId, "accept")
+                                                            haptics.success()
+                                                            refreshReceived()
+                                                            refresh()
+                                                        } catch (e: Exception) {
+                                                            requestsError = friendlyError(e, strings.errAcceptRequest)
+                                                        } finally {
+                                                            requestBusyId = null
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                            D2MButton(
+                                                text = strings.decline, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM, enabled = !busy,
+                                                onClick = {
+                                                    val pid = primaryId ?: return@D2MButton
+                                                    requestBusyId = r.candidateId
+                                                    scope.launch {
+                                                        try {
+                                                            suggestionsRepo.act(pid, r.candidateId, "reject")
+                                                            haptics.medium()
+                                                            refreshReceived()
+                                                        } catch (e: Exception) {
+                                                            requestsError = friendlyError(e, strings.errDeclineRequest)
+                                                        } finally {
+                                                            requestBusyId = null
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            else -> when {
+                                sentRequests == null -> item(key = "sk2", contentType = "skeleton") { SkeletonList(count = 5) }
+                                sentFiltered.isEmpty() -> item(key = "empty2", contentType = "state") {
+                                    D2MEmptyState(strings.noRequestsSentTitle, strings.noRequestsSentBody)
+                                }
+                                else -> items(sentFiltered, key = { it.candidateId }, contentType = { "sent" }) { r ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .bounceClickable(onClick = { onOpenProfile(r.candidateId) }, pressedScale = 0.985f, enforceMinimumTarget = false)
+                                            .padding(vertical = 10.dp),
+                                    ) {
+                                        InitialAvatar(r.candidateName, 56.dp)
+                                        Column {
+                                            Text(r.candidateName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(strings.waitingForReply, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -300,34 +628,36 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
             // option all in one line - that's how things are in all the
             // apps." ChatPane below owns nothing but messages + composer.
             val peerUsername = remember(t.otherParticipantId) { d2mIdToMessagingUsername(t.otherParticipantId) }
+            val goSeriousAction: () -> Unit = {
+                val pid = primaryId
+                if (pid != null) scope.launch {
+                    try {
+                        seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
+                    } catch (e: Exception) {
+                        actionError = friendlyError(e, strings.errSendSeriousModeRequest)
+                    }
+                    refresh()
+                }
+            }
             Column(modifier = Modifier.fillMaxSize()) {
                 ConversationHeader(
                     thread = t,
+                    callsUnlocked = t.callsUnlocked,
                     onBack = { chatUiState.setActiveThreadId(null) },
-                    onOpenProfile = { onOpenProfile(t.otherParticipantId) },
+                    onOpenProfile = { onOpenMatchedProfile(t.otherParticipantId) },
                     onStartAudioCall = { scope.launch { callManager.startCall(peerUsername, "audio") } },
                     onStartVideoCall = { scope.launch { callManager.startCall(peerUsername, "video") } },
                     menuContent = {
                         MoreOptionsMenu(
                             thread = t,
-                            onGoSerious = {
-                                val pid = primaryId ?: return@MoreOptionsMenu
-                                scope.launch {
-                                    try {
-                                        seriousModeRepo.requestSeriousMode(pid, t.threadId, pid)
-                                    } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't send that Serious Mode request.")
-                                    }
-                                    refresh()
-                                }
-                            },
+                            onGoSerious = goSeriousAction,
                             onRevoke = {
                                 val pid = primaryId ?: return@MoreOptionsMenu
                                 scope.launch {
                                     try {
                                         seriousModeRepo.revoke(pid, t.threadId)
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't revoke Serious Mode.")
+                                        actionError = friendlyError(e, strings.errRevokeSeriousMode)
                                     }
                                     refresh()
                                 }
@@ -339,7 +669,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                                         seriousModeRepo.unmatch(pid, t.threadId)
                                         chatUiState.setActiveThreadId(null)
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't unmatch.")
+                                        actionError = friendlyError(e, strings.errUnmatch)
                                     }
                                     refresh()
                                 }
@@ -351,7 +681,7 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                                     try {
                                         seriousModeRepo.respond(pid, reqId, "accept")
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't accept that Serious Mode request.")
+                                        actionError = friendlyError(e, strings.errAcceptSeriousModeRequest)
                                     }
                                     refresh()
                                 }
@@ -363,15 +693,111 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
                                     try {
                                         seriousModeRepo.respond(pid, reqId, "decline")
                                     } catch (e: Exception) {
-                                        actionError = friendlyError(e, "Couldn't decline that Serious Mode request.")
+                                        actionError = friendlyError(e, strings.errDeclineSeriousModeRequest)
                                     }
                                     refresh()
                                 }
                             },
+                            showConfirmUnion = t.status == "exclusive" && !myUnionConfirmed,
+                            onConfirmUnion = { confirmUnion() },
                         )
                     },
                 )
                 actionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+                unionError?.let { D2MErrorBanner(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+
+                // Phones' "next step" strip (web: .chat-next-step) -- says WHY
+                // calls are locked and what unlocks them, instead of a
+                // cryptic header pill.
+                if (!t.callsUnlocked) {
+                    FlatStripRow {
+                        Text(
+                            if (t.metConfirmedByMe) strings.metWaitingStrip(t.otherParticipantName) else strings.metStrip,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!t.metConfirmedByMe) {
+                            D2MButton(text = strings.weMet, size = D2MButtonSize.SM, enabled = !metBusy, onClick = { metDialogOpen = true })
+                        }
+                    }
+                } else if (t.status == "active" && t.pendingSeriousModeRequestId == null) {
+                    FlatStripRow {
+                        Text(strings.goSeriousStrip, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        D2MButton(text = strings.goSerious, size = D2MButtonSize.SM, onClick = goSeriousAction)
+                    }
+                }
+                if (metDialogOpen) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { metDialogOpen = false },
+                        title = { Text(strings.metDialogTitle) },
+                        text = { Text(strings.metDialogBody) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(enabled = !metBusy, onClick = {
+                                val pid = primaryId
+                                metDialogOpen = false
+                                if (pid != null) {
+                                    metBusy = true
+                                    scope.launch {
+                                        try {
+                                            seriousModeRepo.confirmMet(pid, t.threadId)
+                                        } catch (e: Exception) {
+                                            actionError = friendlyError(e, strings.errConfirmMet)
+                                        }
+                                        refresh()
+                                        metBusy = false
+                                    }
+                                }
+                            }) { Text(strings.metDialogConfirm) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { metDialogOpen = false }) { Text(strings.metDialogCancel) }
+                        },
+                    )
+                }
+
+                // Banner only ever appears once someone has actually asked
+                // (myUnionConfirmed or otherUnionConfirmed) -- see the
+                // comment where those are computed above for why gating on
+                // unionStatus alone would nag both sides indefinitely just
+                // for being exclusive. "More options > Confirm Union" is
+                // still there for whoever wants to actually start it.
+                if (t.status == "exclusive" && unionStatus?.status != "confirmed" && (myUnionConfirmed || otherUnionConfirmed)) {
+                    FlatStripRow {
+                        if (myUnionConfirmed) {
+                            Text(strings.waitingOnThemToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        } else {
+                            Text(strings.themWantsToConfirm(t.otherParticipantName), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            D2MButton(text = strings.confirmUnion, size = D2MButtonSize.SM, enabled = !unionBusy, onClick = { confirmUnion() })
+                        }
+                    }
+                }
+
+                if (t.status == "exclusive" && unionStatus?.status == "confirmed") {
+                    FlatStrip {
+                        Column {
+                            Text(strings.unionConfirmedTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                strings.unionConfirmedBody,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = mutedText(0.55f),
+                                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                            )
+                            D2MCheckboxRow(
+                                label = strings.optInSuccessGallery,
+                                checked = myGalleryConsent,
+                                enabled = !unionBusy,
+                                onCheckedChange = { toggleGalleryOptIn(it) },
+                            )
+                            D2MButton(
+                                text = strings.viewSuccessGallery,
+                                variant = D2MButtonVariant.OUTLINE,
+                                size = D2MButtonSize.SM,
+                                modifier = Modifier.padding(top = 10.dp),
+                                onClick = onOpenGallery,
+                            )
+                        }
+                    }
+                }
                 ChatPane(
                     peerId = t.otherParticipantId,
                     peerName = t.otherParticipantName,
@@ -412,22 +838,17 @@ fun MatchesScreen(onOpenProfile: (String) -> Unit = {}) {
  * directly in the chat list rather than only after opening a thread.
  */
 @Composable
-private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
+private fun ThreadRow(thread: ThreadOut, unread: Int, onClick: () -> Unit) {
     val messagingRepo: MessagingRepository = koinInject()
+    val strings = LocalStrings.current.matches
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
+    // remember{}: MessagingRepository.messagesFor() launches a never-cancelled
+    // collector on every call, so calling it bare in the body (as this row
+    // used to) leaked one per recomposition while scrolling.
+    val messagesFlow = remember(peerUsername) { messagingRepo.messagesFor(peerUsername) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
-    // "In matches view, last sent/received message is shown below the name
-    // in web. in mobile - matched is shown. i want same as web." Web's
-    // sidebar row (MatchesScreen.jsx's sortedThreads/_preview) derives this
-    // from the same messagesByPeer state the open conversation reads, not a
-    // separate fetch -- messagingRepo.messagesFor() is the mobile equivalent
-    // (already loaded from local cache + live updates, see
-    // MessagingRepository.kt's messagesFor doc comment), so this row just
-    // needs to pick the newest message and format it the same way web does:
-    // typing (highest priority) > last message preview > the old static
-    // status label as a fallback for a fresh match with no messages yet.
-    val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
+    val messages by messagesFlow.collectAsState()
 
     LaunchedEffect(peerUsername) { messagingRepo.subscribePresence(thread.otherParticipantId) }
 
@@ -435,47 +856,85 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
     val previewText = remember(lastMessage) {
         when {
             lastMessage == null -> ""
-            lastMessage.deleted -> "This message was deleted"
+            lastMessage.deleted -> strings.messageDeleted
             lastMessage.media != null -> mediaLabel(lastMessage.media)
             else -> lastMessage.text
         }
     }
-    val subtitleBase = if (peerTyping) "typing…" else previewText.ifBlank { threadStatusLabel(thread.status) }
-    val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) "$subtitleBase · Serious Mode pending" else subtitleBase
+    val previewWithPrefix = if (lastMessage?.isMine == true && previewText.isNotBlank()) strings.youPrefix + previewText else previewText
+    val subtitleBase = if (peerTyping) strings.typing else previewWithPrefix.ifBlank { if (lastMessage == null && thread.status == "active") strings.sayHi else threadStatusLabel(thread.status, strings) }
+    val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) strings.seriousModePendingSuffix(subtitleBase) else subtitleBase
+    val hasUnread = unread > 0
+    val timeLabel = remember(lastMessage?.sentAt) { lastMessage?.let { fmtThreadListTime(it.sentAt, strings.yesterday) } }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .bounceClickable(onClick = onClick, pressedScale = 0.985f, enforceMinimumTarget = false)
+            .padding(vertical = 10.dp)
+            .semantics { if (hasUnread) stateDescription = strings.unreadDesc(unread) },
     ) {
-        Box(modifier = Modifier.size(48.dp)) {
-            Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+        Box(modifier = Modifier.size(60.dp)) {
+            InitialAvatar(thread.otherParticipantName, 60.dp)
             PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(thread.otherParticipantName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (lastMessage != null) {
-                    Text(
-                        fmtThreadListTime(lastMessage.sentAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = mutedText(0.55f),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-            }
             Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (peerTyping) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (peerTyping) MaterialTheme.colorScheme.primary else mutedText(0.55f),
+                thread.otherParticipantName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (hasUnread) FontWeight.ExtraBold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (peerTyping || hasUnread) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (peerTyping) MaterialTheme.colorScheme.primary else if (hasUnread) MaterialTheme.colorScheme.onSurface else mutedText(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (timeLabel != null) {
+                Text(
+                    timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (hasUnread) d2m.accent else mutedText(0.55f),
+                    fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
+            if (hasUnread) {
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+                        .background(d2m.accent, CircleShape)
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (unread > 99) "99+" else unread.toString(), color = d2m.accentOn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/** Circle avatar showing the person's initial on the warm sunken surface (ThreadOut carries no photo URL). */
+@Composable
+private fun InitialAvatar(name: String, size: Dp) {
+    Box(
+        modifier = Modifier.size(size).background(avatarPlaceholder(), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            (name.trim().firstOrNull() ?: '?').uppercaseChar().toString(),
+            fontWeight = FontWeight.Bold,
+            fontSize = (size.value * 0.38f).sp,
+            color = d2m.label,
+        )
     }
 }
 
@@ -499,6 +958,7 @@ private fun ThreadRow(thread: ThreadOut, onClick: () -> Unit) {
 @Composable
 private fun ConversationHeader(
     thread: ThreadOut,
+    callsUnlocked: Boolean,
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
     onStartAudioCall: () -> Unit,
@@ -506,6 +966,7 @@ private fun ConversationHeader(
     menuContent: @Composable () -> Unit,
 ) {
     val messagingRepo: MessagingRepository = koinInject()
+    val strings = LocalStrings.current.matches
     val peerUsername = remember(thread.otherParticipantId) { d2mIdToMessagingUsername(thread.otherParticipantId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
     val peerTyping by messagingRepo.isPeerTyping(peerUsername).collectAsState()
@@ -517,7 +978,7 @@ private fun ConversationHeader(
         modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to matches")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.backToMatches)
         }
         // "tapping the user avatar inside chat is not taking me to the
         // user's profile" -- matches web's own header (MatchesScreen.jsx:
@@ -529,27 +990,27 @@ private fun ConversationHeader(
             modifier = Modifier.weight(1f).clickable(onClick = onOpenProfile),
         ) {
             Box(modifier = Modifier.size(40.dp)) {
-                Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+                Box(modifier = Modifier.size(40.dp).background(avatarPlaceholder(), RoundedCornerShape(12.dp)))
                 PresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
             }
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(thread.otherParticipantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (messagingRepo.isProductionGradeEncryption) {
-                        Icon(Icons.Filled.Lock, contentDescription = "End-to-end encrypted", modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
+                        Icon(Icons.Filled.Lock, contentDescription = strings.endToEndEncrypted, modifier = Modifier.size(14.dp), tint = mutedText(0.5f))
                     }
                 }
                 val subtitle = when {
-                    peerTyping -> "typing…"
-                    peerOnline -> "Online"
-                    else -> threadStatusLabel(thread.status)
+                    peerTyping -> strings.typing
+                    peerOnline -> strings.online
+                    else -> threadStatusLabel(thread.status, strings)
                 }
                 Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call", onClick = onStartAudioCall)
-            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call", onClick = onStartVideoCall)
+            HeaderIconButton(icon = Icons.Filled.Call, contentDescription = strings.audioCall, onClick = onStartAudioCall, enabled = callsUnlocked, disabledReason = strings.callsLockedDesc)
+            HeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = strings.videoCall, onClick = onStartVideoCall, enabled = callsUnlocked, disabledReason = strings.callsLockedDesc)
             menuContent()
         }
     }
@@ -558,15 +1019,48 @@ private fun ConversationHeader(
 /** Same 38dp outlined-circle visual as the call buttons used to be inside ChatPane's old toolbar -- kept identical now that they live here instead. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HeaderIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+private fun HeaderIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    disabledReason: String? = null,
+) {
     Box(
         modifier = Modifier.size(38.dp)
             .clip(CircleShape)
             .border(BorderStroke(1.dp, mutedText(0.15f)), CircleShape)
-            .combinedClickable(onClick = onClick, onLongClick = {}),
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = {})
+            .semantics {
+                if (!enabled) {
+                    disabled()
+                    if (disabledReason != null) stateDescription = disabledReason
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp))
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(17.dp), tint = if (enabled) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.4f))
+    }
+}
+
+/** Flat edge-to-edge strip (web: padding 10/16, no radius, bottom hairline, accentSoft) for chat banners. */
+@Composable
+private fun FlatStrip(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().background(d2m.accentSoft)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), content = content)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.border))
+    }
+}
+
+@Composable
+private fun FlatStripRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    FlatStrip {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
     }
 }
 
@@ -579,26 +1073,32 @@ private fun MoreOptionsMenu(
     onUnmatch: () -> Unit,
     onAcceptSeriousRequest: () -> Unit,
     onDeclineSeriousRequest: () -> Unit,
+    showConfirmUnion: Boolean = false,
+    onConfirmUnion: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val strings = LocalStrings.current.matches
     Box {
         // "more menu button on the toolbar also should have rounded
         // outline" -- was a bare IconButton (no outline at all), visibly
         // inconsistent with the two call buttons right next to it
         // (HeaderIconButton's 38dp outlined circle). Same visual now.
-        HeaderIconButton(icon = Icons.Filled.MoreVert, contentDescription = "More options", onClick = { menuOpen = true })
+        HeaderIconButton(icon = Icons.Filled.MoreVert, contentDescription = strings.moreOptions, onClick = { menuOpen = true })
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(D2MRadius.lg)) {
             if (thread.pendingSeriousModeRequestId != null) {
-                DropdownMenuItem(text = { Text("Accept Serious Mode") }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
-                DropdownMenuItem(text = { Text("Decline Serious Mode") }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
+                DropdownMenuItem(text = { Text(strings.acceptSeriousMode) }, onClick = { menuOpen = false; onAcceptSeriousRequest() })
+                DropdownMenuItem(text = { Text(strings.declineSeriousMode) }, onClick = { menuOpen = false; onDeclineSeriousRequest() })
             }
             if (thread.status == "active") {
-                DropdownMenuItem(text = { Text("Go Serious") }, onClick = { menuOpen = false; onGoSerious() })
+                DropdownMenuItem(text = { Text(strings.goSerious) }, onClick = { menuOpen = false; onGoSerious() })
             }
             if (thread.status == "exclusive") {
-                DropdownMenuItem(text = { Text("Revoke Serious Mode") }, onClick = { menuOpen = false; onRevoke() })
+                DropdownMenuItem(text = { Text(strings.revokeSeriousMode) }, onClick = { menuOpen = false; onRevoke() })
             }
-            DropdownMenuItem(text = { Text("Unmatch") }, onClick = { menuOpen = false; onUnmatch() })
+            if (showConfirmUnion) {
+                DropdownMenuItem(text = { Text(strings.confirmUnion) }, onClick = { menuOpen = false; onConfirmUnion() })
+            }
+            DropdownMenuItem(text = { Text(strings.unmatch) }, onClick = { menuOpen = false; onUnmatch() })
         }
     }
 }
@@ -608,15 +1108,15 @@ private fun PresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(11.dp)
-            .background(if (online) Color(0xFF3DBE6C) else mutedText(0.3f), CircleShape)
+            .background(if (online) LocalD2MStatusPalette.current.success.fg else mutedText(0.3f), CircleShape)
             .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape),
     )
 }
 
-private fun threadStatusLabel(status: String): String = when (status) {
-    "active" -> "Matched"
-    "exclusive" -> "Serious exploration"
-    "sunsetting" -> "Sunsetting"
-    "closed" -> "Closed"
+private fun threadStatusLabel(status: String, strings: MatchesStrings): String = when (status) {
+    "active" -> strings.statusMatched
+    "exclusive" -> strings.statusSeriousExploration
+    "sunsetting" -> strings.statusSunsetting
+    "closed" -> strings.statusClosed
     else -> status
 }

@@ -4,153 +4,352 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.d2m.app.data.model.BrowseCandidateOut
-import com.d2m.app.ui.theme.mutedText
-import com.russhwolf.settings.Settings
-import com.russhwolf.settings.get
+import com.d2m.app.data.model.SuggestionOut
+import com.d2m.app.ui.components.D2MLevelPill
+import com.d2m.app.ui.components.PrefetchPhotos
+import com.d2m.app.ui.components.D2MSkeleton
+import com.d2m.app.ui.components.ProfileThumb
+import com.d2m.app.ui.components.ShortlistHeart
+import com.d2m.app.ui.components.overallRating
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.theme.d2m
 
-private const val PREF_PREFIX = "d2m:browseTableColumns:v1:"
-private const val COLUMN_SEPARATOR = "|"
-private val DEFAULT_COLUMNS = listOf("name", "age", "city", "occupation", "gothram", "sect", "height", "score")
-private val COLUMN_LABELS = mapOf(
-    "name" to "Name", "age" to "Age", "city" to "City", "occupation" to "Occupation",
-    "gothram" to "Gothram", "sect" to "Sect", "height" to "Height", "score" to "Score",
-)
-private const val COLUMN_WIDTH = 120
-
-private fun preferenceKey(scope: String) = PREF_PREFIX + scope
-
-private fun loadColumns(settings: Settings, scope: String): List<String> {
-    val valid = DEFAULT_COLUMNS.toSet()
-    val saved = settings[preferenceKey(scope), ""]
-        .split(COLUMN_SEPARATOR)
-        .filter { it in valid }
-    return (saved + DEFAULT_COLUMNS.filterNot { it in saved }).ifEmpty { DEFAULT_COLUMNS }
+/**
+ * Spreadsheet-style alternative to the card grid (web's BrowseTable.jsx).
+ *
+ * Layout: a frozen leading pane (photo, name + age, shortlist bookmark) and a
+ * set of data columns that scroll horizontally. The header and every row
+ * share ONE ScrollState so they can never drift apart, and the header sits
+ * above the LazyColumn so it stays put while rows scroll vertically. Tap a
+ * header to sort; tap again to reverse.
+ */
+private enum class Col(val width: Dp, val numeric: Boolean = false) {
+    MATCH(144.dp), CITY(128.dp), JOB(168.dp), AGE(64.dp, true), HEIGHT(84.dp, true),
+    GOTHRAM(128.dp), SECT(116.dp), STAR(132.dp),
 }
 
-private fun saveColumns(settings: Settings, scope: String, columns: List<String>) {
-    settings.putString(preferenceKey(scope), columns.joinToString(COLUMN_SEPARATOR))
+private val FROZEN_WIDTH = 148.dp
+private val SAVE_COL_WIDTH = 56.dp
+private val ROW_HEIGHT = 56.dp
+private val HEADER_HEIGHT = 44.dp
+
+/** null sortKey = server order. NAME is the frozen column's sort. */
+private enum class SortKey { NAME, MATCH, CITY, JOB, AGE, HEIGHT, GOTHRAM, SECT, STAR }
+
+private fun Col.sortKey() = when (this) {
+    Col.MATCH -> SortKey.MATCH; Col.CITY -> SortKey.CITY; Col.JOB -> SortKey.JOB; Col.AGE -> SortKey.AGE
+    Col.HEIGHT -> SortKey.HEIGHT; Col.GOTHRAM -> SortKey.GOTHRAM; Col.SECT -> SortKey.SECT; Col.STAR -> SortKey.STAR
 }
 
-/** Responsive, sortable browse table with account/child-scoped preferences. */
+private fun SuggestionOut.score(): Double? = compositeScore?.takeIf { it > 0.0 }
+
+private fun heightLabel(cm: Int?): String? = cm?.let {
+    val totalIn = (it / 2.54).let { v -> kotlin.math.round(v).toInt() }
+    "${totalIn / 12}'${totalIn % 12}\""
+}
+
 @Composable
 fun BrowseTable(
-    rows: List<BrowseCandidateOut>,
+    rows: List<SuggestionOut>,
     onOpenProfile: (String) -> Unit,
-    settings: Settings,
-    preferenceScope: String,
+    shortlistOverrides: Map<String, Boolean>,
+    onToggleShortlist: (SuggestionOut, Boolean) -> Unit,
+    resolvePhotoUrl: (String) -> String,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    hiddenColumns: Set<String>,
+    onHiddenColumnsChange: (Set<String>) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var visibleColumns by remember(preferenceScope) { mutableStateOf(loadColumns(settings, preferenceScope)) }
-    var menuOpen by remember { mutableStateOf(false) }
-    var sortKey by remember { mutableStateOf<String?>(null) }
+    val strings = LocalStrings.current.parentBrowse
+    val parity = LocalStrings.current.parity
+    val scroll = rememberScrollState()
+    val listState = rememberLazyListState()
+    var sortKey by remember { mutableStateOf<SortKey?>(null) }
     var ascending by remember { mutableStateOf(true) }
-    val horizontalScrollState = rememberScrollState()
+    var columnsMenuOpen by remember { mutableStateOf(false) }
 
-    val resetColumns = {
-        visibleColumns = DEFAULT_COLUMNS
-        saveColumns(settings, preferenceScope, DEFAULT_COLUMNS)
-        menuOpen = false
-    }
-    val toggleColumn: (String) -> Unit = { key ->
-        if (!(key in visibleColumns && visibleColumns.size == 1)) {
-            val next = if (key in visibleColumns) visibleColumns - key else visibleColumns + key
-            visibleColumns = next
-            saveColumns(settings, preferenceScope, next)
-        }
-    }
-    val sortedRows = remember(rows, sortKey, ascending) {
-        val key = sortKey
-        if (key == null) rows else rows.sortedWith(compareBy { valueFor(it, key) }).let {
-            if (ascending) it else it.asReversed()
-        }
+    fun onSort(k: SortKey) {
+        if (sortKey == k) ascending = !ascending
+        else { sortKey = k; ascending = k != SortKey.MATCH } // best match first
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Button(onClick = { menuOpen = true }) { Text("Columns") }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("Reset defaults") }, onClick = resetColumns)
-                DEFAULT_COLUMNS.forEach { key ->
+    val sorted = remember(rows, sortKey, ascending) {
+        val k = sortKey ?: return@remember rows
+        val sel: (SuggestionOut) -> Comparable<*>? = when (k) {
+            SortKey.NAME -> { s -> s.candidateName.lowercase() }
+            SortKey.MATCH -> { s -> s.score() }
+            SortKey.CITY -> { s -> (s.city ?: s.nativity)?.lowercase() }
+            SortKey.JOB -> { s -> s.occupationTitle?.lowercase() }
+            SortKey.AGE -> { s -> s.age }
+            SortKey.HEIGHT -> { s -> s.heightCm }
+            SortKey.GOTHRAM -> { s -> s.gothram?.lowercase() }
+            SortKey.SECT -> { s -> s.sect?.lowercase() }
+            SortKey.STAR -> { s -> s.moonNakshatra?.lowercase() }
+        }
+        @Suppress("UNCHECKED_CAST")
+        val cmp = compareBy<SuggestionOut, Comparable<Any>?>(nullsLast<Comparable<Any>>()) { sel(it) as Comparable<Any>? }
+        // Missing values always sink to the bottom, whichever way we sort.
+        val present = rows.filter { sel(it) != null }
+        val missing = rows.filter { sel(it) == null }
+        (if (ascending) present.sortedWith(cmp) else present.sortedWith(cmp.reversed())) + missing
+    }
+
+    PrefetchPhotos(
+        count = sorted.size,
+        firstVisibleIndex = { listState.firstVisibleItemIndex },
+        urlAt = { i -> sorted.getOrNull(i)?.photoUrl?.let(resolvePhotoUrl) },
+        ahead = 8,
+        perRow = 1,
+    )
+
+    val headerLabels = mapOf(
+        Col.MATCH to strings.colMatch, Col.CITY to parity.colCity, Col.JOB to parity.colOccupation,
+        Col.AGE to parity.colAge, Col.HEIGHT to parity.colHeight, Col.GOTHRAM to parity.colGothram,
+        Col.SECT to parity.colSect, Col.STAR to strings.facetNakshatra,
+    )
+    val dataCols = Col.entries.filter { it.name !in hiddenColumns }
+    val scrolled = scroll.value > 0
+
+    Column(modifier.fillMaxWidth()) {
+        // ---- column picker (kept per child profile) ---------------------------
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Box {
+                TextButton(onClick = { columnsMenuOpen = true }) { Text(strings.tableColumns) }
+                DropdownMenu(expanded = columnsMenuOpen, onDismissRequest = { columnsMenuOpen = false }) {
+                    Col.entries.forEach { c ->
+                        val visible = c.name !in hiddenColumns
+                        val toggle = {
+                            // Always keep at least one data column on screen.
+                            if (!(visible && dataCols.size == 1)) {
+                                if (visible && sortKey == c.sortKey()) sortKey = null
+                                onHiddenColumnsChange(if (visible) hiddenColumns + c.name else hiddenColumns - c.name)
+                            }
+                        }
+                        DropdownMenuItem(
+                            text = { Text(headerLabels.getValue(c)) },
+                            onClick = toggle,
+                            leadingIcon = { Checkbox(checked = visible, onCheckedChange = { toggle() }) },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(COLUMN_LABELS.getValue(key)) },
-                        onClick = { toggleColumn(key) },
-                        leadingIcon = { Checkbox(checked = key in visibleColumns, onCheckedChange = { toggleColumn(key) }) },
+                        text = { Text(strings.tableResetColumns) },
+                        onClick = { onHiddenColumnsChange(emptySet()); columnsMenuOpen = false },
                     )
                 }
             }
         }
-
-        Row(modifier = Modifier.horizontalScroll(horizontalScrollState).background(mutedText(0.06f))) {
-            visibleColumns.forEach { key ->
-                val direction = if (sortKey == key) if (ascending) "ascending" else "descending" else "not sorted"
-                Text(
-                    text = "${COLUMN_LABELS.getValue(key)}${if (sortKey == key) if (ascending) " ↑" else " ↓" else ""}",
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .width(COLUMN_WIDTH.dp)
-                        .clickable {
-                            if (sortKey == key) ascending = !ascending else { sortKey = key; ascending = true }
-                        }
-                        .semantics { role = Role.Button; stateDescription = direction }
-                        .padding(vertical = 8.dp, horizontal = 8.dp),
-                )
+        // ---- sticky header -------------------------------------------------
+        Row(
+            Modifier.fillMaxWidth().height(HEADER_HEIGHT).background(d2m.surfaceSunken),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HeaderCell(
+                label = parity.colName, width = FROZEN_WIDTH, active = sortKey == SortKey.NAME,
+                ascending = ascending, onClick = { onSort(SortKey.NAME) },
+                ascDesc = strings.sortedAscending to strings.sortedDescending,
+            )
+            Row(Modifier.horizontalScroll(scroll)) {
+                // matches the bookmark column in the rows below
+                Box(Modifier.width(SAVE_COL_WIDTH))
+                dataCols.forEach { c ->
+                    HeaderCell(
+                        label = headerLabels.getValue(c), width = c.width, active = sortKey == c.sortKey(),
+                        ascending = ascending, numeric = c.numeric, onClick = { onSort(c.sortKey()) },
+                        ascDesc = strings.sortedAscending to strings.sortedDescending,
+                    )
+                }
             }
         }
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(sortedRows, key = { it.candidateId }) { candidate ->
-                Row(
-                    modifier = Modifier
-                        .horizontalScroll(horizontalScrollState)
-                        .clickable(role = Role.Button) { onOpenProfile(candidate.candidateId) }
-                        .padding(vertical = 6.dp),
-                ) {
-                    visibleColumns.forEach { key ->
-                        Text(
-                            text = valueFor(candidate, key),
-                            modifier = Modifier.width(COLUMN_WIDTH.dp).padding(horizontal = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.borderStrong))
+
+        PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(sorted, key = { _, s -> s.candidateId }, contentType = { _, _ -> "row" }) { index, s ->
+                    val shortlisted = shortlistOverrides[s.candidateId] ?: s.isShortlisted
+                    val bg = if (index % 2 == 0) MaterialTheme.colorScheme.surface else d2m.surfaceSunken.copy(alpha = 0.45f)
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth().height(ROW_HEIGHT).background(bg)
+                                .clickable(role = Role.Button) { onOpenProfile(s.candidateId) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // frozen pane
+                            Row(
+                                Modifier.width(FROZEN_WIDTH).fillMaxHeight().padding(start = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                ProfileThumb(
+                                    photoUrl = s.photoUrl?.let(resolvePhotoUrl),
+                                    contentDescription = null, size = 40.dp, shape = CircleShape,
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        s.candidateName, style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold, color = d2m.textPrimary,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            // scrolling data columns (same ScrollState as the header)
+                            Row(Modifier.horizontalScroll(scroll).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.width(SAVE_COL_WIDTH), contentAlignment = Alignment.Center) {
+                                    ShortlistHeart(shortlisted = shortlisted, onToggle = { onToggleShortlist(s, !shortlisted) }, flat = true)
+                                }
+                                dataCols.forEach { c ->
+                                    Box(Modifier.width(c.width).padding(horizontal = 10.dp), contentAlignment = if (c.numeric) Alignment.CenterEnd else Alignment.CenterStart) {
+                                        when (c) {
+                                            Col.MATCH -> {
+                                                val sc = s.score()
+                                                if (sc != null) D2MLevelPill(overallRating(sc)) else DashText()
+                                            }
+                                            Col.CITY -> CellText(s.city ?: s.nativity)
+                                            Col.JOB -> CellText(s.occupationTitle)
+                                            Col.AGE -> CellText(s.age?.toString())
+                                            Col.HEIGHT -> CellText(heightLabel(s.heightCm))
+                                            Col.GOTHRAM -> CellText(s.gothram)
+                                            Col.SECT -> CellText(s.sect)
+                                            Col.STAR -> CellText(s.moonNakshatra?.let { n -> s.moonPada?.let { "$n · $it" } ?: n })
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.borderSoft))
                     }
                 }
+            }
+            // Hairline at the frozen pane's edge, only once data has slid under it.
+            if (scrolled) {
+                Box(Modifier.padding(start = FROZEN_WIDTH - 1.dp).width(1.dp).fillMaxHeight().background(d2m.border))
             }
         }
     }
 }
 
-private fun valueFor(candidate: BrowseCandidateOut, key: String): String = when (key) {
-    "name" -> candidate.candidateName
-    "age" -> candidate.age?.toString() ?: "--"
-    "city" -> candidate.city ?: "--"
-    "occupation" -> candidate.occupationTitle ?: "--"
-    "gothram" -> candidate.gothram ?: "--"
-    "sect" -> candidate.sect ?: "--"
-    "height" -> candidate.heightCm?.toString() ?: "--"
-    "score" -> candidate.scores?.compositeScore?.toString() ?: "--"
-    else -> "--"
+@Composable
+private fun HeaderCell(
+    label: String,
+    width: Dp,
+    active: Boolean,
+    ascending: Boolean,
+    onClick: () -> Unit,
+    ascDesc: Pair<String, String>,
+    numeric: Boolean = false,
+) {
+    Row(
+        Modifier.width(width).fillMaxHeight().clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = if (width == FROZEN_WIDTH) 12.dp else 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (numeric) Arrangement.End else Arrangement.Start,
+    ) {
+        Text(
+            label, style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (active) d2m.accentStrong else d2m.label,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (active) {
+            Icon(
+                if (ascending) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                contentDescription = if (ascending) ascDesc.first else ascDesc.second,
+                tint = d2m.accentStrong, modifier = Modifier.padding(start = 4.dp).size(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CellText(value: String?) {
+    if (value.isNullOrBlank()) DashText()
+    else Text(
+        value, style = MaterialTheme.typography.bodyMedium, color = d2m.textPrimary,
+        maxLines = 1, overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun DashText() {
+    Text("–", style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+}
+
+/**
+ * Table-view placeholder. Deliberately not the card grid's: a header bar, then rows on the real table geometry -- a round
+ * avatar and name bar in the frozen pane, then bookmark, pill and text bars across the data columns -- so the sheet looks
+ * like a sheet while it loads.
+ */
+@Composable
+fun BrowseTableSkeleton(modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().height(HEADER_HEIGHT).background(d2m.surfaceSunken).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            D2MSkeleton(width = 44.dp, height = 12.dp)
+            Spacer(Modifier.width(FROZEN_WIDTH - 12.dp - 44.dp + SAVE_COL_WIDTH))
+            D2MSkeleton(width = 52.dp, height = 12.dp)
+            Spacer(Modifier.width(60.dp))
+            D2MSkeleton(width = 40.dp, height = 12.dp)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(d2m.borderStrong))
+        repeat(9) { i ->
+            Row(
+                Modifier.fillMaxWidth().height(ROW_HEIGHT)
+                    .background(if (i % 2 == 0) MaterialTheme.colorScheme.surface else d2m.surfaceSunken.copy(alpha = 0.45f)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(Modifier.width(FROZEN_WIDTH).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    D2MSkeleton(width = 40.dp, height = 40.dp, radius = 20.dp)
+                    D2MSkeleton(width = 64.dp, height = 14.dp)
+                }
+                Box(Modifier.width(SAVE_COL_WIDTH), contentAlignment = Alignment.Center) {
+                    D2MSkeleton(width = 16.dp, height = 20.dp, radius = 3.dp)
+                }
+                D2MSkeleton(width = 76.dp, height = 24.dp, radius = 6.dp)
+                Spacer(Modifier.width(28.dp))
+                D2MSkeleton(width = 72.dp, height = 14.dp)
+            }
+        }
+    }
 }

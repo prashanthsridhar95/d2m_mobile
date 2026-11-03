@@ -5,6 +5,9 @@ import com.d2m.app.data.model.*
 /** Mirrors app/routers/identity.py -- onboarding, account, photos, extended bio. */
 class IdentityApi(private val api: ApiClient) {
 
+    suspend fun getMe(): MeOut =
+        api.get("/me")
+
     suspend fun createSponsor(body: SponsorCreateRequest): SponsorCreateResponse =
         api.post("/sponsors", body)
 
@@ -23,8 +26,35 @@ class IdentityApi(private val api: ApiClient) {
     suspend fun updatePrimaryBasicData(primaryId: String, body: PrimaryBasicDataIn): PrimaryBasicDataOut =
         api.put("/primaries/$primaryId/basic-data", body)
 
+    suspend fun setHideNameOverride(primaryId: String, body: HideNameIn): HideNameOut =
+        api.put("/primaries/$primaryId/hide-name", body)
+
+    // KYC "Verified" badge (Phase 3 of the backlog this session is
+    // working, confirmed scope: one govt photo ID + one selfie, admin-
+    // reviewed via the control panel only). null before the first-ever
+    // submission -- see app/routers/identity.py's own Optional response.
+    suspend fun getIdentityVerification(primaryId: String): IdentityVerificationOut? =
+        api.get("/primaries/$primaryId/identity-verification")
+
+    suspend fun submitIdentityVerification(
+        primaryId: String, documentType: String,
+        documentFileName: String, documentContentType: String, documentBytes: ByteArray,
+        selfieFileName: String, selfieContentType: String, selfieBytes: ByteArray,
+    ): IdentityVerificationOut =
+        api.postMultipart(
+            "/primaries/$primaryId/identity-verification",
+            fields = mapOf("document_type" to documentType),
+            files = listOf(
+                ApiClient.MultipartFile("document", documentFileName, documentContentType, documentBytes),
+                ApiClient.MultipartFile("selfie", selfieFileName, selfieContentType, selfieBytes),
+            ),
+        )
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         api.get("/primaries/$primaryId/sponsor")
+
+    suspend fun searchByShortId(code: String): ShortIdSearchResultOut =
+        api.get("/primaries/search", mapOf("code" to code))
 
     suspend fun updateLocationPreference(sponsorId: String, body: LocationPreferenceIn): LocationPreferenceOut =
         api.put("/sponsors/$sponsorId/location-preference", body)
@@ -44,4 +74,10 @@ class IdentityApi(private val api: ApiClient) {
 
     suspend fun updateExtendedBio(primaryId: String, body: ExtendedBioDataIn): ExtendedBioDataOut =
         api.put("/primaries/$primaryId/extended-bio", body)
+
+    suspend fun getAboutMe(primaryId: String): AboutMeDataOut =
+        api.get("/primaries/$primaryId/about-me")
+
+    suspend fun updateAboutMe(primaryId: String, body: AboutMeDataIn): AboutMeDataOut =
+        api.put("/primaries/$primaryId/about-me", body)
 }

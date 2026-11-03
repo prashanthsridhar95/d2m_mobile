@@ -1,0 +1,182 @@
+package com.d2m.app.ui.strings
+
+/** SettingsScreen.kt -- mirrors d2m_web's "settings" namespace where concepts overlap. */
+interface SettingsStrings {
+    val pageTitle: String
+    val muteNotificationsTitle: String
+    val muteNotificationsSubtitle: String
+    val hideNameTitle: String
+    val hideNameSubtitle: String
+    val shareMyProfile: String
+    val previewProfile: String
+    val previewProfileHint: String
+    val trustAndVouches: String
+    val verification: String
+    val logOut: String
+    val familyLinkTitle: String
+    val familyLinkUnlinkedNotice: String
+    val familyLinkUnlinkDescParent: String
+    val familyLinkUnlinkDescChild: String
+    val unlinkFamilyAccount: String
+    val confirmWithPassword: String
+    val unlinkModalSubtitle: String
+    val passwordLabel: String
+    val cancel: String
+    val unlinking: String
+    val unlink: String
+    val errUnlink: String
+    val copied: String
+    val languageTitle: String
+    val languageHint: String
+    val roleParent: String
+    val roleChild: String
+    val yourAccount: String
+    val sectionProfile: String
+    val sectionTrust: String
+    val sectionPreferences: String
+    val sectionFamily: String
+    val shareMyProfileSubtitle: String
+    val trustSubtitle: String
+    val verificationSubtitle: String
+    val statusVerified: String
+    val statusInReview: String
+    val statusRejected: String
+    val statusNotStarted: String
+    val logOutConfirmTitle: String
+    val logOutConfirmBody: String
+}
+
+object SettingsStringsEn : SettingsStrings {
+    override val pageTitle = "Settings"
+    override val muteNotificationsTitle = "Mute notifications"
+    override val muteNotificationsSubtitle = "Turn off all push and in-app alerts"
+    override val hideNameTitle = "Hide my name"
+    override val hideNameSubtitle = "Keep my name masked, even after a match"
+    override val shareMyProfile = "Share my profile"
+    override val previewProfile = "Preview profile"
+    override val previewProfileHint = "This is what another member sees when they view your profile."
+    override val trustAndVouches = "Trust & vouches"
+    override val verification = "Verification"
+    override val logOut = "Log out"
+    override val familyLinkTitle = "Family link"
+    override val familyLinkUnlinkedNotice = "This account is no longer linked to a family member. Log out and back in to refresh the app."
+    override val familyLinkUnlinkDescParent = "Removes the family link between you and your child's account. Your child's profile and data stay intact, just no longer paired with you."
+    override val familyLinkUnlinkDescChild = "Removes the family link between you and your parent's account. Your own profile and data stay intact, just no longer paired with them."
+    override val unlinkFamilyAccount = "Unlink family account"
+    override val confirmWithPassword = "Confirm with your password"
+    override val unlinkModalSubtitle = "This permanently severs the family link – re-enter your password to continue."
+    override val passwordLabel = "Password"
+    override val cancel = "Cancel"
+    override val unlinking = "Unlinking…"
+    override val unlink = "Unlink"
+    override val errUnlink = "Couldn't unlink right now."
+    override val copied = "Copied"
+    override val languageTitle = "Language"
+    override val languageHint = "Changes the app's language everywhere – menus, buttons, and messages."
+    override val roleParent = "Parent account"
+    override val roleChild = "Child account"
+    override val yourAccount = "Your account"
+    override val sectionProfile = "Profile & sharing"
+    override val sectionTrust = "Trust & safety"
+    override val sectionPreferences = "Preferences"
+    override val sectionFamily = "Family"
+    override val shareMyProfileSubtitle = "Send your profile link to family and friends"
+    override val trustSubtitle = "Vouches and trusted connections"
+    override val verificationSubtitle = "Add an ID check to earn a verified badge"
+    override val statusVerified = "Verified"
+    override val statusInReview = "In review"
+    override val statusRejected = "Rejected"
+    override val statusNotStarted = "Not started"
+    override val logOutConfirmTitle = "Log out?"
+    override val logOutConfirmBody = "You'll need to sign in again to use Soul'd."
+}
+
+object SettingsStringsHi : SettingsStrings {
+    override val pageTitle = "सेटिंग्स"
+    override val muteNotificationsTitle = "सूचनाएं म्यूट करें"
+    override val muteNotificationsSubtitle = "सभी पुश और इन-ऐप अलर्ट बंद करें"
+    override val hideNameTitle = "मेरा नाम छिपाएं"
+    override val hideNameSubtitle = "मैच होने के बाद भी मेरा नाम छिपा रहने दें"
+    override val shareMyProfile = "मेरी प्रोफ़ाइल शेयर करें"
+    override val previewProfile = "प्रोफ़ाइल का पूर्वावलोकन"
+    override val previewProfileHint = "जब कोई अन्य सदस्य आपकी प्रोफ़ाइल देखता है, तो उसे यह दिखता है।"
+    override val trustAndVouches = "विश्वास और वाउच"
+    override val verification = "सत्यापन"
+    override val logOut = "लॉग आउट करें"
+    override val familyLinkTitle = "पारिवारिक लिंक"
+    override val familyLinkUnlinkedNotice = "यह खाता अब किसी परिवार के सदस्य से लिंक नहीं है। ऐप रिफ्रेश करने के लिए लॉग आउट करें और फिर से लॉगिन करें।"
+    override val familyLinkUnlinkDescParent = "आपके और आपके बच्चे के खाते के बीच पारिवारिक लिंक हटाता है। आपके बच्चे की प्रोफ़ाइल और डेटा सुरक्षित रहते हैं, बस अब आपसे जुड़े नहीं रहेंगे।"
+    override val familyLinkUnlinkDescChild = "आपके और आपके माता-पिता के खाते के बीच पारिवारिक लिंक हटाता है। आपकी अपनी प्रोफ़ाइल और डेटा सुरक्षित रहते हैं, बस अब उनसे जुड़े नहीं रहेंगे।"
+    override val unlinkFamilyAccount = "पारिवारिक खाता अनलिंक करें"
+    override val confirmWithPassword = "अपने पासवर्ड से पुष्टि करें"
+    override val unlinkModalSubtitle = "यह पारिवारिक लिंक को स्थायी रूप से समाप्त करता है – जारी रखने के लिए अपना पासवर्ड फिर से डालें।"
+    override val passwordLabel = "पासवर्ड"
+    override val cancel = "रद्द करें"
+    override val unlinking = "अनलिंक हो रहा है…"
+    override val unlink = "अनलिंक करें"
+    override val errUnlink = "अभी अनलिंक नहीं किया जा सका।"
+    override val copied = "कॉपी हो गया"
+    override val languageTitle = "भाषा"
+    override val languageHint = "यह ऐप की भाषा हर जगह बदल देता है – मेनू, बटन और संदेश।"
+    override val roleParent = "अभिभावक खाता"
+    override val roleChild = "बच्चे का खाता"
+    override val yourAccount = "आपका खाता"
+    override val sectionProfile = "प्रोफ़ाइल और शेयरिंग"
+    override val sectionTrust = "भरोसा और सुरक्षा"
+    override val sectionPreferences = "पसंद"
+    override val sectionFamily = "परिवार"
+    override val shareMyProfileSubtitle = "अपनी प्रोफ़ाइल का लिंक परिवार और दोस्तों को भेजें"
+    override val trustSubtitle = "वाउच और भरोसेमंद कनेक्शन"
+    override val verificationSubtitle = "सत्यापित बैज पाने के लिए आईडी जाँच जोड़ें"
+    override val statusVerified = "सत्यापित"
+    override val statusInReview = "समीक्षा में"
+    override val statusRejected = "अस्वीकृत"
+    override val statusNotStarted = "शुरू नहीं हुआ"
+    override val logOutConfirmTitle = "लॉग आउट करें?"
+    override val logOutConfirmBody = "Soul'd इस्तेमाल करने के लिए आपको फिर से साइन इन करना होगा।"
+}
+
+object SettingsStringsTa : SettingsStrings {
+    override val pageTitle = "அமைப்புகள்"
+    override val muteNotificationsTitle = "அறிவிப்புகளை முடக்கு"
+    override val muteNotificationsSubtitle = "அனைத்து புஷ் மற்றும் இன்-ஆப் அலர்ட்களையும் அணைக்கவும்"
+    override val hideNameTitle = "என் பெயரை மறை"
+    override val hideNameSubtitle = "பொருத்தமான பிறகும் என் பெயரை மறைத்து வைக்கவும்"
+    override val shareMyProfile = "என் சுயவிவரத்தைப் பகிரவும்"
+    override val previewProfile = "சுயவிவரத்தை முன்னோட்டமிடு"
+    override val previewProfileHint = "மற்றொரு உறுப்பினர் உங்கள் சுயவிவரத்தைப் பார்க்கும்போது இதைத்தான் காண்பார்."
+    override val trustAndVouches = "நம்பிக்கை & நற்சான்றுகள்"
+    override val verification = "சரிபார்ப்பு"
+    override val logOut = "வெளியேறு"
+    override val familyLinkTitle = "குடும்ப இணைப்பு"
+    override val familyLinkUnlinkedNotice = "இந்தக் கணக்கு இனி ஒரு குடும்ப உறுப்பினருடன் இணைக்கப்படவில்லை. ஆப்பைப் புதுப்பிக்க வெளியேறி மீண்டும் உள்நுழையவும்."
+    override val familyLinkUnlinkDescParent = "உங்களுக்கும் உங்கள் குழந்தையின் கணக்கிற்கும் இடையிலான குடும்ப இணைப்பை அகற்றுகிறது. உங்கள் குழந்தையின் சுயவிவரமும் தரவும் அப்படியே இருக்கும், இனி உங்களுடன் இணைக்கப்படாது."
+    override val familyLinkUnlinkDescChild = "உங்களுக்கும் உங்கள் பெற்றோரின் கணக்கிற்கும் இடையிலான குடும்ப இணைப்பை அகற்றுகிறது. உங்கள் சொந்த சுயவிவரமும் தரவும் அப்படியே இருக்கும், இனி அவர்களுடன் இணைக்கப்படாது."
+    override val unlinkFamilyAccount = "குடும்பக் கணக்கை இணைப்பு நீக்கு"
+    override val confirmWithPassword = "உங்கள் கடவுச்சொல்லுடன் உறுதிப்படுத்தவும்"
+    override val unlinkModalSubtitle = "இது குடும்ப இணைப்பை நிரந்தரமாக துண்டிக்கும் – தொடர உங்கள் கடவுச்சொல்லை மீண்டும் உள்ளிடவும்."
+    override val passwordLabel = "கடவுச்சொல்"
+    override val cancel = "ரத்துசெய்"
+    override val unlinking = "இணைப்பு நீக்கப்படுகிறது…"
+    override val unlink = "இணைப்பை நீக்கு"
+    override val errUnlink = "இப்போது இணைப்பை நீக்க முடியவில்லை."
+    override val copied = "நகலெடுக்கப்பட்டது"
+    override val languageTitle = "மொழி"
+    override val languageHint = "இது ஆப்பின் மொழியை எல்லா இடங்களிலும் மாற்றும் – மெனுக்கள், பொத்தான்கள் மற்றும் செய்திகள்."
+    override val roleParent = "பெற்றோர் கணக்கு"
+    override val roleChild = "குழந்தை கணக்கு"
+    override val yourAccount = "உங்கள் கணக்கு"
+    override val sectionProfile = "சுயவிவரம் & பகிர்வு"
+    override val sectionTrust = "நம்பிக்கை & பாதுகாப்பு"
+    override val sectionPreferences = "விருப்பங்கள்"
+    override val sectionFamily = "குடும்பம்"
+    override val shareMyProfileSubtitle = "உங்கள் சுயவிவர இணைப்பை குடும்பத்தினர், நண்பர்களுக்கு அனுப்புங்கள்"
+    override val trustSubtitle = "நற்சான்றுகள் மற்றும் நம்பகமான தொடர்புகள்"
+    override val verificationSubtitle = "சரிபார்க்கப்பட்ட பேட்ஜ் பெற அடையாள சரிபார்ப்பைச் சேர்க்கவும்"
+    override val statusVerified = "சரிபார்க்கப்பட்டது"
+    override val statusInReview = "மதிப்பாய்வில்"
+    override val statusRejected = "நிராகரிக்கப்பட்டது"
+    override val statusNotStarted = "தொடங்கவில்லை"
+    override val logOutConfirmTitle = "வெளியேறவா?"
+    override val logOutConfirmBody = "Soul'd ஐப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்."
+}

@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.protocol
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -81,10 +82,13 @@ data class MessageEnvelope(
  * for every other byte-blob field in this file -- see ArchiveCodec.kt's doc
  * comment.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class JsonWebKey(
-    val kty: String = "EC",
-    val crv: String = "P-256",
+    // @EncodeDefault: the protocol Json omits default values, which used to drop kty/crv from every key sent
+    // to the relay -- WebCrypto (web restore/seal) rejects a JWK without "kty" ("required JWK member kty missing").
+    @EncodeDefault val kty: String = "EC",
+    @EncodeDefault val crv: String = "P-256",
     val x: String,
     val y: String,
     val d: String? = null,
@@ -203,6 +207,17 @@ sealed class ServerToClient {
     @Serializable
     @SerialName("session.reset")
     data class SessionReset(val from: String) : ServerToClient()
+
+    // Serious Mode/union/milestone state changed on the thread with `from`
+    // -- "Serious mode/Union/We met request not getting updated in real
+    // time inside chat," reported directly. Carries no state itself (this
+    // server has no concept of Serious Mode at all, see
+    // d2m_core_engine's serious_mode_service.py) -- just a "go refetch"
+    // nudge, same reasoning as messaging-framework/packages/protocol's
+    // matching addition.
+    @Serializable
+    @SerialName("thread.updated")
+    data class ThreadUpdated(val from: String) : ServerToClient()
 
     @Serializable
     @SerialName("error")

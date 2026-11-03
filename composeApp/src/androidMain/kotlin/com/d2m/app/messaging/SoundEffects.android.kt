@@ -1,6 +1,8 @@
 package com.d2m.app.messaging
 
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.ToneGenerator
 import com.d2m.app.R
 import com.d2m.app.data.session.AndroidSettingsContextHolder
 
@@ -36,6 +38,21 @@ actual object SoundEffects {
             callPlayer?.release()
         }
         callPlayer = null
+    }
+
+    private var ringback: ToneGenerator? = null
+
+    // The platform's standard ringback (440+480 Hz, 2s on / 4s off country pattern) -- loops until stopped.
+    actual fun playRingbackTone() {
+        if (ringback != null) return
+        ringback = runCatching {
+            ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80).also { it.startTone(ToneGenerator.TONE_SUP_RINGTONE) }
+        }.getOrNull()
+    }
+
+    actual fun stopRingbackTone() {
+        runCatching { ringback?.stopTone(); ringback?.release() }
+        ringback = null
     }
 
     actual fun playMsgTone() = playOneShot(R.raw.msg_tone)

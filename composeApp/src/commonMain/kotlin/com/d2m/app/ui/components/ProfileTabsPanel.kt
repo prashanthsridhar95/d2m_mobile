@@ -1,33 +1,72 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.data.model.AboutMeDataOut
 import com.d2m.app.data.model.ChartOut
 import com.d2m.app.data.model.ExtendedBioDataOut
 import com.d2m.app.data.network.ApiError
 import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.IdentityRepository
-import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.SharedComponentsStrings
+import com.d2m.app.ui.theme.d2mNoteStyle
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
+import com.d2m.app.ui.components.D2MTabs
+import com.d2m.app.ui.components.D2MCard
 import kotlinx.serialization.json.JsonObject
 import org.koin.compose.koinInject
 
@@ -76,21 +115,61 @@ import org.koin.compose.koinInject
  * normal content reflow rather than a jarring layout shift the way it
  * would inside web's fixed-viewport page.
  */
+// `showAboutMe` -- About Me is parent-invisible ("About me shouldn't be
+// visible for the parents - anywhere", reported directly) and, when it IS
+// shown (viewer is the child role), leads the tab bar and is the default
+// tab. Callers resolve this from their own `identity.role` (see
+// ProfileDetailScreen.kt/DiscoveryScreen.kt) rather than this panel
+// reading IdentityStore itself -- DiscoveryScreen is a child-only route
+// with no ambiguity, while ProfileDetailScreen serves both roles and
+// needs the real check.
 @Composable
-fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
+fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier, showAboutMe: Boolean = false, viewerPrimaryId: String? = null, hideAboutPrompts: Boolean = false, bioAccordion: Boolean = false) {
+    val strings = LocalStrings.current.sharedComponents
     val identityRepo: IdentityRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
 
-    var tab by remember(candidateId) { mutableStateOf(0) }
-    var bio by remember(candidateId) { mutableStateOf<ExtendedBioDataOut?>(null) }
-    var bioLoaded by remember(candidateId) { mutableStateOf(false) }
-    var chart by remember(candidateId) { mutableStateOf<ChartOut?>(null) }
+    var tab by remember(candidateId, showAboutMe) { mutableStateOf(0) }
+    // Seeded from the cache so a prefetched profile paints on the first
+    // frame instead of flashing "Loading"; the effects below still
+    // revalidate through the same cache.
+    val cachedBio = remember(candidateId) { identityRepo.peekExtendedBio(candidateId) }
+    val cachedAboutMe = remember(candidateId, showAboutMe) { if (showAboutMe) identityRepo.peekAboutMe(candidateId) else null }
+    val cachedChart = remember(candidateId) { dashboardRepo.peekChart(candidateId) }
+    var bio by remember(candidateId) { mutableStateOf(cachedBio) }
+    var bioLoaded by remember(candidateId) { mutableStateOf(cachedBio != null) }
+    var aboutMe by remember(candidateId) { mutableStateOf(cachedAboutMe) }
+    var aboutMeLoaded by remember(candidateId) { mutableStateOf(cachedAboutMe != null) }
+    var chart by remember(candidateId) { mutableStateOf(cachedChart) }
     var chartNotComputed by remember(candidateId) { mutableStateOf(false) }
-    var chartLoaded by remember(candidateId) { mutableStateOf(false) }
+    var chartLoaded by remember(candidateId) { mutableStateOf(cachedChart != null) }
+
+    // The viewer's own About Me/Bio data -- About Me's Lifestyle/Life &
+    // future plans/Quick facts bubbles have no saved preference to check
+    // against (no one states a "preferred sleep schedule" for a partner),
+    // so the only comparison that exists is the viewer's own value for
+    // that same field against the candidate's -- see traitMatch below.
+    // Only ever read when showAboutMe (the About Me tab exists), but
+    // fetched the same unconditional way as candidateId's own bio/aboutMe
+    // above when a viewerPrimaryId is actually known.
+    var ownBio by remember(viewerPrimaryId) { mutableStateOf<ExtendedBioDataOut?>(null) }
+    var ownAboutMe by remember(viewerPrimaryId) { mutableStateOf<AboutMeDataOut?>(null) }
 
     LaunchedEffect(candidateId) {
         bio = runCatching { identityRepo.getExtendedBio(candidateId) }.getOrNull()
         bioLoaded = true
+    }
+
+    LaunchedEffect(candidateId, showAboutMe) {
+        if (!showAboutMe) return@LaunchedEffect
+        aboutMe = runCatching { identityRepo.getAboutMe(candidateId) }.getOrNull()
+        aboutMeLoaded = true
+    }
+
+    LaunchedEffect(viewerPrimaryId, showAboutMe) {
+        if (!showAboutMe || viewerPrimaryId == null) return@LaunchedEffect
+        ownBio = runCatching { identityRepo.getExtendedBio(viewerPrimaryId) }.getOrNull()
+        ownAboutMe = runCatching { identityRepo.getAboutMe(viewerPrimaryId) }.getOrNull()
     }
 
     LaunchedEffect(candidateId) {
@@ -106,16 +185,31 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
         chartLoaded = true
     }
 
-    Card(modifier = modifier, shape = RoundedCornerShape(D2MRadius.lg)) {
+    // NOTE: an earlier pass merged About Me + Bio data into one "About"
+    // tab here -- reverted ("the earlier flow of having biodata, about
+    // me, chart was just fine. The change was asked of only in the
+    // settings", reported directly). This panel (Discover/
+    // ProfileDetailScreen/PreviewProfileScreen -- viewing a candidate,
+    // including yourself in preview) keeps the original 3 tabs; the
+    // Settings self-editing dialog is the only place that tab layout
+    // actually changed -- see ChildProfileDialogScreen.kt.
+    val tabLabels = if (showAboutMe) listOf(strings.tabAboutMe, strings.tabBioData, strings.tabChart) else listOf(strings.tabBioData, strings.tabChart)
+
+    D2MCard(modifier = modifier) {
         Column {
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bio data") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Chart") })
-            }
+            D2MTabs(tabLabels, tab, { tab = it })
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                when (tab) {
-                    0 -> BioDataTab(bio, bioLoaded)
-                    else -> ChartTab(chart, chartNotComputed, chartLoaded)
+                if (showAboutMe) {
+                    when (tab) {
+                        0 -> AboutMeTab(aboutMe, aboutMeLoaded, bio, ownAboutMe, ownBio?.childrenPreference, hideAboutPrompts)
+                        1 -> BioDataTab(bio, bioLoaded, bioAccordion)
+                        else -> ChartTab(chart, chartNotComputed, chartLoaded)
+                    }
+                } else {
+                    when (tab) {
+                        0 -> BioDataTab(bio, bioLoaded, bioAccordion)
+                        else -> ChartTab(chart, chartNotComputed, chartLoaded)
+                    }
                 }
             }
         }
@@ -123,90 +217,432 @@ fun D2MProfileTabsPanel(candidateId: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean) {
+private fun BioDataTab(bio: ExtendedBioDataOut?, loaded: Boolean, accordion: Boolean = false) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
     when {
-        !loaded -> Text("Loading…", color = mutedText(0.45f))
-        bio == null -> Text("No bio data on file for this profile yet.", color = mutedText(0.45f))
+        !loaded -> SkeletonList(count = 3)
+        bio == null -> Text(strings.noBioDataYet, color = mutedText(0.45f))
         else -> Column {
+            if (accordion) BioKeyFacts(bio)
+            BioSections(accordion) {
             BioSection(
-                "Basic & personal",
+                strings.sectionBasicPersonal,
                 listOf(bio.heightCm, bio.complexion, bio.motherTongue, bio.otherLanguages, bio.bodyType),
             ) {
-                BioRow("Height", bio.heightCm?.let(::cmToFeetInches))
-                BioRow("Body type", bio.bodyType?.let(Taxonomy::toLabel))
-                BioRow("Complexion", bio.complexion)
-                BioRow("Mother tongue", bio.motherTongue)
-                BioRow("Other languages", bio.otherLanguages?.takeIf { it.isNotEmpty() }?.joinToString(", "))
+                BioRow(strings.rowHeight, bio.heightCm?.let(::cmToFeetInches))
+                BioRow(strings.rowBodyType, bio.bodyType?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowComplexion, bio.complexion)
+                BioRow(strings.rowMotherTongue, bio.motherTongue)
+                BioRow(strings.rowOtherLanguages, bio.otherLanguages?.takeIf { it.isNotEmpty() }?.joinToString(", "))
             }
             BioSection(
-                "Religious & astrological",
+                strings.sectionReligiousAstrological,
                 listOf(bio.religion, bio.casteCommunity, bio.sect, bio.gothram, bio.horoscopeMatchPreference),
             ) {
-                BioRow("Religion", bio.religion)
-                BioRow("Caste / community", bio.casteCommunity?.let(Taxonomy::toLabel))
-                BioRow("Sect", bio.sect)
-                BioRow("Gothram", bio.gothram)
-                BioRow("Horoscope match preference", bio.horoscopeMatchPreference?.let(Taxonomy::toLabel))
+                BioRow(strings.rowReligion, bio.religion)
+                BioRow(strings.rowCasteCommunity, bio.casteCommunity?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowSect, bio.sect)
+                BioRow(strings.rowGothram, bio.gothram)
+                BioRow(strings.rowHoroscopeMatchPreference, bio.horoscopeMatchPreference?.let { Taxonomy.toLabel(it, locale) })
             }
             BioSection(
-                "Education & career",
-                listOf(bio.highestEducation, bio.institution, bio.occupationTitle, bio.employer, bio.employmentSector, bio.monthlyIncomeAmount),
+                strings.sectionEducationCareer,
+                listOf(bio.highestEducation, bio.institution, bio.occupationTitle, bio.employer, bio.monthlyIncomeAmount, bio.incomeBand),
             ) {
-                BioRow("Highest education", bio.highestEducation?.let(Taxonomy::toLabel))
-                BioRow("Institution", bio.institution)
-                BioRow("Occupation", bio.occupationTitle)
-                BioRow("Employer", bio.employer)
-                BioRow("Employed in", bio.employmentSector?.let(Taxonomy::toLabel))
-                BioRow("Monthly income", bio.monthlyIncomeAmount?.let { "$it ${bio.monthlyIncomeCurrency.orEmpty()}".trim() })
+                BioRow(strings.rowHighestEducation, bio.highestEducation?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowInstitution, bio.institution)
+                BioRow(strings.rowOccupation, bio.occupationTitle)
+                BioRow(strings.rowEmployer, bio.employer)
+                // "What is 'Employed in'? remove that" (reported directly)
+                // -- employmentSector dropped from this display; still an
+                // editable field in the Bio data form (and still stored on
+                // the backend), just no longer shown here.
+                BioRow(strings.rowMonthlyIncome, bio.monthlyIncomeAmount?.let { "$it ${bio.monthlyIncomeCurrency.orEmpty()}".trim() })
+                // "Instead of salary field - provide salary range"
+                // (reported directly) -- income_band is the replacement
+                // display field; monthlyIncomeAmount above stays (no
+                // annual_income row ever existed here to remove).
+                BioRow(strings.rowIncomeBand, bio.incomeBand?.let { Taxonomy.toLabel(it, locale) })
             }
             BioSection(
-                "Family background",
+                strings.sectionFamilyBackground,
                 listOf(bio.fatherName, bio.motherName, bio.nativity, bio.familyType, bio.familyValues, bio.financialStatus),
             ) {
-                BioRow("Father", listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" -- ").ifBlank { null })
-                BioRow("Mother", listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" -- ").ifBlank { null })
-                BioRow("Siblings", siblingsSummary(bio))
-                BioRow("Native place", bio.nativity)
-                BioRow("Family type", bio.familyType?.let(Taxonomy::toLabel))
-                BioRow("Family values", bio.familyValues?.let(Taxonomy::toLabel))
-                BioRow("Financial status", bio.financialStatus)
+                BioRow(strings.rowFather, listOfNotNull(bio.fatherName, bio.fatherOccupation).joinToString(" – ").ifBlank { null })
+                BioRow(strings.rowMother, listOfNotNull(bio.motherName, bio.motherOccupation).joinToString(" – ").ifBlank { null })
+                BioRow(strings.rowSiblings, siblingsSummary(bio, strings))
+                BioRow(strings.rowNativePlace, bio.nativity)
+                BioRow(strings.rowFamilyType, bio.familyType?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowFamilyValues, bio.familyValues?.let { Taxonomy.toLabel(it, locale) })
+                BioRow(strings.rowFinancialStatus, bio.financialStatus)
             }
-            BioSection("Location & contact", listOf(bio.citizenshipStatus)) {
-                BioRow("Citizenship / residing status", bio.citizenshipStatus?.let(Taxonomy::toLabel))
+            BioSection(strings.sectionLocationContact, listOf(bio.citizenshipStatus)) {
+                BioRow(strings.rowCitizenshipResiding, bio.citizenshipStatus?.let { Taxonomy.toLabel(it, locale) })
+            }
             }
         }
     }
 }
 
-private fun siblingsSummary(bio: ExtendedBioDataOut): String? = listOfNotNull(
-    bio.elderBrothersCount?.takeIf { it > 0 }?.let { "$it elder brother${if (it > 1) "s" else ""}" },
-    bio.youngerBrothersCount?.takeIf { it > 0 }?.let { "$it younger brother${if (it > 1) "s" else ""}" },
-    bio.elderSistersCount?.takeIf { it > 0 }?.let { "$it elder sister${if (it > 1) "s" else ""}" },
-    bio.youngerSistersCount?.takeIf { it > 0 }?.let { "$it younger sister${if (it > 1) "s" else ""}" },
+// Own value vs candidate value -- see D2MProfileTabsPanel's ownBio/
+// ownAboutMe doc comment for why this is the only comparison these
+// fields support (no saved preference exists for any of them). `null`
+// (own value unset, candidate value unset, or either input missing)
+// means "nothing to compare," same undefined-means-no-indicator contract
+// MatchIndicator already relies on below.
+private fun traitMatch(ownValue: String?, candidateValue: String?): Boolean? {
+    if (ownValue.isNullOrEmpty() || candidateValue.isNullOrEmpty()) return null
+    return ownValue == candidateValue
+}
+
+@Composable
+private fun AboutMeTab(
+    aboutMe: AboutMeDataOut?,
+    loaded: Boolean,
+    bio: ExtendedBioDataOut? = null,
+    ownAboutMe: AboutMeDataOut? = null,
+    ownChildrenPreference: String? = null,
+    hidePrompts: Boolean = false,
+) {
+    val strings = LocalStrings.current.sharedComponents
+    val cpd = LocalStrings.current.childProfileDialog
+    val locale = LocalAppLocale.current
+    when {
+        !loaded -> SkeletonList(count = 3)
+        aboutMe == null -> Text(strings.noAboutMeYet, color = mutedText(0.45f))
+        else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // The Discover feed already shows (and lets you like) each prompt, so it asks for them to be left out here.
+            if (!hidePrompts) aboutMe.aboutPrompts.forEach { p -> PromptCard(p.prompt, p.answer) }
+
+            if (aboutMe.fitnessRoutine != null || aboutMe.sleepSchedule != null || aboutMe.pets != null || aboutMe.socialEnergy != null) {
+                CasualCard {
+                    Text(strings.lifestyleTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+                    FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
+                        IconBubble("🏃", cpd.fitnessRoutine, aboutMe.fitnessRoutine, traitMatch(ownAboutMe?.fitnessRoutine, aboutMe.fitnessRoutine))
+                        IconBubble("🌙", cpd.sleepSchedule, aboutMe.sleepSchedule, traitMatch(ownAboutMe?.sleepSchedule, aboutMe.sleepSchedule))
+                        IconBubble("🐾", cpd.pets, aboutMe.pets, traitMatch(ownAboutMe?.pets, aboutMe.pets))
+                        IconBubble("🔋", cpd.socialEnergy, aboutMe.socialEnergy, traitMatch(ownAboutMe?.socialEnergy, aboutMe.socialEnergy))
+                    }
+                }
+            }
+
+            if (aboutMe.partnerQualities.isNotEmpty()) {
+                CasualCard {
+                    Text(strings.whatIValueInPartner, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+                    FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
+                        aboutMe.partnerQualities.forEach { PlainBubble(it) }
+                    }
+                }
+            }
+
+            if (!aboutMe.whatMattersMost.isNullOrBlank()) {
+                PromptCard(strings.whatMattersMostToMe, aboutMe.whatMattersMost)
+            }
+
+            // "In future plans, children related question is not seen"
+            // (reported directly) -- childrenPreference lives on
+            // ExtendedBioData (it's the actual edited/scored field, see
+            // the Bio data tab), but reads thematically as a life/future-
+            // plans fact, so it's surfaced here too from the same bio
+            // param this tab now takes, alongside career/living/relocation.
+            if (aboutMe.careerAfterMarriage != null || aboutMe.livingArrangement != null || aboutMe.openToRelocation != null || bio?.childrenPreference != null) {
+                CasualCard {
+                    Text(strings.lifeAndFuturePlansTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+                    FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
+                        IconBubble("💼", cpd.careerAfterMarriage, aboutMe.careerAfterMarriage, traitMatch(ownAboutMe?.careerAfterMarriage, aboutMe.careerAfterMarriage))
+                        IconBubble("🏠", cpd.livingArrangement, aboutMe.livingArrangement, traitMatch(ownAboutMe?.livingArrangement, aboutMe.livingArrangement))
+                        IconBubble("🧳", cpd.openToRelocation, aboutMe.openToRelocation, traitMatch(ownAboutMe?.openToRelocation, aboutMe.openToRelocation))
+                        IconBubble("👶", cpd.childrenPreference, bio?.childrenPreference?.let { Taxonomy.toLabel(it, locale) }, traitMatch(ownChildrenPreference, bio?.childrenPreference))
+                    }
+                }
+            }
+
+            if (aboutMe.favoriteCuisine != null || aboutMe.dreamDestination != null || aboutMe.loveLanguage != null) {
+                CasualCard {
+                    Text(strings.quickFactsTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+                    FlowWrap(modifier = Modifier.padding(top = 12.dp)) {
+                        IconBubble("🍽️", cpd.favoriteCuisine, aboutMe.favoriteCuisine, traitMatch(ownAboutMe?.favoriteCuisine, aboutMe.favoriteCuisine))
+                        IconBubble("✈️", cpd.dreamDestination, aboutMe.dreamDestination, traitMatch(ownAboutMe?.dreamDestination, aboutMe.dreamDestination))
+                        IconBubble("💌", cpd.loveLanguage, aboutMe.loveLanguage, traitMatch(ownAboutMe?.loveLanguage, aboutMe.loveLanguage))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Third cut of this tab: stacking a question-pill directly above an
+// answer-pill made both read as the same kind of thing -- "I don't even
+// understand what they are" (reported directly), the opposite of the
+// distinction that pairing was meant to create. Two pills of the same
+// shape don't read as "label, then value" no matter how they're
+// arranged. So closed-set/short-fact fields (fitness, sleep schedule,
+// cuisine, ...) now drop the separate question pill entirely -- a small
+// icon prefixed inside the ONE answer bubble carries the category instead
+// ("🏃 Regularly"), the same compact "icon + fact" chip Bumble itself
+// uses. Free-text answers (prompts, "what matters most") never had this
+// problem the same way -- a sentence doesn't fit in a pill -- but their
+// question label was ALSO wrapped in a pill last pass for visual
+// consistency; dropped back to plain text here ("for custom answers, I
+// don't want bubbles for questions", reported directly), leaving the
+// praised-as-nice italic answer (D2MNoteStyle, the comps' own
+// "attribution" convention) as the only pill-free voice on this tab.
+//
+// CasualCard is the soft, borderless, larger-radius container everything
+// sits in -- a deliberate, local departure from the rest of the app's
+// hairline-border formality, confined to this one section. Mirrors
+// d2m_web's ProfileTabsPanel.jsx CasualCard/IconBubble/PlainBubble.
+@Composable
+private fun CasualCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(18.dp))
+            .padding(16.dp),
+        content = content,
+    )
+}
+
+// icon + value in one pill -- no separate label. The icon alone carries
+// "what category is this" (a small, muted-adjacent glyph reads as a
+// category marker, not as the "childish" full-size emoji sticker the
+// very first cut of this tab used).
+@Composable
+private fun IconBubble(icon: String, label: String, value: String?, match: Boolean? = null) {
+    if (value == null) return
+    val palette = LocalD2MStatusPalette.current
+    val strings = LocalStrings.current.sharedComponents
+    // Tapping the pill explains it, like the web's hover bubble: the field's name, and -- when it was compared with the
+    // viewer's own answer -- the verdict, in the verdict's own green/red ("Sleep schedule: you both picked the same answer").
+    val tip = when (match) {
+        true -> strings.matchTooltipYesShared(label)
+        false -> strings.matchTooltipNoShared(label)
+        null -> label
+    }
+    TapTip(
+        text = tip,
+        container = when (match) { true -> palette.success.fg; false -> palette.danger.fg; null -> null },
+        content = if (match != null) MaterialTheme.colorScheme.background else null,
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier
+                .background(d2m.accentSoft, RoundedCornerShape(999.dp))
+                .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+        ) {
+            Text(icon, fontSize = 13.sp)
+            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = d2m.accentStrong)
+            MatchMark(match)
+        }
+    }
+}
+
+// Small green-check/red-X circle inside a pill -- a quiet mark only (soft tinted bg + coloured icon, as on web); the pill
+// it sits in is what you tap, so the mark itself never has to be a tiny target or make the pill bigger.
+@Composable
+private fun MatchMark(match: Boolean?, size: Dp = 13.dp) {
+    if (match == null) return
+    val palette = LocalD2MStatusPalette.current
+    val circleColor = if (match) palette.success.bg else palette.danger.bg
+    val strokeColor = if (match) palette.success.fg else palette.danger.fg
+    Canvas(modifier = Modifier.size(size)) {
+        drawCircle(color = circleColor, radius = this.size.minDimension / 2f, center = center)
+        val w = this.size.width
+        val h = this.size.height
+        val strokeWidth = this.size.minDimension * 0.11f
+        if (match) {
+            val path = Path().apply {
+                moveTo(w * 0.292f, h * 0.5125f)
+                lineTo(w * 0.425f, h * 0.6458f)
+                lineTo(w * 0.708f, h * 0.3583f)
+            }
+            drawPath(path, color = strokeColor, style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        } else {
+            drawLine(strokeColor, Offset(w * 0.3f, h * 0.3f), Offset(w * 0.7f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            drawLine(strokeColor, Offset(w * 0.7f, h * 0.3f), Offset(w * 0.3f, h * 0.7f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+        }
+    }
+}
+
+// Plain bubble, no icon -- for values with no natural single glyph
+// (partner qualities are abstract adjectives, not things).
+@Composable
+private fun PlainBubble(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Bold,
+        color = d2m.accentStrong,
+        modifier = Modifier
+            .background(d2m.accentSoft, RoundedCornerShape(999.dp))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowWrap(modifier: Modifier = Modifier, content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+}
+
+@Composable
+private fun PromptCard(prompt: String, answer: String) {
+    CasualCard {
+        Text(prompt, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+        // Same style as the Discover feed's prompt answers, so every answer in the app reads in one voice.
+        Text(answer, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+private fun siblingsSummary(bio: ExtendedBioDataOut, strings: SharedComponentsStrings): String? = listOfNotNull(
+    bio.elderBrothersCount?.takeIf { it > 0 }?.let(strings::elderBrothersCount),
+    bio.youngerBrothersCount?.takeIf { it > 0 }?.let(strings::youngerBrothersCount),
+    bio.elderSistersCount?.takeIf { it > 0 }?.let(strings::elderSistersCount),
+    bio.youngerSistersCount?.takeIf { it > 0 }?.let(strings::youngerSistersCount),
 ).joinToString(", ").ifBlank { null }
+
+/**
+ * Collapsible Bio data on the parent profile screen (web's ParentBioData accordion on phones): provided by [BioSections]
+ * only when asked for, so every other caller (Discover, preview) keeps the always-open sections. Only the first
+ * non-empty section starts open; [claimFirst] is read once per section, in composition order.
+ */
+private class BioAccordion {
+    private var firstClaimed = false
+    fun claimFirst(): Boolean {
+        if (firstClaimed) return false
+        firstClaimed = true
+        return true
+    }
+}
+
+private val LocalBioAccordion = androidx.compose.runtime.compositionLocalOf<BioAccordion?> { null }
+
+@Composable
+private fun BioSections(accordion: Boolean, content: @Composable () -> Unit) {
+    if (accordion) {
+        val acc = remember { BioAccordion() }
+        androidx.compose.runtime.CompositionLocalProvider(LocalBioAccordion provides acc) { content() }
+    } else {
+        content()
+    }
+}
+
+/** Up to four pills a parent scans for before reading anything: height (ft/in), highest education, occupation, nativity. Empties skipped. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BioKeyFacts(bio: ExtendedBioDataOut) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
+    val facts = listOfNotNull(
+        bio.heightCm?.takeIf { it > 0 }?.let(::formatHeightFtIn),
+        bio.highestEducation?.let { Taxonomy.toLabel(it, locale) },
+        bio.occupationTitle,
+        bio.nativity,
+    ).filter { it.isNotBlank() }
+    if (facts.isEmpty()) return
+    FlowRow(
+        modifier = Modifier
+            .padding(bottom = 14.dp)
+            .semantics(mergeDescendants = true) { contentDescription = strings.keyFacts + ": " + facts.joinToString(", ") },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        facts.forEach { f ->
+            Text(
+                f,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = d2m.accentStrong,
+                modifier = Modifier
+                    .background(d2m.accentSoft, RoundedCornerShape(percent = 50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
 
 /** label:value pairs, skipping anything not set -- an empty section would just be visual noise. */
 @Composable
 private fun BioSection(title: String, anyValues: List<Any?>, content: @Composable () -> Unit) {
     val hasAny = anyValues.any { v -> v != null && v != "" && (v as? Collection<*>)?.isEmpty() != true }
     if (!hasAny) return
-    Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f))
-        Column(modifier = Modifier.padding(top = 6.dp)) { content() }
+    val accordion = LocalBioAccordion.current
+    if (accordion == null) {
+        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = mutedText(0.55f), modifier = Modifier.semantics { heading() })
+            Column(modifier = Modifier.padding(top = 6.dp)) { content() }
+        }
+        return
+    }
+    val strings = LocalStrings.current.sharedComponents
+    val firstOpen = remember { accordion.claimFirst() }
+    var open by remember { mutableStateOf(firstOpen) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button) { open = !open }
+                .semantics { stateDescription = if (open) strings.sectionExpanded else strings.sectionCollapsed },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+            // Static rotation (no animation), so it needs no reduce-motion branch.
+            androidx.compose.material3.Icon(
+                Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = mutedText(0.55f),
+                modifier = Modifier.size(22.dp).rotate(if (open) 180f else 0f),
+            )
+        }
+        if (open) Column(modifier = Modifier.padding(bottom = 8.dp)) { content() }
+        HorizontalDivider(color = d2m.borderSoft)
     }
 }
 
-/** label:value pair with a bottom divider -- mirrors BioRow.jsx's own `borderBottom` on every row, not just between sections. */
+/**
+ * label:value pair with a bottom divider -- mirrors BioRow.jsx's own `borderBottom` on every row, not just between
+ * sections. Short values sit beside the label (label gets at most ~40% of the width and always a 16dp gutter, so a
+ * long label can never run into its value); long or list-like values drop below the label instead of squeezing into
+ * a narrow right-aligned column that wraps one word per line.
+ */
 @Composable
 private fun BioRow(label: String, value: String?) {
     if (value.isNullOrBlank()) return
+    val stacked = value.length > 26 || label.length + value.length > 40 || com.d2m.app.ui.theme.isLargeText()
     Column {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        ) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.45f))
-            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        if (stacked) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = mutedText(0.5f))
+                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.5f), modifier = Modifier.weight(0.4f))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    modifier = Modifier.weight(0.6f),
+                )
+            }
         }
         HorizontalDivider(color = mutedText(0.1f))
     }
@@ -225,9 +661,10 @@ private fun BioRow(label: String, value: String?) {
  */
 @Composable
 private fun ChartTab(chart: ChartOut?, chartNotComputed: Boolean, loaded: Boolean) {
+    val strings = LocalStrings.current.sharedComponents
     when {
-        !loaded -> Text("Loading…", color = mutedText(0.45f))
-        chartNotComputed || chart == null -> Text("This profile's chart hasn't been computed yet.", color = mutedText(0.45f))
+        !loaded -> SkeletonList(count = 3)
+        chartNotComputed || chart == null -> Text(strings.chartNotComputedYet, color = mutedText(0.45f))
         else -> AstrologyChartView(
             d1 = chart.chartJson["d1"] as? JsonObject,
             d9 = chart.chartJson["d9"] as? JsonObject,

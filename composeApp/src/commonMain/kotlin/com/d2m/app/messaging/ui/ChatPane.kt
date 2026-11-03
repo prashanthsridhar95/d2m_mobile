@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.ui
 
+import com.d2m.app.platform.rememberReduceMotion
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reply
@@ -117,18 +119,26 @@ import coil3.request.ImageRequest
 import com.d2m.app.AppForegroundState
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.ChatMessage
+import com.d2m.app.messaging.FlaggedLanguage
 import com.d2m.app.messaging.MessageStatus
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.messaging.d2mIdToMessagingUsername
 import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.ui.components.BackHandlerCompat
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+// See ApiCache.kt's import comment -- deprecated kotlinx.datetime.Clock
+// typealias, actually resolves to kotlin.time.Clock in the 0.7.1 that this
+// project really compiles against. The other kotlinx.datetime imports below
+// (Instant/LocalDate/TimeZone/toLocalDateTime) are untouched -- only Clock
+// itself hit this specific deprecation-typealias resolution problem.
+import kotlin.time.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -229,9 +239,11 @@ fun ChatPane(
     modifier: Modifier = Modifier,
 ) {
     val identityStore: IdentityStore = koinInject()
+    val identity by identityStore.identity.collectAsState()
     val messagingRepo: MessagingRepository = koinInject()
     val apiClient = koinInject<com.d2m.app.data.network.ApiClient>()
     val scope = rememberCoroutineScope()
+    val messagingStrings = LocalStrings.current.messaging
 
     val peerUsername = remember(peerId) { d2mIdToMessagingUsername(peerId) }
     val messages by messagingRepo.messagesFor(peerUsername).collectAsState()
@@ -250,6 +262,19 @@ fun ChatPane(
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var menuForMessageId by remember { mutableStateOf<String?>(null) }
+    // "Profanity filter - may be provide report or flag..." (reported
+    // directly) -- client-side-only pre-send screening, see
+    // FlaggedLanguage.kt's own doc comment for why this can't be
+    // server-side given E2E encryption. true once the user has confirmed
+    // past a flagged-language warning for the CURRENT draft -- cleared on
+    // any further edit, see the composer's onValueChange below. Direct
+    // port of d2m_web's MessageComposer.jsx (flaggedConfirm).
+    var flaggedConfirm by remember { mutableStateOf(false) }
+    // The message/media item currently targeted by the Report dialog, or
+    // null -- matches d2m_web's MessageList.jsx (reportTarget). Holds the
+    // whole message, not just an id, so the dialog can read its
+    // text/media without a second lookup.
+    var reportTarget by remember { mutableStateOf<ChatMessage?>(null) }
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var emojiOpen by remember { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
@@ -299,6 +324,34 @@ fun ChatPane(
     }
 
     fun replyContext() = replyingTo?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) }
+
+    // Shared by the send/save button below AND the flagged-language
+    // warning strip's "Send anyway" link -- direct port of d2m_web's
+    // MessageComposer.jsx submit(): screens the draft once (skipped
+    // entirely while editing, same as web), and re-running it after
+    // flaggedConfirm is already true just falls through to the real send,
+    // so "Send anyway" needs no separate bypass path of its own.
+    fun attemptSend() {
+        val text = draft.text
+        if (text.isBlank()) return
+        if (editingId == null && !flaggedConfirm && FlaggedLanguage.containsFlaggedLanguage(text)) {
+            flaggedConfirm = true
+            return
+        }
+        flaggedConfirm = false
+        draft = TextFieldValue("")
+        val editing = editingId
+        val reply = replyingTo
+        editingId = null
+        replyingTo = null
+        scope.launch {
+            messagingRepo.sendTyping(peerId, false)
+            when {
+                editing != null -> messagingRepo.editMessage(peerId, editing, text)
+                else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
+            }
+        }
+    }
 
     // Attach (paperclip button below) -- any file type, matches web's plain
     // <input type="file"> with no `accept` restriction. Reported directly:
@@ -413,11 +466,33 @@ fun ChatPane(
 
     Box(modifier = modifier) {
         MediaViewerDialog(target = viewerTarget, onDismiss = { viewerTarget = null })
+        // "Report" a specific message/media item -- see
+        // ReportMessageDialog.kt's own doc comment. primaryId is MY OWN
+        // D2M primary id (the require_owns_primary path param), resolved
+        // the same way every other /primaries/{id}/... caller in this app
+        // resolves "my own profile id" regardless of child/parent role
+        // (see e.g. ProfileDetailScreen.kt's viewerPrimaryId) -- NOT
+        // d2m_web's own ReportMessageModal caller's `messaging.myUsername`
+        // prop, see ReportMessageDialog.kt's doc comment for why that
+        // wouldn't actually resolve against the real backend.
+        reportTarget?.let { target ->
+            val myPrimaryId = identity.primaryId ?: identity.childPrimaryId
+            if (myPrimaryId != null) {
+                ReportMessageDialog(
+                    primaryId = myPrimaryId,
+                    reportedPrimaryId = peerId,
+                    reportedName = peerName,
+                    contentType = if (target.media != null) "media" else "text",
+                    contentSnippet = if (target.media != null) target.media.name else target.text,
+                    onDismiss = { reportTarget = null },
+                )
+            }
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 if (messages.isEmpty() && !peerTyping) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No messages yet -- say hi 👋", style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
+                        Text(messagingStrings.noMessagesYet, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.45f))
                     }
                 } else if (messages.isEmpty()) {
                     // No real messages yet, but the peer is already typing --
@@ -505,6 +580,7 @@ fun ChatPane(
                                     onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
                                     onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
                                     onOpenMedia = { viewerTarget = it },
+                                    onReport = { reportTarget = m; menuForMessageId = null },
                                 )
                             }
                         }
@@ -517,6 +593,44 @@ fun ChatPane(
                 }
                 SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { data ->
                     Snackbar(snackbarData = data, containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+
+            // Flagged-language warning strip -- direct port of d2m_web's
+            // MessageComposer.jsx (flaggedConfirm && <div>...). Shown above
+            // the reply/edit strip, same stacking order as web.
+            AnimatedVisibility(
+                visible = flaggedConfirm,
+                enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                exit = shrinkVertically(tween(150)) + fadeOut(tween(120)),
+            ) {
+                val warningColors = LocalD2MStatusPalette.current.warning
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        .background(warningColors.bg, RoundedCornerShape(D2MRadius.sm)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        messagingStrings.flaggedLanguageWarning,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = warningColors.fg,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        LocalStrings.current.common.edit,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = mutedText(0.55f),
+                        modifier = Modifier.clickable { flaggedConfirm = false },
+                    )
+                    Text(
+                        messagingStrings.sendAnyway,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = warningColors.fg,
+                        modifier = Modifier.clickable { attemptSend() },
+                    )
                 }
             }
 
@@ -536,12 +650,12 @@ fun ChatPane(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        if (editingId != null) "Editing message" else "Replying to ${replyingTo?.let { if (it.isMine) "yourself" else peerName }}: ${replyingTo?.text.orEmpty().take(60)}",
+                        if (editingId != null) messagingStrings.editingMessage else replyingTo?.let { r -> if (r.isMine) messagingStrings.replyingToYourself(r.text.orEmpty().take(60)) else messagingStrings.replyingToName(peerName, r.text.orEmpty().take(60)) }.orEmpty(),
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = { replyingTo = null; editingId = null; draft = TextFieldValue("") }, modifier = Modifier.size(22.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.common.cancel, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -581,7 +695,7 @@ fun ChatPane(
                             // itself still handles its own failure (uploadFailed
                             // bubble) once bytes are actually in hand.
                             val bytes = runCatching { fetchGifBytes(apiClient.client, gif) }
-                                .onFailure { snackbarHostState.showSnackbar("Couldn't load that GIF -- try again") }
+                                .onFailure { snackbarHostState.showSnackbar("Couldn't load that GIF – try again") }
                                 .getOrNull()
                             if (bytes != null) {
                                 messagingRepo.sendMedia(peerId, bytes, "gif.gif", "image/gif", "image", gif.width, gif.height, reply)
@@ -600,7 +714,7 @@ fun ChatPane(
             ) {
                 if (editingId == null) {
                     IconButton(onClick = { emojiOpen = false; mediaLauncher() }, enabled = !attaching, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach a file", tint = mutedText(0.45f))
+                        Icon(Icons.Filled.AttachFile, contentDescription = messagingStrings.attachFile, tint = mutedText(0.45f))
                     }
                 }
                 OutlinedTextField(
@@ -608,6 +722,12 @@ fun ChatPane(
                     onValueChange = { new ->
                         val wasEmpty = draft.text.isEmpty()
                         draft = new
+                        // Editing the draft after a flagged-language warning
+                        // re-screens it on the next send attempt, rather than
+                        // letting one earlier confirmation silently cover
+                        // whatever gets typed next -- matches d2m_web's
+                        // MessageComposer.jsx handleChange exactly.
+                        if (flaggedConfirm) flaggedConfirm = false
                         if (editingId == null) {
                             if (new.text.isNotEmpty() && wasEmpty) scope.launch { messagingRepo.sendTyping(peerId, true) }
                             typingJob?.cancel()
@@ -619,7 +739,7 @@ fun ChatPane(
                         }
                     },
                     modifier = Modifier.weight(1f).focusRequester(composerFocusRequester),
-                    placeholder = { Text("Message…", color = mutedText(0.4f)) },
+                    placeholder = { Text(messagingStrings.messagePlaceholder, color = mutedText(0.4f)) },
                     shape = RoundedCornerShape(D2MRadius.pill),
                     textStyle = MaterialTheme.typography.bodyMedium,
                     // "based on user keyboard settings, first letter
@@ -635,7 +755,7 @@ fun ChatPane(
                             IconButton(onClick = { emojiOpen = !emojiOpen }) {
                                 Icon(
                                     Icons.Filled.EmojiEmotions,
-                                    contentDescription = "Emoji, stickers & GIFs",
+                                    contentDescription = messagingStrings.emojiStickersGifs,
                                     tint = if (emojiOpen) MaterialTheme.colorScheme.primary else mutedText(0.45f),
                                 )
                             }
@@ -658,26 +778,12 @@ fun ChatPane(
                     modifier = Modifier.size(44.dp)
                         .clip(CircleShape)
                         .background(sendBg)
-                        .combinedClickable(enabled = canSend, onClick = {
-                            val text = draft.text
-                            draft = TextFieldValue("")
-                            val editing = editingId
-                            val reply = replyingTo
-                            editingId = null
-                            replyingTo = null
-                            scope.launch {
-                                messagingRepo.sendTyping(peerId, false)
-                                when {
-                                    editing != null -> messagingRepo.editMessage(peerId, editing, text)
-                                    else -> messagingRepo.sendText(peerId, text, reply?.let { ReplyContext(it.id, it.fromUsername, it.text.take(80)) })
-                                }
-                            }
-                        }, onLongClick = {}),
+                        .combinedClickable(enabled = canSend, onClick = { attemptSend() }, onLongClick = {}),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         if (editingId != null) Icons.Filled.Check else Icons.Filled.Send,
-                        contentDescription = if (editingId != null) "Save" else "Send",
+                        contentDescription = if (editingId != null) LocalStrings.current.common.save else LocalStrings.current.common.send,
                         tint = if (canSend) Color.White else mutedText(0.4f),
                         modifier = Modifier.size(20.dp),
                     )
@@ -745,13 +851,13 @@ private fun MessageTicks(status: MessageStatus, mine: Boolean) {
  */
 @Composable
 private fun TypingIndicatorBubble(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "typing")
-    val t by transition.animateFloat(
+    // Reduce motion: three still dots, no infinite transition.
+    val t = if (rememberReduceMotion()) 0f else rememberInfiniteTransition(label = "typing").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
         label = "typing-progress",
-    )
+    ).value
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Row(
             modifier = Modifier
@@ -881,7 +987,7 @@ private fun VideoBubblePlaceholder(durationSec: Int?, onClick: () -> Unit) {
             modifier = Modifier.size(48.dp).background(Color.White.copy(alpha = 0.25f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.PlayArrow, contentDescription = LocalStrings.current.messaging.playVideo, tint = Color.White, modifier = Modifier.size(28.dp))
         }
         if (durationSec != null && durationSec > 0) {
             Text(
@@ -913,7 +1019,9 @@ private fun MessageRow(
     onDeleteForEveryone: () -> Unit,
     onRetry: () -> Unit,
     onOpenMedia: (MediaViewerTarget) -> Unit,
+    onReport: () -> Unit,
 ) {
+    val messagingStrings = LocalStrings.current.messaging
     Column(modifier = modifier.fillMaxWidth()) {
         // BoxWithConstraints (not a fixed dp cap) to match d2m_web's
         // MessageBubble.jsx exactly -- web caps a bubble at `max-width: 72%`
@@ -1116,7 +1224,7 @@ private fun MessageRow(
                             }
 
                             when {
-                                message.deleted -> Text("This message was deleted", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
+                                message.deleted -> Text(messagingStrings.messageDeleted, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.7f))
                                 message.callLog != null -> {
                                     val info = message.callLog
                                     // "No answer"/declined/busy/failed all read as
@@ -1127,10 +1235,10 @@ private fun MessageRow(
                                     val noAnswer = info.reason == "declined" || info.reason == "busy" || info.reason == "failed" ||
                                         (info.durationSec == 0 && info.incoming && info.reason != "ended")
                                     val label = when (info.reason) {
-                                        "ended" -> "${if (info.media == "video") "Video" else "Voice"} call"
-                                        "busy", "failed" -> "Call failed"
-                                        "declined" -> "Call declined"
-                                        else -> if (info.incoming) "Missed call" else "No answer"
+                                        "ended" -> if (info.media == "video") messagingStrings.videoCall else messagingStrings.voiceCall
+                                        "busy", "failed" -> messagingStrings.callFailed
+                                        "declined" -> messagingStrings.callDeclined
+                                        else -> if (info.incoming) messagingStrings.missedCall else messagingStrings.noAnswer
                                     }
                                     val durationLabel = if (info.durationSec > 0) "${info.durationSec / 60}:${(info.durationSec % 60).toString().padStart(2, '0')}" else null
                                     // Circular icon badge, not a bare small icon -- matches
@@ -1210,11 +1318,11 @@ private fun MessageRow(
                                     }
                                     if (message.uploading) {
                                         Column(modifier = Modifier.width(160.dp).padding(top = 4.dp)) {
-                                            Text("Uploading…", style = MaterialTheme.typography.labelSmall)
+                                            Text(messagingStrings.uploading, style = MaterialTheme.typography.labelSmall)
                                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                         }
                                     }
-                                    if (message.uploadFailed) Text("Attachment failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    if (message.uploadFailed) Text(messagingStrings.attachmentFailed, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                     if (message.text.isNotBlank()) {
                                         if (emojiOnly) {
                                             // Matches web's emojiOnly text styling exactly: fontSize
@@ -1246,10 +1354,10 @@ private fun MessageRow(
                                     if (message.status == MessageStatus.FAILED) {
                                         Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
                                         Spacer(Modifier.width(3.dp))
-                                        Text("Failed -- tap to retry", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                        Text(messagingStrings.failedTapToRetry, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                     } else {
                                         if (message.edited) {
-                                            Text("edited", style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.65f))
+                                            Text(messagingStrings.edited, style = MaterialTheme.typography.labelSmall, fontStyle = FontStyle.Italic, color = LocalContentColor.current.copy(alpha = 0.65f))
                                             Spacer(Modifier.width(4.dp))
                                         }
                                         Text(formatBubbleTime(message.sentAt), style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
@@ -1293,13 +1401,24 @@ private fun MessageRow(
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    DropdownMenuItem(text = { Text("Reply") }, onClick = onReply)
+                    DropdownMenuItem(text = { Text(messagingStrings.reply) }, onClick = onReply)
                     if (message.isMine && message.media == null) {
-                        DropdownMenuItem(text = { Text("Edit") }, onClick = onEdit)
+                        DropdownMenuItem(text = { Text(LocalStrings.current.common.edit) }, onClick = onEdit)
                     }
-                    DropdownMenuItem(text = { Text("Delete for me") }, onClick = onDeleteForMe)
+                    DropdownMenuItem(text = { Text(messagingStrings.deleteForMe) }, onClick = onDeleteForMe)
                     if (message.isMine) {
-                        DropdownMenuItem(text = { Text("Delete for everyone") }, onClick = onDeleteForEveryone)
+                        DropdownMenuItem(text = { Text(messagingStrings.deleteForEveryone) }, onClick = onDeleteForEveryone)
+                    }
+                    // Reporting your own message makes no sense -- only
+                    // shown for the PEER's own messages, same `isMine` gate
+                    // "Edit"/"Delete for everyone" already use (inverted).
+                    // Matches d2m_web's MessageList.jsx exactly.
+                    if (!message.isMine) {
+                        DropdownMenuItem(
+                            text = { Text(messagingStrings.reportMenuItem, color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Filled.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = onReport,
+                        )
                     }
                 }
             }

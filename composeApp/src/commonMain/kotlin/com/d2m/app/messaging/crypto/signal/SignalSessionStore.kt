@@ -60,6 +60,9 @@ internal data class SessionRecord(
     val ratchet: RatchetRecord,
     val chains: MutableMap<String, ChainRecord> = mutableMapOf(), // key = base64(32-byte raw ephemeral pubkey)
     var pendingPreKey: PendingPreKeyRecord? = null,
+    // Base key of the PreKey message this session was built from (responder side). A peer keeps sending PreKey messages
+    // until it hears back from us, and every one repeats the same base key: those must reuse this session, not rebuild it.
+    var remoteBaseKey: String? = null,
 )
 
 @Serializable

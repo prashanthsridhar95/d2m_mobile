@@ -41,11 +41,25 @@ import com.d2m.app.messaging.InboxNotification
 import com.d2m.app.messaging.MessagingRepository
 import com.d2m.app.messaging.SoundEffects
 import com.d2m.app.ui.theme.D2MRadius
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
+import com.d2m.app.ui.strings.LocalStrings
 
-private val BannerAvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+/*
+ * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
+ * (#DCEEEA -> #FBEAD2), left over from the old per-flow palettes and the
+ * one place in this app with a colour baked in rather than read from the
+ * theme. It's now the same warm sunken surface a missing photograph gets
+ * everywhere else (see ProfilePhoto.kt), so an avatar with no photo and a
+ * card with no photo read as the same material. A composable accessor
+ * rather than a top-level val, since a CompositionLocal can only be read
+ * inside composition.
+ */
+@Composable
+private fun avatarPlaceholder() = d2m.surfaceSunken
+
 
 /**
  * Instagram/iMessage-style in-app banner for incoming messages -- point 4 of
@@ -126,7 +140,7 @@ fun InAppNotificationLayer(onOpenPeer: (String) -> Unit) {
                         },
                 ) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(40.dp).background(BannerAvatarGradient, RoundedCornerShape(12.dp)))
+                        Box(modifier = Modifier.size(40.dp).background(avatarPlaceholder(), RoundedCornerShape(12.dp)))
                         Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(
                                 messagingRepo.peerDisplayName(event.peerUsername),
@@ -144,7 +158,7 @@ fun InAppNotificationLayer(onOpenPeer: (String) -> Unit) {
                             )
                         }
                         IconButton(onClick = { current = null }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Close, contentDescription = LocalStrings.current.messaging.dismiss, modifier = Modifier.size(16.dp))
                         }
                     }
                 }

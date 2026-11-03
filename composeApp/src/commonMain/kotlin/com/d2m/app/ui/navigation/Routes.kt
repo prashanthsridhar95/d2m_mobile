@@ -29,12 +29,27 @@ object Routes {
     const val DISCOVERY = "child/discover"
     const val MATCHES = "child/matches"
 
+    /** A matched thread's profile: Discover's layout, read-only (web: MatchedProfileScreen). */
+    const val MATCHED_PROFILE = "child/matched/{candidateId}"
+    fun matchedProfile(candidateId: String) = "child/matched/$candidateId"
+
     const val PROFILE_DETAIL = "profile/{candidateId}"
     fun profileDetail(candidateId: String) = "profile/$candidateId"
     const val PROFILE_ARG_CANDIDATE_ID = "candidateId"
 
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
+    const val SHARE_LINKS = "share_links"
+    // WedLock trust subsystem Round 1 (vouches/trusted connections/
+    // endorsements) -- no free bottom-bar slot on either role's tab bar
+    // (both already have 4), so this is a Settings entry point for both
+    // roles, same placement pattern ShareLinksScreen uses on the child side.
+    const val TRUST = "trust"
+
+    // KYC identity verification (Phase 3 of the backlog this session is
+    // working) -- another Settings entry point, same placement pattern as
+    // SHARE_LINKS/TRUST above.
+    const val IDENTITY_VERIFICATION = "identity_verification"
 
     const val CHILD_PROFILE_DIALOG = "child_profile_dialog"
 
@@ -42,4 +57,14 @@ object Routes {
     const val SUCCESS_GALLERY = "gallery"
     const val ADMIN_GALLERY_MODERATION = "admin/gallery"
     const val PANCHANGAM_CALENDAR = "panchangam"
+
+    // Public share-link viewer (Phase 6) -- mirrors d2m_web's
+    // ProfileLinkScreen.jsx. The real shared URL is a bare root-level code
+    // (https://d2m.app/{code}, see app/routers/links.py's share_preview
+    // docstring), unlike CLAIM's own /claim/{token} prefix.
+    const val PROFILE_LINK = "links/{code}"
+    fun profileLink(code: String) = "links/$code"
+    const val PROFILE_LINK_ARG_CODE = "code"
+    const val PROFILE_LINK_DEEPLINK_HTTPS = "https://d2m.app/{code}"
+    const val PROFILE_LINK_DEEPLINK_SCHEME = "d2m://link/{code}"
 }

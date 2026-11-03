@@ -15,6 +15,10 @@ class IdentityRepository(
     private val api: IdentityApi,
     private val cache: ApiCache,
 ) {
+    // Not cached -- only ever called once, right after a fresh WedLock
+    // login (see LoginScreen.kt), never re-read by another screen.
+    suspend fun getMe(): MeOut = api.getMe()
+
     suspend fun createSponsor(body: SponsorCreateRequest): SponsorCreateResponse =
         api.createSponsor(body)
 
@@ -46,8 +50,36 @@ class IdentityRepository(
         return result
     }
 
+    suspend fun setHideNameOverride(primaryId: String, hidden: Boolean): HideNameOut {
+        val result = api.setHideNameOverride(primaryId, HideNameIn(hidden))
+        cache.invalidateKey("primary-profile:$primaryId")
+        return result
+    }
+
+    // Not cached -- a status that can change server-side (admin review)
+    // without any action on this device, so a stale cached "pending"
+    // would silently hide an approval/rejection.
+    suspend fun getIdentityVerification(primaryId: String): IdentityVerificationOut? =
+        api.getIdentityVerification(primaryId)
+
+    suspend fun submitIdentityVerification(
+        primaryId: String, documentType: String,
+        documentFileName: String, documentContentType: String, documentBytes: ByteArray,
+        selfieFileName: String, selfieContentType: String, selfieBytes: ByteArray,
+    ): IdentityVerificationOut =
+        api.submitIdentityVerification(
+            primaryId, documentType,
+            documentFileName, documentContentType, documentBytes,
+            selfieFileName, selfieContentType, selfieBytes,
+        )
+
     suspend fun getPrimarySponsor(primaryId: String): PrimarySponsorOut =
         cache.get("primary-sponsor:$primaryId") { api.getPrimarySponsor(primaryId) }.value
+
+    // Not cached -- a one-off lookup triggered by an explicit search
+    // action, not a value any other screen would ever re-read.
+    suspend fun searchByShortId(code: String): ShortIdSearchResultOut =
+        api.searchByShortId(code)
 
     suspend fun updateLocationPreference(sponsorId: String, body: LocationPreferenceIn): LocationPreferenceOut {
         val result = api.updateLocationPreference(sponsorId, body)
@@ -79,9 +111,26 @@ class IdentityRepository(
         return cache.get(key) { api.getExtendedBio(primaryId) }.value
     }
 
+    /** Cached extended bio, if any, without suspending -- safe to call in composition for a no-flash first frame. */
+    fun peekExtendedBio(primaryId: String): ExtendedBioDataOut? = cache.peekNow<ExtendedBioDataOut>("extended-bio:$primaryId")?.value
+
     suspend fun updateExtendedBio(primaryId: String, body: ExtendedBioDataIn): ExtendedBioDataOut {
         val result = api.updateExtendedBio(primaryId, body)
         cache.setCached("extended-bio:$primaryId", result)
+        return result
+    }
+
+    suspend fun getAboutMe(primaryId: String, forceRefresh: Boolean = false): AboutMeDataOut {
+        val key = "about-me:$primaryId"
+        if (forceRefresh) cache.invalidateKey(key)
+        return cache.get(key) { api.getAboutMe(primaryId) }.value
+    }
+
+    fun peekAboutMe(primaryId: String): AboutMeDataOut? = cache.peekNow<AboutMeDataOut>("about-me:$primaryId")?.value
+
+    suspend fun updateAboutMe(primaryId: String, body: AboutMeDataIn): AboutMeDataOut {
+        val result = api.updateAboutMe(primaryId, body)
+        cache.setCached("about-me:$primaryId", result)
         return result
     }
 }

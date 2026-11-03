@@ -53,14 +53,30 @@ import com.d2m.app.messaging.ui.ArchivePinDialog
 import com.d2m.app.messaging.ui.ChatPane
 import com.d2m.app.ui.components.BackHandlerCompat
 import com.d2m.app.ui.components.D2MEmptyState
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.ParentMessagesStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
+import com.d2m.app.ui.theme.d2m
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-/** Same gradient squircle placeholder as MatchesScreen.kt's AvatarGradient -- neither platform has a real photo for a messaging contact (a Sponsor has no profile photo field at all), so this IS the design. */
-private val AvatarGradient = Brush.linearGradient(listOf(Color(0xFFDCEEEA), Color(0xFFFBEAD2)))
+/*
+ * Retheme pass: the avatar placeholder was a fixed teal-to-cream gradient
+ * (#DCEEEA -> #FBEAD2), left over from the old per-flow palettes and the
+ * one place in this app with a colour baked in rather than read from the
+ * theme. It's now the same warm sunken surface a missing photograph gets
+ * everywhere else (see ProfilePhoto.kt), so an avatar with no photo and a
+ * card with no photo read as the same material. A composable accessor
+ * rather than a top-level val, since a CompositionLocal can only be read
+ * inside composition.
+ */
+@Composable
+private fun avatarPlaceholder() = d2m.surfaceSunken
+
 
 /**
  * Mirrors screens/parent/ParentMessagesScreen.jsx -- real E2E chat (same
@@ -102,6 +118,7 @@ fun ParentMessagesScreen() {
     val scope = rememberCoroutineScope()
 
     val sponsorId = identity.sponsorId
+    val strings = LocalStrings.current.parentMessages
 
     D2MTheme(flow = D2MFlow.PARENT) {
         if (sponsorId == null) {
@@ -109,7 +126,7 @@ fun ParentMessagesScreen() {
             // this route is only ever reachable once logged in as a Parent, so this is
             // a defensive empty state rather than a real navigation target.
             Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                D2MEmptyState("Not signed in", "Log in as a parent to see your messages.")
+                D2MEmptyState(strings.notSignedInTitle, strings.notSignedInBody)
             }
             return@D2MTheme
         }
@@ -159,11 +176,11 @@ fun ParentMessagesScreen() {
             val sel = selectedUsername
             if (sel == null) {
                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text("Messages", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    PageTitle(strings.pageTitle)
                     if (contacts.isEmpty()) {
                         D2MEmptyState(
-                            title = "No conversations yet",
-                            subtitle = "Open a profile and use \"Message their parent\" to start one.",
+                            title = strings.noConversationsTitle,
+                            subtitle = strings.noConversationsBody,
                             modifier = Modifier.padding(top = 24.dp),
                         )
                     } else {
@@ -227,6 +244,7 @@ fun ParentMessagesScreen() {
 /** One row in the contact list -- gradient avatar + presence dot, name, qualifier ("Deepak's parent"), and a live last-message preview. */
 @Composable
 private fun ParentContactRow(peerUsername: String, contact: ParentContact, onClick: () -> Unit) {
+    val strings = LocalStrings.current.parentMessages
     val messagingRepo: MessagingRepository = koinInject()
     val peerOnline by remember(peerUsername) { messagingRepo.isPeerOnline(peerUsername) }.collectAsState()
     val peerTyping by remember(peerUsername) { messagingRepo.isPeerTyping(peerUsername) }.collectAsState()
@@ -236,9 +254,9 @@ private fun ParentContactRow(peerUsername: String, contact: ParentContact, onCli
 
     val last = messages.maxByOrNull { it.sentAt }
     val preview = when {
-        last == null -> "No messages yet"
-        last.deleted -> "This message was deleted"
-        last.media != null -> "Sent an attachment"
+        last == null -> strings.noMessagesYet
+        last.deleted -> strings.messageDeleted
+        last.media != null -> strings.sentAnAttachment
         else -> last.text
     }
 
@@ -248,7 +266,7 @@ private fun ParentContactRow(peerUsername: String, contact: ParentContact, onCli
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
     ) {
         Box(modifier = Modifier.size(48.dp)) {
-            Box(modifier = Modifier.size(48.dp).background(AvatarGradient, RoundedCornerShape(14.dp)))
+            Box(modifier = Modifier.size(48.dp).background(avatarPlaceholder(), RoundedCornerShape(14.dp)))
             ParentPresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -257,7 +275,7 @@ private fun ParentContactRow(peerUsername: String, contact: ParentContact, onCli
                 Text(it.replaceFirstChar { c -> c.uppercase() }, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
             Text(
-                if (peerTyping) "typing…" else preview,
+                if (peerTyping) strings.typing else preview,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (peerTyping) MaterialTheme.colorScheme.primary else mutedText(0.55f),
                 fontWeight = if (peerTyping) FontWeight.SemiBold else FontWeight.Normal,
@@ -279,6 +297,7 @@ private fun ParentConversationHeader(
     onStartAudioCall: () -> Unit,
     onStartVideoCall: () -> Unit,
 ) {
+    val strings = LocalStrings.current.parentMessages
     val messagingRepo: MessagingRepository = koinInject()
     val peerUsername = remember(peerD2mId) { d2mIdToMessagingUsername(peerD2mId) }
     val peerOnline by messagingRepo.isPeerOnline(peerUsername).collectAsState()
@@ -291,26 +310,26 @@ private fun ParentConversationHeader(
         modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to messages")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.backToMessages)
         }
         Box(modifier = Modifier.size(40.dp)) {
-            Box(modifier = Modifier.size(40.dp).background(AvatarGradient, RoundedCornerShape(12.dp)))
+            Box(modifier = Modifier.size(40.dp).background(avatarPlaceholder(), RoundedCornerShape(12.dp)))
             ParentPresenceDot(online = peerOnline, modifier = Modifier.align(Alignment.BottomEnd))
         }
         Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
             Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val qualifier = contactQualifier(kind, childName)
             val subtitle = when {
-                peerTyping -> "typing…"
-                peerOnline -> "Online"
+                peerTyping -> strings.typing
+                peerOnline -> strings.online
                 qualifier != null -> qualifier.replaceFirstChar { it.uppercase() }
-                else -> "Offline"
+                else -> strings.offline
             }
             Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ParentHeaderIconButton(icon = Icons.Filled.Call, contentDescription = "Audio call", onClick = onStartAudioCall)
-            ParentHeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = "Video call", onClick = onStartVideoCall)
+            ParentHeaderIconButton(icon = Icons.Filled.Call, contentDescription = strings.audioCall, onClick = onStartAudioCall)
+            ParentHeaderIconButton(icon = Icons.Filled.Videocam, contentDescription = strings.videoCall, onClick = onStartVideoCall)
         }
     }
 }
@@ -333,7 +352,7 @@ private fun ParentPresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(11.dp)
-            .background(if (online) Color(0xFF3DBE6C) else mutedText(0.3f), CircleShape)
+            .background(if (online) LocalD2MStatusPalette.current.success.fg else mutedText(0.3f), CircleShape)
             .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape),
     )
 }

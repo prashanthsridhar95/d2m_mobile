@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
@@ -26,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.network.GeocodingApi
+import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.delay
 
@@ -45,6 +45,8 @@ fun CityChipPicker(
     modifier: Modifier = Modifier,
     disabled: Boolean = false,
 ) {
+    val strings = LocalStrings.current.sharedComponents
+    val locale = LocalAppLocale.current
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<String>>(emptyList()) }
     var expanded by remember { mutableStateOf(false) }
@@ -70,12 +72,23 @@ fun CityChipPicker(
                 value.forEach { city ->
                     AssistChip(
                         onClick = { if (!disabled) onChange(value - city) },
-                        label = { Text(city) },
+                        // Mainly for legacy data: accept_locations previously
+                        // stored the old closed LOCATIONS taxonomy's
+                        // lowercase/snake_case codes ("delhi_ncr", plain
+                        // "chennai") before this field switched to free-text
+                        // city search -- a profile onboarded before that
+                        // switch still shows them raw ("lowercase with
+                        // underscores", reported directly). Taxonomy.toLabel
+                        // fixes those and is a no-op on a real geocode label
+                        // ("Chennai, Tamil Nadu, India"), which is already
+                        // properly capitalized and has no underscore to
+                        // split on.
+                        label = { Text(Taxonomy.toLabel(city, locale)) },
                         trailingIcon = if (!disabled) {
                             {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Remove $city",
+                                    contentDescription = strings.removeCity(city),
                                     modifier = Modifier.padding(2.dp),
                                 )
                             }
@@ -90,14 +103,15 @@ fun CityChipPicker(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Start typing a city…") },
+                placeholder = { Text(strings.startTypingACity) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
             if (expanded) {
                 Card(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    LazyColumn {
-                        items(results) { r ->
+                    // Plain Column: a LazyColumn inside a scrolling screen crashes (infinite height constraint).
+                    Column {
+                        results.forEach { r ->
                             DropdownMenuItem(
                                 text = { Text(r) },
                                 onClick = {

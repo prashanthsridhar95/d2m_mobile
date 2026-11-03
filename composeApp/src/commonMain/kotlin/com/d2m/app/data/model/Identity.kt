@@ -12,6 +12,19 @@ import kotlinx.serialization.Serializable
  * client authenticates, i.e. doesn't).
  */
 
+/** Mirrors app/schemas.py::MeOut -- GET /me resolves the caller's own
+ * WedLock-verified bearer token straight to a D2M account (role +
+ * sponsor_id/primary_id), so LoginScreen.kt can skip its manual
+ * "I'm a parent / I'm the child, paste your id" step for the common case.
+ * See that screen's own doc comment. */
+@Serializable
+data class MeOut(
+    val role: String, // "parent" | "child"
+    val sponsorId: String? = null,
+    val primaryId: String? = null,
+    val name: String,
+)
+
 @Serializable
 data class SponsorCreateRequest(
     val name: String,
@@ -20,7 +33,8 @@ data class SponsorCreateRequest(
     val ownReligion: String,
     val ownCasteCommunity: String,
     val acceptReligions: List<String>,
-    val hardCasteCommunity: Boolean,
+    // the community code parents insist on (null = no hard community filter); the backend field is Optional[str], not a flag
+    val hardCasteCommunity: String? = null,
     val minAge: Int,
     val maxAge: Int,
     val acceptLocations: List<String> = emptyList(),
@@ -45,17 +59,21 @@ data class SponsorCreateResponse(
 )
 
 /**
- * Mirrors app/schemas.py's SponsorProfileOut exactly -- previously had
- * contactInfo/createdAt, neither of which exist on the real backend
- * response (which has childName/childClaimed instead), and both were
- * required, so decoding this after a "I'm a parent" login would have
- * crashed with the same MissingFieldException class as the SuggestionOut
- * bug this file was fixed alongside.
+ * Mirrors app/schemas.py's SponsorProfileOut exactly. Used to omit
+ * contactInfo (the backend response didn't have it, so decoding this
+ * after a "I'm a parent" login would've crashed with the same
+ * MissingFieldException class as the SuggestionOut bug this file was
+ * fixed alongside) -- contactInfo is back now that
+ * onboarding_service.get_sponsor_profile actually returns it, added
+ * specifically to power the Settings screen's account header (name +
+ * contact + account id), same as PrimaryProfileOut.contactInfo already
+ * does for the child role.
  */
 @Serializable
 data class SponsorProfileOut(
     val sponsorId: String,
     val name: String,
+    val contactInfo: String,
     val childName: String? = null,
     val childClaimed: Boolean,
 )
@@ -89,6 +107,12 @@ data class ChildPreferencesRequest(
     val hobbiesPref: List<String> = emptyList(),
     val lifestyleTags: List<String> = emptyList(),
     val relationshipGoal: String,
+    // Required by the backend (empty list = no preference). Omitting them made every claim flow end in a 422.
+    val bodyTypePref: List<String> = emptyList(),
+    val complexionPref: List<String> = emptyList(),
+    val sectPref: List<String> = emptyList(),
+    val gothramPref: List<String> = emptyList(),
+    val citizenshipPref: List<String> = emptyList(),
 )
 
 @Serializable
@@ -113,7 +137,20 @@ data class PrimaryProfileOut(
     // PrimaryBasicDataIn -- these two are deliberately absent from it).
     val dob: String? = null,
     val tob: String? = null,
+    // "Hide name" manual override + founding-member badge (reported
+    // directly) -- see app/models/identity.py's Primary.hide_name_override/
+    // founding_member on the backend. Defaulted so an older cached response
+    // shape still deserializes.
+    val hideNameOverride: Boolean = false,
+    val isFoundingMember: Boolean = false,
+    val isVerified: Boolean = false,
 )
+
+@Serializable
+data class HideNameIn(val hidden: Boolean)
+
+@Serializable
+data class HideNameOut(val primaryId: String, val hideNameOverride: Boolean)
 
 @Serializable
 data class PrimaryBasicDataIn(
@@ -141,6 +178,20 @@ data class PrimarySponsorOut(
     val sponsorId: String,
 )
 
+/** GET /primaries/search?code= result -- "provide an ID for each profile
+ * for easy search & finding" (reported directly). Minimal preview card,
+ * not a full candidate/match shape -- a short_id lookup isn't the
+ * matching pipeline's output, just a direct lookup by a human-shared
+ * code; ParentBrowseScreen navigates straight to ProfileDetailScreen on
+ * a hit, which fetches the real candidate card itself. */
+@Serializable
+data class ShortIdSearchResultOut(
+    val primaryId: String,
+    val shortId: String,
+    val name: String,
+    val photoUrl: String? = null,
+)
+
 @Serializable
 data class LocationPreferenceIn(
     val acceptLocations: List<String>,
@@ -156,7 +207,7 @@ data class LocationPreferenceOut(
 
 @Serializable
 data class PhotoOut(
-    val photoId: String,
+    val id: String, // backend field is "id" (the DTO used to declare photo_id, so decoding any photo list threw)
     val url: String,
     val sortOrder: Int,
 )
@@ -180,6 +231,11 @@ data class ExtendedBioDataIn(
     val motherTongue: String? = null,
     val otherLanguages: List<String>? = null,
     val bodyType: String? = null,
+    // "Children preference in biodata" (reported directly) -- its own
+    // labeled field here instead of buried in the Preferences tab's
+    // generic lifestyle-tags picker (see Taxonomy.kt's LIFESTYLE_TAGS,
+    // which still lists these 3 values too, and CHILDREN_PREFERENCES).
+    val childrenPreference: String? = null,
     // Religious & astrological
     val religion: String? = null,
     val casteCommunity: String? = null,
@@ -194,6 +250,12 @@ data class ExtendedBioDataIn(
     val employmentSector: String? = null,
     val monthlyIncomeAmount: Int? = null,
     val monthlyIncomeCurrency: String? = null,
+    // "Instead of salary field - provide salary range" (reported
+    // directly) -- income_band replaces monthlyIncomeAmount/Currency in
+    // the edit/display UI; those two stay in the schema (no destructive
+    // drop, the backend still has them) but are no longer surfaced as an
+    // editable input.
+    val incomeBand: String? = null,
     // Family background
     val fatherName: String? = null,
     val fatherOccupation: String? = null,
@@ -219,6 +281,7 @@ data class ExtendedBioDataOut(
     val motherTongue: String? = null,
     val otherLanguages: List<String>? = null,
     val bodyType: String? = null,
+    val childrenPreference: String? = null,
     val religion: String? = null,
     val casteCommunity: String? = null,
     val sect: String? = null,
@@ -231,6 +294,7 @@ data class ExtendedBioDataOut(
     val employmentSector: String? = null,
     val monthlyIncomeAmount: Int? = null,
     val monthlyIncomeCurrency: String? = null,
+    val incomeBand: String? = null,
     val fatherName: String? = null,
     val fatherOccupation: String? = null,
     val motherName: String? = null,
@@ -244,6 +308,58 @@ data class ExtendedBioDataOut(
     val familyValues: String? = null,
     val financialStatus: String? = null,
     val citizenshipStatus: String? = null,
+    val updatedAt: String? = null,
+)
+
+/** One {prompt, answer} card -- see AboutMeDataIn's doc comment. */
+@Serializable
+data class AboutMePromptEntry(
+    val prompt: String,
+    val answer: String,
+)
+
+/**
+ * Mirrors AboutMeData / AboutMeDataIn / AboutMeDataOut exactly -- the
+ * Tinder/Bumble-style "About Me" tab, distinct from ExtendedBioData above
+ * and from ChildPreferencesRequest's hobbies/lifestyleTags/relationshipGoal
+ * (those already back the Preferences tab and matching_service's scoring;
+ * About Me doesn't re-ask the same questions under new names). Unlike
+ * ExtendedBioDataIn, the backend DOES validate this schema's closed-set
+ * fields -- see app/schemas.py::AboutMeDataIn's own doc comment.
+ */
+@Serializable
+data class AboutMeDataIn(
+    val fitnessRoutine: String? = null,
+    val sleepSchedule: String? = null,
+    val pets: String? = null,
+    val socialEnergy: String? = null,
+    val aboutPrompts: List<AboutMePromptEntry> = emptyList(),
+    val partnerQualities: List<String> = emptyList(),
+    val whatMattersMost: String? = null,
+    val careerAfterMarriage: String? = null,
+    val livingArrangement: String? = null,
+    val openToRelocation: String? = null,
+    val favoriteCuisine: String? = null,
+    val dreamDestination: String? = null,
+    val loveLanguage: String? = null,
+)
+
+@Serializable
+data class AboutMeDataOut(
+    val primaryId: String,
+    val fitnessRoutine: String? = null,
+    val sleepSchedule: String? = null,
+    val pets: String? = null,
+    val socialEnergy: String? = null,
+    val aboutPrompts: List<AboutMePromptEntry> = emptyList(),
+    val partnerQualities: List<String> = emptyList(),
+    val whatMattersMost: String? = null,
+    val careerAfterMarriage: String? = null,
+    val livingArrangement: String? = null,
+    val openToRelocation: String? = null,
+    val favoriteCuisine: String? = null,
+    val dreamDestination: String? = null,
+    val loveLanguage: String? = null,
     val updatedAt: String? = null,
 )
 

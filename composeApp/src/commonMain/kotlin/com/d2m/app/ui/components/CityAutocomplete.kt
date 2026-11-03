@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.d2m.app.data.network.CitySuggestion
 import com.d2m.app.data.network.GeocodingApi
+import com.d2m.app.ui.strings.LocalStrings
 import kotlinx.coroutines.delay
 
 /**
@@ -40,7 +39,7 @@ fun CityAutocomplete(
     onSelect: (CitySuggestion) -> Unit,
     onRawTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Start typing a city…",
+    placeholder: String = LocalStrings.current.sharedComponents.startTypingACity,
 ) {
     var query by remember(value) { mutableStateOf(value) }
     var results by remember { mutableStateOf<List<CitySuggestion>>(emptyList()) }
@@ -70,8 +69,10 @@ fun CityAutocomplete(
         )
         if (expanded) {
             Card(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                LazyColumn {
-                    items(results) { r ->
+                // A plain Column, not LazyColumn: these screens scroll vertically themselves, and a LazyColumn nested
+                // in them is measured with infinite height and crashes the app as soon as suggestions load.
+                Column {
+                    results.forEach { r ->
                         DropdownMenuItem(
                             text = { Text(r.label) },
                             onClick = {

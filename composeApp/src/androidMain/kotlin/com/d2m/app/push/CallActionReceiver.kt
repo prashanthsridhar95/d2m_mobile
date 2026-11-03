@@ -8,6 +8,7 @@ import com.d2m.app.messaging.call.CallManager
 import org.koin.core.context.GlobalContext
 
 const val ACTION_ACCEPT_CALL = "com.d2m.app.action.ACCEPT_CALL"
+const val ACTION_HANGUP_CALL = "com.d2m.app.action.HANGUP_CALL"
 const val ACTION_DECLINE_CALL = "com.d2m.app.action.DECLINE_CALL"
 const val EXTRA_CALL_ID = "call_id"
 const val EXTRA_NOTIFICATION_ID = "notification_id"
@@ -45,6 +46,8 @@ class CallActionReceiver : BroadcastReceiver() {
 
         if (intent.action == ACTION_DECLINE_CALL) {
             callManager.decline() // synchronous (fires its own coroutine internally) -- see CallManager.decline().
+        } else if (intent.action == ACTION_HANGUP_CALL) {
+            callManager.hangup()
         }
     }
 }

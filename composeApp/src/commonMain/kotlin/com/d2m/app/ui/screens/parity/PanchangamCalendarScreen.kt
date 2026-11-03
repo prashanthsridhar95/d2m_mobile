@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +26,10 @@ import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.PanchangamRepository
 import com.d2m.app.ui.components.D2MErrorBanner
+import com.d2m.app.ui.components.D2MCard
+import com.d2m.app.ui.components.SubHeading
+import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
 import com.d2m.app.ui.theme.mutedText
@@ -43,6 +46,7 @@ fun PanchangamCalendarScreen() {
     val identityStore: IdentityStore = koinInject()
     val panchangamRepo: PanchangamRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val strings = LocalStrings.current.parity
 
     var month by remember { mutableStateOf<PanchangamMonthOut?>(null) }
     var selectedDay by remember { mutableStateOf<PanchangamDayOut?>(null) }
@@ -56,24 +60,24 @@ fun PanchangamCalendarScreen() {
             month = panchangamRepo.getMonth(primaryId)
             selectedDay = panchangamRepo.getDay(primaryId)
         } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load the panchangam.")
+            error = friendlyError(e, strings.errLoadPanchangam)
         }
     }
 
     D2MTheme(flow = D2MFlow.PARENT) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Panchangam", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            PageTitle(strings.panchangamTitle)
 
             error?.let { D2MErrorBanner(it, modifier = Modifier.padding(top = 12.dp)) }
 
             selectedDay?.let { day ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                D2MCard(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(day.date, fontWeight = FontWeight.Bold)
-                        Text("Tithi: ${day.tithi.name}  ·  Nakshatra: ${day.nakshatra.name}", color = mutedText(0.55f))
-                        Text("Yoga: ${day.yoga.name}  ·  Karana: ${day.karana.name}", color = mutedText(0.55f))
+                        SubHeading(day.date)
+                        Text("${strings.tithiLabel}: ${day.tithi.name}  ·  ${strings.nakshatraLabel}: ${day.nakshatra.name}", color = mutedText(0.55f))
+                        Text("${strings.yogaLabel}: ${day.yoga.name}  ·  ${strings.karanaLabel}: ${day.karana.name}", color = mutedText(0.55f))
                         Text(
-                            "Rahu Kalam: ${day.rahuKalam.start} – ${day.rahuKalam.end}",
+                            "${strings.rahuKalamLabel}: ${day.rahuKalam.start} – ${day.rahuKalam.end}",
                             color = mutedText(0.45f),
                             style = MaterialTheme.typography.labelMedium,
                         )
@@ -84,7 +88,7 @@ fun PanchangamCalendarScreen() {
             month?.let { m ->
                 LazyVerticalGrid(columns = GridCells.Fixed(7), verticalArrangement = Arrangement.spacedBy(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(m.days) { d ->
-                        Card {
+                        D2MCard {
                             Column(modifier = Modifier.padding(6.dp)) {
                                 Text(d.date.takeLast(2), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                                 if (d.isChandrashtamam) Text("⚠", style = MaterialTheme.typography.labelSmall)

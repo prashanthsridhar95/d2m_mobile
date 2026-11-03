@@ -73,5 +73,13 @@ interface ArchivePrimitives {
 
 data class EcKeyPair(val privateKeyPkcs8: ByteArray, val publicKeyRawPoint: ByteArray)
 
-/** Platform factory -- see AppModule.kt for wiring. Android-only for now, same precedent as messaging.crypto.signal.CryptoPrimitives (no iOS actual exists yet). */
+/**
+ * Platform factory -- see AppModule.kt for wiring. Implemented on BOTH
+ * platforms: `java.security`/`javax.crypto` on Android,
+ * CommonCrypto + the shared `P256.kt`/`AesGcm.kt` on iOS (Kotlin/Native's
+ * CommonCrypto bindings expose no GCM mode, and Security framework cannot
+ * build an EC private key from the bare scalar Android's PKCS#8 carries --
+ * see those files' doc comments). `ArchiveInteropAndroidTest.kt` pins the
+ * shared halves against Android's own stack.
+ */
 expect fun createArchivePrimitives(): ArchivePrimitives
