@@ -42,27 +42,50 @@ interface CryptoProvider {
     /** True only for a real, reviewed implementation -- MessagingRepository surfaces this in UI so a stub build can warn users visibly rather than silently. */
     val isProductionGrade: Boolean
 
-    suspend fun ensureIdentity(username: String)
-
-    /** Encrypts `plaintext` for `toUsername`, returning (ciphertextType, base64 body) to place in a MessageEnvelope. */
-    suspend fun encrypt(toUsername: String, plaintext: String): Pair<String, String>
-
-    /** Decrypts a MessageEnvelope.body from `fromUsername` back to plaintext. */
-    suspend fun decrypt(fromUsername: String, ciphertextType: String, body: String): String
+    /**
+     * This install's device id on the account (server-assigned, see [ensureIdentity]); null until the device has
+     * registered. Every Signal session is addressed by `(username, deviceId)` -- see messaging-framework/docs/MULTI_DEVICE.md.
+     */
+    val deviceId: Int?
 
     /**
-     * Forgets the local session with `peerUsername` so the next [encrypt] call
-     * re-establishes fresh (a new X3DH handshake against a newly-fetched
-     * bundle). Mirrors d2m_web's `crypto.resetPeer` -- MessagingRepository
-     * calls this both when ITS OWN decrypt fails (our side is desynced too,
-     * not just the peer's) and when a peer's `session.reset` request arrives
-     * (they couldn't decrypt us). Skipping this step was a real bug: without
-     * it, "reset" only re-sent undelivered messages over the SAME stale
-     * session, which the other side -- having genuinely reset -- still
-     * couldn't decrypt, producing a reset loop instead of actually
-     * recovering.
+     * Makes sure this install is a registered device of `username`'s account with published keys (the web's
+     * `ensureDevice`): a fresh install registers a device and publishes its bundle; a pre-multi-device identity becomes
+     * device 1 if the server still holds exactly that identity there (else a new device keeping the identity); a device
+     * the server no longer knows registers again; an empty prekey pool is topped up. Idempotent and safe to call
+     * concurrently (after the first success it is a no-op unless [force], which re-checks with the server). Throws if it could not register/publish.
      */
-    suspend fun resetSession(peerUsername: String)
+    suspend fun ensureIdentity(username: String, force: Boolean = false)
+
+    /** The devices of `username` that can receive messages (our own account included). Consumes nothing. */
+    suspend fun listDevices(username: String): List<Int>
+
+    /** Encrypts `plaintext` for one device of `toUsername`, returning (ciphertextType, base64 body) to place in a MessageEnvelope. */
+    suspend fun encrypt(toUsername: String, toDevice: Int, plaintext: String): Pair<String, String>
+
+    /** Decrypts a MessageEnvelope.body that `fromUsername`'s device `fromDevice` sent us back to plaintext. */
+    suspend fun decrypt(fromUsername: String, fromDevice: Int, ciphertextType: String, body: String): String
+
+    /**
+     * Forgets the local session with ONE device of `peerUsername` so the next [encrypt] to it re-establishes fresh (a
+     * new X3DH handshake against a newly-fetched bundle); the peer's other devices keep their sessions. Mirrors
+     * d2m_web's `crypto.resetPeer` -- MessagingRepository calls this both when ITS OWN decrypt fails (our side is
+     * desynced too, not just the peer's) and when a peer's `session.reset` request arrives (they couldn't decrypt us).
+     * Skipping this step was a real bug: without it, "reset" only re-sent undelivered messages over the SAME stale
+     * session, which the other side -- having genuinely reset -- still couldn't decrypt, producing a reset loop
+     * instead of actually recovering.
+     */
+    suspend fun resetSession(peerUsername: String, peerDevice: Int)
+
+    /** Forgets the sessions with EVERY device of `peerUsername` (a legacy `session.reset` that names no device). */
+    suspend fun resetAllSessions(peerUsername: String)
+
+    /**
+     * Logout: removes this device from the account on the server (bounded by [timeoutMs], best effort) and, ONLY if the
+     * server confirmed, wipes the local identity and sessions. Returns whether the device was deregistered. If it
+     * returns false the device stays registered and a later sign-in reuses it.
+     */
+    suspend fun deregisterDevice(username: String, timeoutMs: Long = 2_500): Boolean
 }
 
 /**
@@ -72,22 +95,29 @@ interface CryptoProvider {
  */
 class StubUnencryptedCryptoProvider : CryptoProvider {
     override val isProductionGrade: Boolean = false
+    override val deviceId: Int? = 1
 
-    override suspend fun ensureIdentity(username: String) {
+    override suspend fun ensureIdentity(username: String, force: Boolean) {
         // No key material to generate -- nothing to do for the stub.
     }
 
-    override suspend fun encrypt(toUsername: String, plaintext: String): Pair<String, String> {
+    override suspend fun listDevices(username: String): List<Int> = listOf(1)
+
+    override suspend fun encrypt(toUsername: String, toDevice: Int, plaintext: String): Pair<String, String> {
         val encoded = plaintext.encodeToByteArray().base64Encode()
         return "stub" to encoded
     }
 
-    override suspend fun decrypt(fromUsername: String, ciphertextType: String, body: String): String =
+    override suspend fun decrypt(fromUsername: String, fromDevice: Int, ciphertextType: String, body: String): String =
         body.base64Decode().decodeToString()
 
-    override suspend fun resetSession(peerUsername: String) {
+    override suspend fun resetSession(peerUsername: String, peerDevice: Int) {
         // No session state exists for the stub -- nothing to forget.
     }
+
+    override suspend fun resetAllSessions(peerUsername: String) {}
+
+    override suspend fun deregisterDevice(username: String, timeoutMs: Long): Boolean = true
 }
 
 // Minimal, dependency-free base64 -- avoids pulling in a platform-specific

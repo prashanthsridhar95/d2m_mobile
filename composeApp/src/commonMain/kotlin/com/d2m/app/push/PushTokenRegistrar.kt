@@ -2,6 +2,8 @@ package com.d2m.app.push
 
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.NotificationsRepository
+import com.d2m.app.messaging.crypto.CryptoProvider
+import kotlinx.coroutines.delay
 
 /**
  * Client-side half of push (plan §7/§8 Phase 3): registers whatever
@@ -26,11 +28,34 @@ import com.d2m.app.domain.repository.NotificationsRepository
 class PushTokenRegistrar(
     private val notificationsRepo: NotificationsRepository,
     private val identityStore: IdentityStore,
+    private val cryptoProvider: CryptoProvider,
 ) {
+    /**
+     * Registers the token bound to this install's messaging device (`device_id`), so core pushes a message's ciphertext only
+     * to the device whose Signal session can decrypt it (see d2m_core_engine docs/INTERNAL_CONTRACT.md, "Multi-device").
+     * The device id only exists once messaging has registered the device, which can lag the token callback at app start, so
+     * this waits (bounded) for it; if it never appears the token is registered unbound, exactly as before multi-device
+     * (core then also sends it pushes meant for other devices -- MessagingRepository refuses to decrypt those).
+     *
+     * (Messaging derives the account from `primaryId ?: sponsorId`, this from `sponsorId ?: primaryId`. IdentityStore.setParent /
+     * setChild clear the other id, so only one is ever set and both resolve to the same account.)
+     */
     suspend fun registerCurrentToken(platform: String, token: String) {
         val identity = identityStore.identity.value
         val accountId = identity.sponsorId ?: identity.primaryId ?: return
-        runCatching { notificationsRepo.registerDeviceToken(accountId, platform, token) }
+        var deviceId = cryptoProvider.deviceId
+        var waitedMs = 0L
+        while (deviceId == null && waitedMs < DEVICE_WAIT_MS) {
+            delay(DEVICE_POLL_MS)
+            waitedMs += DEVICE_POLL_MS
+            deviceId = cryptoProvider.deviceId
+        }
+        runCatching { notificationsRepo.registerDeviceToken(accountId, platform, token, deviceId) }
+    }
+
+    private companion object {
+        const val DEVICE_WAIT_MS = 30_000L
+        const val DEVICE_POLL_MS = 500L
     }
 }
 

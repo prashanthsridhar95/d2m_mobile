@@ -103,6 +103,7 @@ fun SettingsScreen(
     onOpenProfilePreview: (String) -> Unit,
 ) {
     val identityStore: IdentityStore = koinInject()
+    val messagingRepo: com.d2m.app.messaging.MessagingRepository = koinInject()
     val notificationsRepo: NotificationsRepository = koinInject()
     val identityRepo: IdentityRepository = koinInject()
     val trustRepo: TrustRepository = koinInject()
@@ -282,8 +283,13 @@ fun SettingsScreen(
                     TextButton(onClick = {
                         logoutConfirm = false
                         haptics.medium()
-                        identityStore.clear()
-                        onLogout()
+                        // Deregister THIS chat device first (bounded, best effort; needs the session token that
+                        // identityStore.clear() is about to drop). Other devices of the account are unaffected.
+                        scope.launch {
+                            runCatching { messagingRepo.deregisterThisDevice() }
+                            identityStore.clear()
+                            onLogout()
+                        }
                     }) { Text(strings.logOut, color = com.d2m.app.ui.theme.LocalD2MStatusPalette.current.danger.fg) }
                 },
                 dismissButton = { TextButton(onClick = { logoutConfirm = false }) { Text(strings.cancel) } },

@@ -30,6 +30,11 @@ import kotlin.time.Clock
  * follow-up rather than faked here; the plain 1500ms retry loop still
  * reconnects on its own within a couple seconds either way.
  */
+/** WebSocket close: the device id on the upgrade is not registered (anymore). */
+const val WS_CLOSE_UNKNOWN_DEVICE = 4004
+/** WebSocket close: this device was removed from the account or evicted by the per-account device cap. */
+const val WS_CLOSE_DEVICE_REMOVED = 4005
+
 class MessagingWsClient {
     private var session: io.ktor.client.plugins.websocket.DefaultClientWebSocketSession? = null
     private var job: Job? = null
@@ -45,6 +50,14 @@ class MessagingWsClient {
     var onOpen: () -> Unit = {}
 
     /**
+     * The server closed the socket with a code that reconnecting can never fix (see [WS_CLOSE_UNKNOWN_DEVICE],
+     * [WS_CLOSE_DEVICE_REMOVED]). The reconnect loop has stopped; the owner shows a message and decides what to do. There is
+     * deliberately NO automatic re-register here: devices evicting each other in a loop is worse than one stuck device.
+     */
+    var onTerminalClose: (code: Int) -> Unit = {}
+    private var halted = false
+
+    /**
      * True only while an actual session is live. [send] silently no-ops
      * (never throws) when this is false -- see that function's doc comment
      * for why that used to be invisible ("messages not sent... totally
@@ -56,14 +69,19 @@ class MessagingWsClient {
     private val _isConnected = kotlinx.coroutines.flow.MutableStateFlow(false)
     val isConnected: kotlinx.coroutines.flow.StateFlow<Boolean> = _isConnected
 
-    fun connect(wsBaseUrl: String, username: String, client: HttpClient) {
+    /**
+     * [deviceId] says which of the account's devices this socket is (sent as `?device=` on the upgrade, which the server
+     * accepts like the auth frame's `deviceId`); null = legacy device 1.
+     */
+    fun connect(wsBaseUrl: String, username: String, client: HttpClient, deviceId: Int? = null) {
         closedByUs = false
+        halted = false
         if (job?.isActive == true) return
 
         job = scope.launch {
-            while (isActive && !closedByUs) {
+            while (isActive && !closedByUs && !halted) {
                 try {
-                    val url = "$wsBaseUrl/ws?user=${encodeQueryParam(username)}"
+                    val url = "$wsBaseUrl/ws?user=${encodeQueryParam(username)}" + if (deviceId != null) "&device=$deviceId" else ""
                     println("MessagingWsClient: connecting to $url")
                     // The whole live session runs in its own child job so
                     // reconnectNow()/the liveness watchdog can tear down a
@@ -111,7 +129,14 @@ class MessagingWsClient {
                                     }
                                 }
                             }
-                            println("MessagingWsClient: socket closed, will reconnect")
+                            val closeCode = runCatching { s.closeReason.await()?.code?.toInt() }.getOrNull()
+                            if (closeCode == WS_CLOSE_UNKNOWN_DEVICE || closeCode == WS_CLOSE_DEVICE_REMOVED) {
+                                println("MessagingWsClient: server closed the socket with terminal code $closeCode, not reconnecting")
+                                halted = true
+                                onTerminalClose(closeCode)
+                            } else {
+                                println("MessagingWsClient: socket closed (code=$closeCode), will reconnect")
+                            }
                         } catch (e: ClosedReceiveChannelException) {
                             println("MessagingWsClient: socket closed (${e.message ?: "normal close"}), will reconnect")
                         } finally {
@@ -127,7 +152,7 @@ class MessagingWsClient {
                 session = null
                 currentSessionJob = null
                 _isConnected.value = false
-                if (closedByUs) break
+                if (closedByUs || halted) break
                 if (skipNextDelay) skipNextDelay = false else delay(1_500)
             }
             println("MessagingWsClient: reconnect loop exited (closedByUs=$closedByUs)")
@@ -142,7 +167,7 @@ class MessagingWsClient {
      * session exists yet (the connect loop is already retrying).
      */
     fun reconnectNow() {
-        if (closedByUs || job?.isActive != true) return
+        if (closedByUs || halted || job?.isActive != true) return
         println("MessagingWsClient: reconnectNow()")
         skipNextDelay = true
         currentSessionJob?.cancel()

@@ -414,6 +414,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                 ) else emptyList(),
                                 size = if (identity.role == D2MRole.CHILD) CompatibilityCardSize.Small else CompatibilityCardSize.Large,
                                 modifier = Modifier.fillMaxWidth(),
+                                score = if (!isSelf) c.compositeScore else null,
                             )
 
                             val badges = trustSummary?.badgeExplanations?.takeIf { it.isNotEmpty() }

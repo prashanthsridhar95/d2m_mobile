@@ -1,6 +1,33 @@
 package com.d2m.app.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import kotlin.math.PI
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -10,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -59,6 +87,26 @@ fun overallRating(compositeScore: Double): String = when {
     compositeScore >= HIGH_CUTOFF -> "High"
     compositeScore >= MEDIUM_CUTOFF -> "Medium"
     else -> "Low"
+}
+
+/**
+ * Child-facing, Hinge-style readout of the composite score (mirror of d2m_web's compatibilityTier): a friendly message
+ * per percentage tier instead of a level word. [level] maps the tier onto the existing level colours.
+ */
+data class CompatibilityTier(val key: String, val level: String, val emoji: String)
+
+private val EXCELLENT = CompatibilityTier("excellent", "Exceptional", "❤️")
+private val VERY_GOOD = CompatibilityTier("very_good", "High", "✨")
+private val GOOD = CompatibilityTier("good", "High", "😉")
+private val MODERATE = CompatibilityTier("moderate", "Medium", "😊")
+private val UNEXPECTED = CompatibilityTier("unexpected", "Low", "🌟")
+
+fun compatibilityTier(score: Double): CompatibilityTier = when {
+    score >= 90.0 -> EXCELLENT
+    score >= 75.0 -> VERY_GOOD
+    score >= 60.0 -> GOOD
+    score >= 40.0 -> MODERATE
+    else -> UNEXPECTED
 }
 
 /** Maps levelForScore()/overallRating()'s internal English key (also what toneForLevel matches on) to its display label -- never shown directly, since D2MLevelPill/CompatibilityCard are the only render sites for a `level` string. */
@@ -145,12 +193,19 @@ fun CompatibilityCard(
     breakdown: List<Pair<String, String?>> = emptyList(),
     size: CompatibilityCardSize = CompatibilityCardSize.Large,
     modifier: Modifier = Modifier,
+    /** Child view: the raw composite score. With [CompatibilityCardSize.Small] it switches the card to the tier message. */
+    score: Double? = null,
 ) {
     val strings = LocalStrings.current.sharedComponents
     if (level == null) {
         SectionCard(modifier = modifier) {
             Text(strings.notScoredYet, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
         }
+        return
+    }
+
+    if (size == CompatibilityCardSize.Small && score != null) {
+        CompatibilityTierCard(compatibilityTier(score), modifier)
         return
     }
 
@@ -221,3 +276,88 @@ fun CompatibilityCard(
         }
     }
 }
+
+/**
+ * The child's compatibility card: one self-contained surface (no title, no label, no score) -- an emoji badge that floats
+ * and pulses a halo in a loop, the tier's friendly message as the headline, and a bright segment that travels around the
+ * card's outline. All tinted from the tier's level colour. Mirror of web's `.dh-compat`.
+ */
+@Composable
+private fun CompatibilityTierCard(tier: CompatibilityTier, modifier: Modifier = Modifier) {
+    val strings = LocalStrings.current.sharedComponents
+    val accent = levelColor(tier.level)
+    val message = strings.tierMessage(tier.key)
+    val shape = RoundedCornerShape(CARD_RADIUS)
+    val transition = rememberInfiniteTransition(label = "compatTier")
+    val orbit by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 4500, easing = LinearEasing)),
+        label = "orbit",
+    )
+    val bob by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 3200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bob",
+    )
+    Row(
+        modifier = modifier
+            .semantics { contentDescription = "${strings.tierName(tier.key)}: $message" }
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.16f), Color.Transparent)))
+            .border(D2MStroke.hairline, accent.copy(alpha = 0.32f), shape)
+            .drawWithContent {
+                drawContent()
+                // The travelling segment: a dash as long as ~22% of the outline, the rest a gap, with the phase advancing.
+                val sw = 1.5.dp.toPx()
+                val w = size.width - sw
+                val h = size.height - sw
+                val r = CARD_RADIUS.toPx().coerceAtMost(minOf(w, h) / 2f)
+                val perimeter = 2f * (w + h) - (8f - 2f * PI.toFloat()) * r
+                val seg = perimeter * 0.22f
+                drawRoundRect(
+                    color = accent,
+                    topLeft = Offset(sw / 2f, sw / 2f),
+                    size = Size(w, h),
+                    cornerRadius = CornerRadius(r, r),
+                    style = Stroke(
+                        width = sw,
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(seg, perimeter - seg), phase = -orbit * perimeter),
+                    ),
+                )
+            }
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(54.dp)
+                .drawBehind {
+                    // Halo: breathes with the float.
+                    drawCircle(accent.copy(alpha = 0.08f + 0.06f * bob), radius = size.minDimension / 2f + (5.dp + 5.dp * bob).toPx())
+                }
+                .graphicsLayer {
+                    translationY = -3.dp.toPx() * bob
+                    scaleX = 1f + 0.06f * bob
+                    scaleY = 1f + 0.06f * bob
+                }
+                .clip(CircleShape)
+                .background(accent.copy(alpha = 0.18f))
+                .border(D2MStroke.hairline, accent.copy(alpha = 0.4f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(tier.emoji, fontSize = 26.sp)
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(
+            message,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp, lineHeight = 25.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Start,
+        )
+    }
+}
+
+private val CARD_RADIUS = 14.dp

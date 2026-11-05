@@ -15,6 +15,7 @@ import com.d2m.app.messaging.protocol.ReplyContext
 import com.d2m.app.messaging.protocol.ServerToClient
 import com.d2m.app.messaging.protocol.messagingProtocolJson
 import com.d2m.app.messaging.transport.MessagingWsClient
+import com.d2m.app.messaging.transport.WS_CLOSE_DEVICE_REMOVED
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -211,6 +212,24 @@ class MessagingRepository(
     private var started = false
     private var httpClient: HttpClient? = null
 
+    // ---- Multi-device (messaging-framework/docs/MULTI_DEVICE.md; reference: d2m_web useMessaging.js) ----
+    // Every device of an account has its own Signal identity and session, so a message to a peer is encrypted once per
+    // target device (see Fanout.kt). Device lists are cached briefly; a message from a device that isn't in the cached list
+    // (or a `device_gone` error) drops the cache so the next send refetches.
+    private val deviceCache = DeviceCache(30_000)
+
+    /** The devices of [user] that can receive messages. For our own account this includes THIS device. */
+    private suspend fun devicesOf(user: String): List<Int> {
+        deviceCache.get(user)?.let { return it }
+        val list = cryptoProvider.listDevices(user)
+        deviceCache.set(user, list)
+        return list
+    }
+
+    // Set once the server closed the socket for a device-level reason (4004/4005); the next start() re-checks the device
+    // registration with the server instead of trusting the cached one.
+    private var reverifyDevice = false
+
     // Second, in-memory-only dedup layer for decryptAndPersistIncoming --
     // see that function's doc comment. The disk-backed _messagesByPeer check
     // there only protects Text/Media (the only payload types appendMessage
@@ -239,11 +258,15 @@ class MessagingRepository(
         true
     }
 
+    private suspend fun releaseEnvelopeClaim(id: String) {
+        processedEnvelopeIdsMutex.withLock { processedEnvelopeIds.remove(id) }
+    }
+
     /** Registered by call/CallManager.kt at DI-construction time -- routes incoming ChatPayload.Call signals here instead of into chat history. */
-    var callSignalHandler: (suspend (fromUsername: String, signal: CallSignal) -> Unit)? = null
+    var callSignalHandler: (suspend (fromUsername: String, signal: CallSignal, fromDevice: Int?) -> Unit)? = null
 
     /** Also registered by call/CallManager.kt -- lets a mid-ring invite that was lost to a session desync be resent once the peer's session.reset round-trip completes (mirrors resendInvite in useMessaging.js). Kept as a separate callback rather than a direct CallManager reference to avoid a dependency cycle (CallManager already depends on this repository). */
-    var sessionResetHandler: ((fromUsername: String) -> Unit)? = null
+    var sessionResetHandler: ((fromUsername: String, fromDevice: Int?) -> Unit)? = null
 
     val isProductionGradeEncryption: Boolean get() = cryptoProvider.isProductionGrade
     val unreadByPeer: StateFlow<Map<String, Int>> get() = _unreadByPeer.asStateFlow()
@@ -426,8 +449,20 @@ class MessagingRepository(
             runCatching { _messagesByPeer.value = localStore.loadAll(myUsername!!) }
                 .onFailure { e -> println("MessagingRepository.start: local chat hydration failed (non-fatal): ${e.message ?: e::class.simpleName}") }
 
-            cryptoProvider.ensureIdentity(myUsername!!)
+            cryptoProvider.ensureIdentity(myUsername!!, force = reverifyDevice)
+            reverifyDevice = false
 
+            wsClient.onTerminalClose = { code ->
+                // The server refuses this device for good (unknown / removed / evicted): reconnecting cannot help, and
+                // silently re-registering would let devices evict each other in a loop. Say so; the retry action re-runs start().
+                started = false
+                reverifyDevice = true
+                _startupError.value = if (code == WS_CLOSE_DEVICE_REMOVED) {
+                    "This device was signed out of chat because your account has too many devices."
+                } else {
+                    "This device is no longer registered for chat."
+                }
+            }
             wsClient.onEvent = { event -> handleEvent(event) }
             wsClient.onOpen = {
                 for (peer in subscribedPeers) scope.launch { wsClient.send(ClientToServer.PresenceSubscribe(peer)) }
@@ -451,7 +486,7 @@ class MessagingRepository(
                     }
                 }
             }
-            wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient)
+            wsClient.connect(MessagingConfig.wsBaseUrl, myUsername!!, httpClient, cryptoProvider.deviceId)
             started = true
             _startupError.value = null
             println("MessagingRepository.start: identity ready, socket connect initiated for $myUsername (see MessagingWsClient logs for actual connect result)")
@@ -487,6 +522,25 @@ class MessagingRepository(
         started = false
     }
 
+    /**
+     * Logout: closes the socket, then removes THIS device from the account on the server (bounded, best effort) so peers
+     * stop encrypting a copy for it, and wipes the local identity/sessions only if the server confirmed. Must run BEFORE the
+     * session token is cleared. Returns whether the device was deregistered; on false it stays registered and a later
+     * sign-in reuses it. Other devices of the account are unaffected either way.
+     */
+    suspend fun deregisterThisDevice(): Boolean {
+        val identity = identityStore.identity.value
+        val myId = identity.primaryId ?: identity.sponsorId
+        val username = myUsername ?: myId?.let { d2mIdToMessagingUsername(it) }
+        stop()
+        deviceCache.invalidate()
+        myUsername = null
+        if (username == null) return false
+        return runCatching { cryptoProvider.deregisterDevice(username) }
+            .onFailure { e -> println("MessagingRepository.deregisterThisDevice: ${e.message ?: e::class.simpleName}") }
+            .getOrDefault(false)
+    }
+
     /** Marks `peerD2mId` as the open conversation: clears its unread badge and enables auto-read-receipts for future arrivals (mirrors useMessaging.js's setActivePeer). Pass null when leaving the chat screen entirely. */
     fun setActivePeer(peerD2mId: String?) {
         val peer = peerD2mId?.let { d2mIdToMessagingUsername(it) }
@@ -516,13 +570,58 @@ class MessagingRepository(
         sendTextInternal(id, me, peerUsername, t, replyTo)
     }
 
+    /**
+     * Encrypts [payloadJson] once per target device and sends one envelope per copy, all sharing [id]: every device of
+     * [peer], plus (unless [includeSelf] is false) every OTHER device of our own account, so the conversation looks the same
+     * on all of our devices. A sync copy carries the conversation's `peer` inside its encrypted payload so the receiving
+     * device files it correctly. The archive rides the first PEER copy only. [only] restricts the targets to specific
+     * `(user, device)` pairs (a resend after one device lost its session). Returns true if at least one copy for the PEER was
+     * handed to the socket; throws only for things that make the whole send impossible (no device registered, peer unknown).
+     */
+    private suspend fun sendToTargets(
+        id: String,
+        peer: String,
+        payloadJson: String,
+        sentAt: Long = Clock.System.now().toEpochMilliseconds(),
+        withArchive: Boolean = true,
+        includeSelf: Boolean = true,
+        only: Set<Pair<String, Int>>? = null,
+    ): Boolean {
+        val me = myUsername ?: return false
+        val myDevice = cryptoProvider.deviceId ?: error("this device isn't registered for chat yet")
+        val peerDevices = devicesOf(peer)
+        val selfDevices = if (includeSelf) devicesOf(me) else emptyList()
+        var targets = fanoutTargets(me, myDevice, peer, peerDevices, selfDevices, includeSelf)
+        if (only != null) targets = targets.filter { (it.user to it.device) in only }
+        if (targets.none { !it.self }) {
+            if (only == null) error("That person hasn't connected to the messaging server yet")
+            return false
+        }
+        val archiveField = if (withArchive) archiveManager.buildArchiveField(peer, payloadJson) else null
+        val carrier = if (archiveField != null) archiveTarget(targets) else null
+        var sentToPeer = false
+        for (t in targets) {
+            try {
+                val text = if (t.self) addPeerToPayload(payloadJson, peer) else payloadJson
+                val (ciphertextType, body) = cryptoProvider.encrypt(t.user, t.device, text)
+                val envelope = MessageEnvelope(
+                    id = id, from = me, to = t.user, ciphertextType = ciphertextType, body = body, sentAt = sentAt,
+                    archive = if (carrier != null && t.user == carrier.user && t.device == carrier.device) archiveField else null,
+                    toDevice = t.device,
+                )
+                if (wsClient.send(ClientToServer.MessageSend(envelope)) && !t.self) sentToPeer = true
+            } catch (e: Throwable) {
+                println("MessagingRepository.sendToTargets: couldn't send $id to ${addrKey(t.user, t.device)}: ${e.message ?: e::class.simpleName}")
+            }
+        }
+        return sentToPeer
+    }
+
     private suspend fun sendTextInternal(id: String, me: String, peerUsername: String, t: String, replyTo: ReplyContext?) {
         try {
             val payload = ChatPayload.Text(t, replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
+            val sent = sendToTargets(id, peerUsername, payloadJson)
             // wsClient.send() silently no-ops (never throws) if the socket
             // isn't connected -- without this check the message would sit at
             // SENDING forever with nothing to explain why (this was the
@@ -592,9 +691,7 @@ class MessagingRepository(
 
             val payload = ChatPayload.Media(media, replyTo = replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(id, me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
+            val sent = sendToTargets(id, peerUsername, payloadJson)
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.sendMedia: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -616,9 +713,7 @@ class MessagingRepository(
         try {
             val payload = ChatPayload.Edit(messageId, t)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
+            val sent = sendToTargets(Uuid.random().toString(), peerUsername, payloadJson)
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.editMessage: failed to send edit for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -641,9 +736,7 @@ class MessagingRepository(
         try {
             val payload = ChatPayload.Delete(messageId)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
+            val sent = sendToTargets(Uuid.random().toString(), peerUsername, payloadJson)
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.deleteForEveryone: failed to send delete for $messageId to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -679,9 +772,7 @@ class MessagingRepository(
         try {
             val payload = ChatPayload.Reaction(message.id, emoji, action)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val archiveField = archiveManager.buildArchiveField(peerUsername, payloadJson)
-            val sent = wsClient.send(ClientToServer.MessageSend(MessageEnvelope(Uuid.random().toString(), me, peerUsername, ciphertextType, body, Clock.System.now().toEpochMilliseconds(), archive = archiveField)))
+            val sent = sendToTargets(Uuid.random().toString(), peerUsername, payloadJson)
             if (!sent) error("not connected to the server")
         } catch (e: Throwable) {
             println("MessagingRepository.toggleReaction: failed to send $emoji ($action) for ${message.id} to $peerUsername: ${e.message ?: e::class.simpleName}")
@@ -715,23 +806,45 @@ class MessagingRepository(
      * accepting one) check this return value explicitly instead.
      */
     @OptIn(ExperimentalUuidApi::class)
-    suspend fun sendCallSignal(peerUsername: String, signal: CallSignal): Boolean {
+    suspend fun sendCallSignal(
+        peerUsername: String,
+        signal: CallSignal,
+        device: Int? = null,
+        exceptDevice: Int? = null,
+        onTargets: ((count: Int) -> Unit)? = null,
+    ): Boolean {
         val me = myUsername ?: return false
         return try {
+            // `device` narrows the signal to ONE device of the peer (an established call talks to a single device);
+            // `exceptDevice` to all but one (telling the devices that did not answer to stop ringing); neither = every
+            // device of the peer (an invite rings them all). Each device gets its own copy, encrypted for its own session.
+            var devices = if (device != null) listOf(device) else devicesOf(peerUsername)
+            if (exceptDevice != null) devices = devices.filter { it != exceptDevice }
+            onTargets?.invoke(devices.size)
             val payload = ChatPayload.Call(signal)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, payloadJson)
-            val envelope = MessageEnvelope(
-                id = Uuid.random().toString(),
-                from = me,
-                to = peerUsername,
-                ciphertextType = ciphertextType,
-                body = body,
-                sentAt = Clock.System.now().toEpochMilliseconds(),
-                ephemeral = true,
-                callInvite = signal is CallSignal.Invite,
-            )
-            wsClient.send(ClientToServer.MessageSend(envelope))
+            var sentAny = false
+            for (d in devices) {
+                try {
+                    val (ciphertextType, body) = cryptoProvider.encrypt(peerUsername, d, payloadJson)
+                    val envelope = MessageEnvelope(
+                        id = Uuid.random().toString(),
+                        from = me,
+                        to = peerUsername,
+                        ciphertextType = ciphertextType,
+                        body = body,
+                        sentAt = Clock.System.now().toEpochMilliseconds(),
+                        ephemeral = true,
+                        callInvite = signal is CallSignal.Invite,
+                        callCancel = signal is CallSignal.Hangup || signal is CallSignal.Decline,
+                        toDevice = d,
+                    )
+                    if (wsClient.send(ClientToServer.MessageSend(envelope))) sentAny = true
+                } catch (e: Throwable) {
+                    println("MessagingRepository.sendCallSignal: failed to send ${signal::class.simpleName} to ${addrKey(peerUsername, d)}: $e")
+                }
+            }
+            sentAny
         } catch (e: Throwable) {
             println("MessagingRepository.sendCallSignal: failed to send ${signal::class.simpleName} to $peerUsername: $e")
             false
@@ -780,6 +893,11 @@ class MessagingRepository(
                 }
             }
             is ServerToClient.PresenceUpdate -> _presenceByUser.update { it + (event.user to event.online) }
+            is ServerToClient.Error -> {
+                // A target device no longer exists (removed/evicted): our cached device list is stale.
+                if (event.code == "device_gone") deviceCache.invalidate()
+                println("MessagingRepository.handleEvent: server error code=${event.code} messageId=${event.messageId}: ${event.message}")
+            }
             is ServerToClient.SessionReset -> {
                 // Peer couldn't decrypt us -- forget our side of the session FIRST
                 // (mirrors useMessaging.js's `await crypto.resetPeer(ev.from)` before
@@ -788,12 +906,17 @@ class MessagingRepository(
                 // gave up on. Without this the resend was a no-op in practice: same
                 // stale session in, same stale session out, so the peer's next decrypt
                 // failed too and they'd send another session.reset right back.
-                println("MessagingRepository.handleEvent: SessionReset from ${event.from} – resetting our session and resending")
+                // A device-addressed reset (fromDevice) touches only that device's session; one without a device is a legacy
+                // reset and means every device.
+                println("MessagingRepository.handleEvent: SessionReset from ${event.from} device=${event.fromDevice} – resetting our session and resending")
                 scope.launch {
-                    runCatching { cryptoProvider.resetSession(event.from) }
-                    resendUndelivered(event.from)
+                    runCatching {
+                        if (event.fromDevice != null) cryptoProvider.resetSession(event.from, event.fromDevice) else cryptoProvider.resetAllSessions(event.from)
+                    }
+                    // Our own other device lost its session: our sync copies to it rebuild it on the next send; nothing to resend.
+                    if (event.from != myUsername) resendUndelivered(event.from, event.fromDevice)
                 }
-                sessionResetHandler?.invoke(event.from)
+                sessionResetHandler?.invoke(event.from, event.fromDevice)
             }
             is ServerToClient.ThreadUpdated -> _threadUpdatedEvents.tryEmit(event.from)
             else -> Unit
@@ -825,8 +948,10 @@ class MessagingRepository(
         val identity = identityStore.identity.value
         val myId = identity.primaryId ?: identity.sponsorId ?: return null
         val username = d2mIdToMessagingUsername(myId)
-        runCatching { cryptoProvider.ensureIdentity(username) }
+        // Not cached on failure: a later push gets another chance to register / look up this device.
+        val ensured = runCatching { cryptoProvider.ensureIdentity(username) }
             .onFailure { e -> println("MessagingRepository.ensurePassiveIdentity: ensureIdentity failed: ${e.message ?: e::class.simpleName}") }
+        if (ensured.isFailure) return null
         runCatching { _messagesByPeer.value = localStore.loadAll(username) }
             .onFailure { e -> println("MessagingRepository.ensurePassiveIdentity: local chat hydration failed: ${e.message ?: e::class.simpleName}") }
         myUsername = username
@@ -872,7 +997,24 @@ class MessagingRepository(
      * once ensureConnected() brings the socket up).
      */
     suspend fun decryptAndPersistIncoming(envelope: MessageEnvelope): ChatPayload? {
-        if (_messagesByPeer.value[envelope.from]?.any { it.id == envelope.id } == true) {
+        // Which device of the sender this copy came from (1 for a server/client that predates multi-device). A copy from
+        // one of OUR OWN other devices is a sync copy of something we sent there.
+        val fromDevice = envelope.fromDevice ?: DEFAULT_DEVICE
+        val me = myUsername
+        val isSelfCopy = me != null && envelope.from == me
+        // A ciphertext is for ONE device's Signal session. A push (legacy tokens carry no device binding) can deliver
+        // another device's copy here; decrypting it would corrupt this device's ratchet, so leave it for its owner.
+        if (envelope.toDevice != null && envelope.toDevice != cryptoProvider.deviceId) {
+            println("MessagingRepository.decryptAndPersistIncoming: ${envelope.id} is for device ${envelope.toDevice}, this is device ${cryptoProvider.deviceId} – not decrypting")
+            return null
+        }
+        val alreadyHave = if (isSelfCopy) {
+            // A sync copy doesn't say which conversation it belongs to until it is decrypted: look everywhere.
+            _messagesByPeer.value.values.any { list -> list.any { it.id == envelope.id } }
+        } else {
+            _messagesByPeer.value[envelope.from]?.any { it.id == envelope.id } == true
+        }
+        if (alreadyHave) {
             println("MessagingRepository.decryptAndPersistIncoming: ${envelope.id} from ${envelope.from} already processed, skipping decrypt")
             return null
         }
@@ -880,8 +1022,10 @@ class MessagingRepository(
             println("MessagingRepository.decryptAndPersistIncoming: ${envelope.id} already claimed by a concurrent call, skipping decrypt")
             return null
         }
+        // A message from a device we hadn't listed: our cached device list is stale, refetch it on the next send.
+        deviceCache.noteSeen(envelope.from, fromDevice)
         val plaintext = runCatching {
-            cryptoProvider.decrypt(envelope.from, envelope.ciphertextType, envelope.body)
+            cryptoProvider.decrypt(envelope.from, fromDevice, envelope.ciphertextType, envelope.body)
         }.onFailure { e ->
             println("MessagingRepository.decryptAndPersistIncoming: decrypt failed for ${envelope.id} from ${envelope.from}: ${e.message ?: e::class.simpleName}")
         }.getOrNull()
@@ -895,9 +1039,13 @@ class MessagingRepository(
             // to decrypt, so their next decrypt failed too, and they'd send
             // another session.reset right back -- a reset loop that never
             // actually recovers instead of a real re-handshake.
-            println("MessagingRepository.decryptAndPersistIncoming: null plaintext for ${envelope.id}, resetting our session with ${envelope.from} and requesting they reset too")
-            runCatching { cryptoProvider.resetSession(envelope.from) }
-            wsClient.send(ClientToServer.SessionReset(envelope.from))
+            println("MessagingRepository.decryptAndPersistIncoming: null plaintext for ${envelope.id}, resetting our session with ${addrKey(envelope.from, fromDevice)} and requesting they reset too")
+            // Release the claim: the sender resends this same id over the rebuilt session, and that resend must not be
+            // dropped as "already claimed".
+            releaseEnvelopeClaim(envelope.id)
+            // Only THAT device's session is dropped -- the peer's other devices keep working.
+            runCatching { cryptoProvider.resetSession(envelope.from, fromDevice) }
+            wsClient.send(ClientToServer.SessionReset(envelope.from, toDevice = fromDevice))
             return null
         }
         val payload = runCatching {
@@ -907,30 +1055,51 @@ class MessagingRepository(
             null
         }
 
+        // The conversation this belongs to: the sender -- or, for a sync copy of something we sent from another of our
+        // devices, the peer named inside the payload.
+        val peer = if (isSelfCopy) peerFromPayload(plaintext) else envelope.from
+        if (peer == null) {
+            // A sync copy that doesn't say which conversation it is for: nothing to file it under, but clear it from the queue.
+            wsClient.send(ClientToServer.ReceiptDelivered(envelope.id, envelope.from))
+            return null
+        }
+
         when (payload) {
             is ChatPayload.Text -> {
-                appendMessage(envelope.from, ChatMessage(envelope.id, envelope.from, envelope.to, payload.text, envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, replyTo = payload.replyTo))
-                markUnreadOrChime(envelope.from, payload.text, envelope.id)
+                if (isSelfCopy) {
+                    // Our own message from another device: no unread badge, banner or chime.
+                    appendMessage(peer, ChatMessage(envelope.id, envelope.from, peer, payload.text, envelope.sentAt, isMine = true, status = MessageStatus.SENT, replyTo = payload.replyTo))
+                } else {
+                    appendMessage(peer, ChatMessage(envelope.id, envelope.from, envelope.to, payload.text, envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, replyTo = payload.replyTo))
+                    markUnreadOrChime(envelope.from, payload.text, envelope.id)
+                }
             }
             is ChatPayload.Media -> {
-                appendMessage(
-                    envelope.from,
-                    ChatMessage(envelope.id, envelope.from, envelope.to, payload.caption.orEmpty(), envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
-                )
-                markUnreadOrChime(envelope.from, payload.caption?.takeIf { it.isNotBlank() } ?: "Sent a photo", envelope.id)
+                if (isSelfCopy) {
+                    appendMessage(
+                        peer,
+                        ChatMessage(envelope.id, envelope.from, peer, payload.caption.orEmpty(), envelope.sentAt, isMine = true, status = MessageStatus.SENT, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
+                    )
+                } else {
+                    appendMessage(
+                        peer,
+                        ChatMessage(envelope.id, envelope.from, envelope.to, payload.caption.orEmpty(), envelope.sentAt, isMine = false, status = MessageStatus.DELIVERED, media = payload.media, mediaUrl = mediaUrl(payload.media.blobId), replyTo = payload.replyTo),
+                    )
+                    markUnreadOrChime(envelope.from, payload.caption?.takeIf { it.isNotBlank() } ?: "Sent a photo", envelope.id)
+                }
             }
             is ChatPayload.Edit -> updateMessage(payload.targetId) { it.copy(text = payload.text, edited = true) }
             is ChatPayload.Delete -> updateMessage(payload.targetId) { it.copy(deleted = true) }
             is ChatPayload.Reaction -> updateMessage(payload.targetId) { applyReaction(it, payload.emoji, envelope.from, payload.action) }
             is ChatPayload.Call -> {
                 val isStaleInvite = payload.call is CallSignal.Invite && (Clock.System.now().toEpochMilliseconds() - envelope.sentAt) > 60_000
-                if (!isStaleInvite) callSignalHandler?.invoke(envelope.from, payload.call)
+                if (!isStaleInvite && !isSelfCopy) callSignalHandler?.invoke(envelope.from, payload.call, fromDevice)
             }
             null -> Unit
         }
 
         wsClient.send(ClientToServer.ReceiptDelivered(envelope.id, envelope.from))
-        if ((payload is ChatPayload.Text || payload is ChatPayload.Media) && activePeer == envelope.from) {
+        if (!isSelfCopy && (payload is ChatPayload.Text || payload is ChatPayload.Media) && activePeer == envelope.from) {
             wsClient.send(ClientToServer.ReceiptRead(envelope.id, envelope.from))
         }
         return payload
@@ -956,14 +1125,26 @@ class MessagingRepository(
         }
     }
 
-    private suspend fun resendUndelivered(peerUsername: String) {
-        val me = myUsername ?: return
-        val pending = _messagesByPeer.value[peerUsername].orEmpty().filter { it.isMine && it.status == MessageStatus.SENDING }
+    /**
+     * Re-sends whatever [peerUsername] never acknowledged. [device] (from a per-device `session.reset`) limits it to that one
+     * device of the peer: the others already have their copies, and their ratchets must not be advanced for nothing. Without
+     * it (a reconnect, a legacy reset) every device gets a copy again.
+     */
+    private suspend fun resendUndelivered(peerUsername: String, device: Int? = null) {
+        val pending = _messagesByPeer.value[peerUsername].orEmpty().filter {
+            it.isMine && !it.uploading && (it.status == MessageStatus.SENDING || (device != null && it.status == MessageStatus.SENT))
+        }
         for (m in pending) {
             val payload: ChatPayload = if (m.media != null) ChatPayload.Media(m.media, m.text.takeIf { it.isNotBlank() }, m.replyTo) else ChatPayload.Text(m.text, m.replyTo)
             val payloadJson = messagingProtocolJson.encodeToString(ChatPayload.serializer(), payload)
-            val (ciphertextType, body) = runCatching { cryptoProvider.encrypt(peerUsername, payloadJson) }.getOrNull() ?: continue
-            wsClient.send(ClientToServer.MessageSend(MessageEnvelope(m.id, me, peerUsername, ciphertextType, body, m.sentAt)))
+            runCatching {
+                // sendToTargets (re)establishes a fresh session for the target first, exactly like a normal send.
+                sendToTargets(
+                    m.id, peerUsername, payloadJson, sentAt = m.sentAt, withArchive = false,
+                    includeSelf = device == null,
+                    only = device?.let { setOf(peerUsername to it) },
+                )
+            }.onFailure { e -> println("MessagingRepository.resendUndelivered: ${m.id} to $peerUsername failed: ${e.message ?: e::class.simpleName}") }
         }
     }
 

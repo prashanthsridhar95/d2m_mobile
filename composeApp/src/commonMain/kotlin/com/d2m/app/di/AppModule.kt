@@ -90,7 +90,7 @@ val appModule = module {
     // screen via koinInject().
     single { com.d2m.app.ui.components.StepUpController(get()) }
 
-    single { PushTokenRegistrar(get(), get()) }
+    single { PushTokenRegistrar(get(), get(), get()) }
     single { com.d2m.app.push.PlatformPushInitializer() }
 
     // Real Signal Protocol crypto on Android (messaging/crypto/signal/ --

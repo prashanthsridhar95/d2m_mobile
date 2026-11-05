@@ -259,6 +259,7 @@ fun ProfileCardContent(
                         ),
                         size = CompatibilityCardSize.Small,
                         modifier = Modifier.fillMaxWidth(),
+                        score = card.scores.compositeScore,
                     )
                     if (!isSelf && card.doshaFlags.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -27,6 +27,9 @@ interface SharedComponentsStrings {
     val overallCompatibility: String
     val notYetCompared: String
     val notScoredYet: String
+    /** Child-view compatibility tier ("excellent" | "very_good" | "good" | "moderate" | "unexpected"): short name, and the friendly line shown on the card. */
+    fun tierName(key: String): String
+    fun tierMessage(key: String): String
     val retry: String
     val nothingHereYet: String
     val clear: String
@@ -145,6 +148,20 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val overallCompatibility = "Overall compatibility"
     override val notYetCompared = "Not yet compared"
     override val notScoredYet = "This pairing hasn't been scored yet."
+    override fun tierName(key: String): String = when (key) {
+        "excellent" -> "Excellent"
+        "very_good" -> "Very good"
+        "good" -> "Good"
+        "moderate" -> "Moderate"
+        else -> "Unexpected"
+    }
+    override fun tierMessage(key: String): String = when (key) {
+        "excellent" -> "We think you two would hit it out of the park!"
+        "very_good" -> "We think you two would make a great match!"
+        "good" -> "We think you two would get along well!"
+        "moderate" -> "We think there's potential here. Why not see where it goes?"
+        else -> "We think this one's a little unexpected. But hey, surprises happen!"
+    }
     override val retry = "Retry"
     override val nothingHereYet = "Nothing here yet"
     override val clear = "Clear"
@@ -259,6 +276,20 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val overallCompatibility = "समग्र संगतता"
     override val notYetCompared = "अभी तुलना नहीं हुई"
     override val notScoredYet = "इस जोड़ी का अभी तक स्कोर नहीं किया गया है।"
+    override fun tierName(key: String): String = when (key) {
+        "excellent" -> "उत्कृष्ट"
+        "very_good" -> "बहुत अच्छा"
+        "good" -> "अच्छा"
+        "moderate" -> "मध्यम"
+        else -> "अनपेक्षित"
+    }
+    override fun tierMessage(key: String): String = when (key) {
+        "excellent" -> "हमें लगता है कि आप दोनों बिल्कुल बेहतरीन जोड़ी होंगे!"
+        "very_good" -> "हमें लगता है कि आप दोनों एक बढ़िया जोड़ी बनेंगे!"
+        "good" -> "हमें लगता है कि आप दोनों की अच्छी निभेगी!"
+        "moderate" -> "हमें लगता है कि यहाँ संभावना है। क्यों न देखें कि बात कहाँ तक पहुँचती है?"
+        else -> "हमें लगता है कि यह थोड़ा अनपेक्षित है। लेकिन कभी-कभी हैरानियाँ भी होती हैं!"
+    }
     override val retry = "फिर से प्रयास करें"
     override val nothingHereYet = "अभी यहां कुछ नहीं"
     override val clear = "साफ़ करें"
@@ -373,6 +404,20 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val overallCompatibility = "ஒட்டுமொத்த பொருத்தம்"
     override val notYetCompared = "இன்னும் ஒப்பிடப்படவில்லை"
     override val notScoredYet = "இந்த ஜோடி இன்னும் மதிப்பிடப்படவில்லை."
+    override fun tierName(key: String): String = when (key) {
+        "excellent" -> "சிறப்பு"
+        "very_good" -> "மிக நல்லது"
+        "good" -> "நல்லது"
+        "moderate" -> "மிதமானது"
+        else -> "எதிர்பாராதது"
+    }
+    override fun tierMessage(key: String): String = when (key) {
+        "excellent" -> "நீங்கள் இருவரும் மிகச் சிறந்த ஜோடியாக இருப்பீர்கள் என்று நாங்கள் நினைக்கிறோம்!"
+        "very_good" -> "நீங்கள் இருவரும் சிறந்த பொருத்தமாக இருப்பீர்கள் என்று நாங்கள் நினைக்கிறோம்!"
+        "good" -> "நீங்கள் இருவரும் நன்றாகப் பழகுவீர்கள் என்று நாங்கள் நினைக்கிறோம்!"
+        "moderate" -> "இங்கே வாய்ப்பு இருக்கிறது என்று நினைக்கிறோம். எங்கே செல்கிறது என்று பார்க்கலாமே?"
+        else -> "இது சற்று எதிர்பாராதது என்று நினைக்கிறோம். ஆனால் ஆச்சரியங்களும் நடக்கும்!"
+    }
     override val retry = "மீண்டும் முயற்சிக்கவும்"
     override val nothingHereYet = "இன்னும் இங்கே எதுவும் இல்லை"
     override val clear = "அழி"

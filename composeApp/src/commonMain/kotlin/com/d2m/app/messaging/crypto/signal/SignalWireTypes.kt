@@ -26,6 +26,8 @@ data class KeyBundleUpload(
     val identityKey: String,
     val signedPreKey: SignedPreKeyDto,
     val preKeys: List<PreKeyDto>,
+    /** Which device of the account this bundle is for (server-assigned by POST /devices); absent = legacy device 1. */
+    val deviceId: Int? = null,
 )
 
 @Serializable
@@ -37,4 +39,14 @@ data class PreKeyBundleResponse(
 )
 
 @Serializable
-data class KeyCountResponse(val oneTimePreKeys: Int)
+data class KeyCountResponse(
+    val oneTimePreKeys: Int,
+    /** The identity key the server holds for the queried device; null = the server doesn't know that device. */
+    val identityKey: String? = null,
+)
+
+@Serializable
+data class RegisterDeviceResponse(val deviceId: Int, val evicted: List<Int> = emptyList())
+
+@Serializable
+data class DeviceListResponse(val devices: List<com.d2m.app.messaging.protocol.DeviceInfo> = emptyList())

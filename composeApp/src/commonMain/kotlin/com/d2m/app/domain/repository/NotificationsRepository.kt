@@ -32,6 +32,6 @@ class NotificationsRepository(
     suspend fun setPreferences(accountId: String, body: NotificationPreferenceIn): NotificationPreferenceOut =
         api.setPreferences(accountId, body)
 
-    suspend fun registerDeviceToken(accountId: String, platform: String, token: String): DeviceTokenOut =
-        api.registerDeviceToken(accountId, platform, token)
+    suspend fun registerDeviceToken(accountId: String, platform: String, token: String, deviceId: Int? = null): DeviceTokenOut =
+        api.registerDeviceToken(accountId, platform, token, deviceId)
 }

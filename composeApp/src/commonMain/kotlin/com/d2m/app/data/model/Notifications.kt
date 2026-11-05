@@ -38,6 +38,8 @@ data class NotificationPreferenceOut(
 data class DeviceTokenIn(
     val platform: String, // fcm | apns
     val token: String,
+    /** The messaging device (Signal identity) this install is; binds the token so a push's ciphertext only goes to the device that can decrypt it. */
+    val deviceId: Int? = null,
 )
 
 @Serializable

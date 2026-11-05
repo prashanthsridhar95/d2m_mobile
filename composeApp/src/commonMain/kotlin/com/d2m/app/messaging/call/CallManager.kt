@@ -70,10 +70,13 @@ data class CallView(
 
 data class CallStreams(val localVideoTrack: Any? = null, val remoteVideoTrack: Any? = null)
 
-enum class CallEndReason { ENDED, MISSED, NO_ANSWER, FAILED, BUSY, DECLINED }
+/** ANSWERED_ELSEWHERE: another of OUR devices took the call (or the caller connected to one); this device just stops ringing and logs nothing. */
+enum class CallEndReason { ENDED, MISSED, NO_ANSWER, FAILED, BUSY, DECLINED, ANSWERED_ELSEWHERE }
 data class CallEndInfo(val peerUsername: String, val incoming: Boolean, val media: String, val connected: Boolean, val durationSec: Int, val reason: CallEndReason)
 
 private const val RING_TIMEOUT_MS = 30_000L
+/** `Decline.reason` the caller sends to the peer devices that did not answer once one of them did. */
+const val ANSWERED_ELSEWHERE = "answered_elsewhere"
 private val EMPTY_STREAMS = CallStreams()
 
 class CallManager(
@@ -136,6 +139,15 @@ class CallManager(
     private var polite = false
     private var remoteVideoTrack: Any? = null
 
+    // Multi-device: the one device of the peer this call is with. Unset while an outgoing invite is still ringing on all of
+    // the peer's devices; set when one of them answers (outgoing) or on the invite we received (incoming). Every later
+    // signal goes to that device only.
+    private var peerDevice: Int? = null
+    // Outgoing: how many peer devices were invited, and which of them have declined so far -- the call only ends as declined
+    // once every invited device has.
+    private var invitedDevices: Int? = null
+    private val declinedDevices = mutableSetOf<Int>()
+
     /**
      * Guards teardown() against a real, observed reentrancy crash: calling
      * engine.closePeerConnection() below triggers PeerConnectionObserver's
@@ -153,11 +165,14 @@ class CallManager(
     private var tearDownGate = Mutex()
 
     init {
-        messagingRepository.callSignalHandler = { from, signal -> handleSignal(from, signal) }
-        messagingRepository.sessionResetHandler = { from -> resendInviteIfMidRing(from) }
+        messagingRepository.callSignalHandler = { from, signal, fromDevice -> handleSignal(from, signal, fromDevice) }
+        messagingRepository.sessionResetHandler = { from, fromDevice -> resendInviteIfMidRing(from, fromDevice) }
     }
 
     val active: Boolean get() = phase != CallPhase.IDLE && phase != CallPhase.ENDED
+
+    // Every signal of an established call goes to the one peer device it is with (all of the peer's devices before that).
+    private suspend fun sig(signal: CallSignal): Boolean = messagingRepository.sendCallSignal(peer, signal, device = peerDevice)
 
     private fun emit() {
         _view.value = if (phase == CallPhase.IDLE || phase == CallPhase.ENDED) null else CallView(
@@ -207,7 +222,7 @@ class CallManager(
         remoteVideoTrack = null
         val observer = object : PeerConnectionObserver {
             override fun onIceCandidate(candidate: IceCandidateData) {
-                scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Ice(callId, candidate)) }
+                scope.launch { sig(CallSignal.Ice(callId, candidate)) }
             }
             override fun onConnected() {
                 println("CallManager: peer connection connected (callId=$callId, peer=$peer)")
@@ -265,7 +280,7 @@ class CallManager(
             engine.waitForIceGatheringComplete(currentPc)
             if (pc !== currentPc) return
             val sdp = engine.localDescriptionSdp(currentPc) ?: return
-            messagingRepository.sendCallSignal(peer, CallSignal.Offer(callId, SdpDescription("offer", sdp), video = videoMeta(), mic = micOn))
+            sig(CallSignal.Offer(callId, SdpDescription("offer", sdp), video = videoMeta(), mic = micOn))
         } catch (_: Throwable) {
             hangup()
         }
@@ -315,7 +330,12 @@ class CallManager(
             engine.waitForIceGatheringComplete(myPc)
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: offer
-            val sent = messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn))
+            // The invite rings every device of the peer (one offer, one encrypted copy per device); remember how many so the
+            // call only ends as declined once all of them have declined.
+            val sent = messagingRepository.sendCallSignal(
+                peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn),
+                onTargets = { count -> invitedDevices = count },
+            )
             if (!sent) error("couldn't reach $peer – check your connection")
             println("CallManager.startCall: invite sent to $peer (callId=$callId)")
 
@@ -349,7 +369,7 @@ class CallManager(
             engine.waitForIceGatheringComplete(myPc)
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: answer
-            val sent = messagingRepository.sendCallSignal(peer, CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
+            val sent = sig(CallSignal.Accept(callId, SdpDescription("answer", sdp), videoMeta(), micOn))
             if (!sent) error("couldn't reach $peer – check your connection")
             println("CallManager.accept: accept sent to $peer (callId=$callId)")
             pendingOfferSdp = null
@@ -361,25 +381,26 @@ class CallManager(
         }
     }
 
-    private fun resendInviteIfMidRing(fromPeer: String) {
+    private fun resendInviteIfMidRing(fromPeer: String, fromDevice: Int?) {
         val myPc = pc ?: return
         if (phase == CallPhase.CALLING && !incoming && peer == fromPeer) {
             val sdp = engine.localDescriptionSdp(myPc) ?: return
-            scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn)) }
+            // The peer device that lost its session needs the invite again; the others already have it.
+            scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Invite(callId, media, SdpDescription("offer", sdp), videoMeta(), micOn), device = fromDevice) }
         }
     }
 
     fun decline() {
         if (phase != CallPhase.INCOMING) return
         println("CallManager.decline: declining call from $peer (callId=$callId)")
-        scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Decline(callId, "declined")) }
+        scope.launch { sig(CallSignal.Decline(callId, "declined")) }
         teardown()
     }
 
     fun hangup() {
         if (!active) return
         println("CallManager.hangup: hanging up on $peer (callId=$callId, phase=$phase)")
-        scope.launch { messagingRepository.sendCallSignal(peer, CallSignal.Hangup(callId)) }
+        scope.launch { sig(CallSignal.Hangup(callId)) }
         teardown()
     }
 
@@ -438,30 +459,31 @@ class CallManager(
 
     private suspend fun sendMediaState() {
         if (peer.isEmpty() || callId.isEmpty()) return
-        messagingRepository.sendCallSignal(peer, CallSignal.MediaState(callId, videoMeta(), micOn))
+        sig(CallSignal.MediaState(callId, videoMeta(), micOn))
     }
 
     // ---------- Signaling in ----------
-    suspend fun handleSignal(from: String, signal: CallSignal) {
-        println("CallManager.handleSignal: ${signal::class.simpleName} from $from (currentCallId=$callId)")
+    suspend fun handleSignal(from: String, signal: CallSignal, fromDevice: Int? = null) {
+        println("CallManager.handleSignal: ${signal::class.simpleName} from $from device=$fromDevice (currentCallId=$callId)")
         if (signal is CallSignal.Invite) {
             if (active) {
                 if (signal.callId != callId) {
                     println("CallManager.handleSignal: busy, declining new invite ${signal.callId} from $from while on call $callId")
-                    messagingRepository.sendCallSignal(from, CallSignal.Decline(signal.callId, "busy"))
+                    messagingRepository.sendCallSignal(from, CallSignal.Decline(signal.callId, "busy"), device = fromDevice)
                 }
                 return
             }
             reset()
             callId = signal.callId
             peer = from
+            peerDevice = fromDevice // answer the device that rang us
             incoming = true
             media = signal.media
             phase = CallPhase.INCOMING
             pendingOfferSdp = signal.sdp.sdp
             remoteMicOn = signal.mic ?: true
             applyRemoteVideo(signal.video)
-            messagingRepository.sendCallSignal(from, CallSignal.Ringing(callId))
+            sig(CallSignal.Ringing(callId))
             emit()
             // Don't ring forever: if nobody answers, stop the ring (and the notification/ringtone that follow the
             // INCOMING phase), tell the caller, and log a missed call.
@@ -470,7 +492,7 @@ class CallManager(
                 delay(RING_TIMEOUT_MS)
                 if (phase == CallPhase.INCOMING && callId == ringingCallId) {
                     println("CallManager.handleSignal: incoming ring timeout (${RING_TIMEOUT_MS}ms) from $peer, missing call (callId=$callId)")
-                    messagingRepository.sendCallSignal(peer, CallSignal.Decline(callId, "timeout"))
+                    sig(CallSignal.Decline(callId, "timeout"))
                     teardown()
                 }
             }
@@ -478,15 +500,38 @@ class CallManager(
         }
 
         if (signal.callId != callId) return
+        // Pinned to one device of the peer: a late signal from any other device (a sibling that declined after another
+        // answered, say) is not part of this call.
+        if (peerDevice != null && fromDevice != null && fromDevice != peerDevice) return
 
         when (signal) {
             is CallSignal.Ringing -> if (phase == CallPhase.CALLING) { ringing = true; emit() }
             is CallSignal.Accept -> {
+                // Outgoing: the first of the peer's devices to answer wins. Pin the call to it and tell the others to stop ringing.
+                if (!incoming && peerDevice == null && fromDevice != null) {
+                    peerDevice = fromDevice
+                    messagingRepository.sendCallSignal(peer, CallSignal.Decline(callId, ANSWERED_ELSEWHERE), exceptDevice = fromDevice)
+                }
                 applyRemoteMic(signal.mic)
                 applyRemoteVideo(signal.video)
                 pc?.let { p -> engine.setRemoteDescription(p, "answer", signal.sdp.sdp.orEmpty()); drainCandidates(p) }
             }
-            is CallSignal.Decline -> teardown(if (signal.reason == "busy") CallEndReason.BUSY else CallEndReason.DECLINED)
+            is CallSignal.Decline -> {
+                // The caller connected to another of OUR devices: stop ringing quietly (no "missed call" entry).
+                if (signal.reason == ANSWERED_ELSEWHERE) {
+                    teardown(CallEndReason.ANSWERED_ELSEWHERE)
+                    return
+                }
+                // Outgoing to a peer with several devices: one declining doesn't end the call until all that were invited have.
+                if (!incoming && peerDevice == null && fromDevice != null) {
+                    val invited = invitedDevices
+                    if (invited != null) {
+                        declinedDevices.add(fromDevice)
+                        if (declinedDevices.size < invited) return
+                    }
+                }
+                teardown(if (signal.reason == "busy") CallEndReason.BUSY else CallEndReason.DECLINED)
+            }
             is CallSignal.Ice -> addCandidate(signal.candidate)
             is CallSignal.Offer -> onRenegotiationOffer(signal.sdp.sdp.orEmpty(), signal.note, signal.video, signal.mic)
             is CallSignal.Answer -> {
@@ -512,7 +557,7 @@ class CallManager(
             engine.waitForIceGatheringComplete(myPc)
             if (pc !== myPc) return
             val sdp = engine.localDescriptionSdp(myPc) ?: offer
-            messagingRepository.sendCallSignal(peer, CallSignal.Offer(callId, SdpDescription("offer", sdp), note, videoMeta(), micOn))
+            sig(CallSignal.Offer(callId, SdpDescription("offer", sdp), note, videoMeta(), micOn))
         } finally {
             makingOffer = false
         }
@@ -533,7 +578,7 @@ class CallManager(
         engine.waitForIceGatheringComplete(myPc)
         if (pc !== myPc) return
         val answerSdp = engine.localDescriptionSdp(myPc) ?: answer
-        messagingRepository.sendCallSignal(peer, CallSignal.Answer(callId, SdpDescription("answer", answerSdp), videoMeta(), micOn))
+        sig(CallSignal.Answer(callId, SdpDescription("answer", answerSdp), videoMeta(), micOn))
         recomputeRemote()
         emit()
     }
@@ -573,6 +618,9 @@ class CallManager(
         clearRing()
         callId = ""
         peer = ""
+        peerDevice = null
+        invitedDevices = null
+        declinedDevices.clear()
         incoming = false
         media = "audio"
         ringing = false
@@ -632,7 +680,7 @@ class CallManager(
         val peerAtEnd = peer
         reset()
         phase = CallPhase.IDLE
-        if (info != null) logCallEnded(peerAtEnd, info)
+        if (info != null && info.reason != CallEndReason.ANSWERED_ELSEWHERE) logCallEnded(peerAtEnd, info)
     }
 
     @OptIn(ExperimentalUuidApi::class)
@@ -644,6 +692,7 @@ class CallManager(
             CallEndReason.DECLINED -> "Call declined"
             CallEndReason.MISSED -> "Missed call"
             CallEndReason.NO_ANSWER -> "No answer"
+            CallEndReason.ANSWERED_ELSEWHERE -> return // never logged, see teardown()
         }
         messagingRepository.appendCallLogMessage(
             peerUsername,

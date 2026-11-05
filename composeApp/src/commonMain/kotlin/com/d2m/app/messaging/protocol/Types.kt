@@ -41,6 +41,8 @@ data class KeyBundleUpload(
     val identityKey: String,
     val signedPreKey: SignedPreKeyPublic,
     val preKeys: List<PreKeyPublic>,
+    /** Which of the account's devices this bundle is for; absent = legacy device 1. */
+    val deviceId: Int? = null,
 )
 
 @Serializable
@@ -70,7 +72,17 @@ data class MessageEnvelope(
     // (call-signaling) envelopes, which are never archived. See
     // ArchiveManager.buildArchiveField.
     val archive: ArchiveField? = null,
+    // Hangup/decline: a still-queued invite for an offline device must not ring later.
+    val callCancel: Boolean = false,
+    // Multi-device (messaging-framework/docs/MULTI_DEVICE.md). The server stamps `fromDevice`; a sender sets `toDevice` on
+    // each fanned-out copy. Absent = the legacy single device 1.
+    val fromDevice: Int? = null,
+    val toDevice: Int? = null,
 )
+
+/** One device of an account, as listed by GET /keys/:username/devices. */
+@Serializable
+data class DeviceInfo(val deviceId: Int, val registrationId: Int = 0, val lastSeen: Long = 0)
 
 /**
  * P-256 ECDH public key in JSON Web Key form -- the literal wire shape
@@ -174,7 +186,7 @@ sealed class ClientToServer {
 
     @Serializable
     @SerialName("session.reset")
-    data class SessionReset(val to: String) : ClientToServer()
+    data class SessionReset(val to: String, val toDevice: Int? = null) : ClientToServer()
 
     @Serializable
     @SerialName("ping")
@@ -194,7 +206,7 @@ sealed class ServerToClient {
 
     @Serializable
     @SerialName("receipt.update")
-    data class ReceiptUpdate(val messageId: String, val status: String, val from: String) : ServerToClient()
+    data class ReceiptUpdate(val messageId: String, val status: String, val from: String, val fromDevice: Int? = null) : ServerToClient()
 
     @Serializable
     @SerialName("typing")
@@ -206,7 +218,7 @@ sealed class ServerToClient {
 
     @Serializable
     @SerialName("session.reset")
-    data class SessionReset(val from: String) : ServerToClient()
+    data class SessionReset(val from: String, val fromDevice: Int? = null) : ServerToClient()
 
     // Serious Mode/union/milestone state changed on the thread with `from`
     // -- "Serious mode/Union/We met request not getting updated in real
@@ -221,7 +233,12 @@ sealed class ServerToClient {
 
     @Serializable
     @SerialName("error")
-    data class Error(val message: String) : ServerToClient()
+    data class Error(val message: String, val code: String? = null, val messageId: String? = null) : ServerToClient()
+
+    /** Sent by a server that authenticates via a first frame; carries the device this socket was bound to. */
+    @Serializable
+    @SerialName("auth.ok")
+    data class AuthOk(val user: String? = null, val device: Int? = null) : ServerToClient()
 
     @Serializable
     @SerialName("pong")
@@ -403,6 +420,7 @@ val messagingProtocolJson = Json {
             subclass(ServerToClient.PresenceUpdate::class)
             subclass(ServerToClient.SessionReset::class)
             subclass(ServerToClient.Error::class)
+            subclass(ServerToClient.AuthOk::class)
             subclass(ServerToClient.Pong::class)
         }
         polymorphic(ChatPayload::class) {

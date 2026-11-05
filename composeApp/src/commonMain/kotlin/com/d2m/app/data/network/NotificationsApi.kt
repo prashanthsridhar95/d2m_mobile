@@ -25,6 +25,6 @@ class NotificationsApi(private val api: ApiClient) {
 
     /** Registers a push token. Delivery itself is a no-op server-side until the backend's
      *  notification_service SWAP POINT is implemented -- registering early costs nothing. */
-    suspend fun registerDeviceToken(accountId: String, platform: String, token: String): DeviceTokenOut =
-        api.post("/accounts/$accountId/device-tokens", DeviceTokenIn(platform, token))
+    suspend fun registerDeviceToken(accountId: String, platform: String, token: String, deviceId: Int? = null): DeviceTokenOut =
+        api.post("/accounts/$accountId/device-tokens", DeviceTokenIn(platform, token, deviceId))
 }

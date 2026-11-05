@@ -133,7 +133,11 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         CoroutineScope(Dispatchers.Default).launch {
             runCatching {
-                org.koin.core.context.GlobalContext.get().get<PushTokenRegistrar>().registerCurrentToken("fcm", token)
+                val koin = org.koin.core.context.GlobalContext.get()
+                // The token is bound to this install's messaging device; in a cold process nothing has registered that
+                // device yet, so do it first (idempotent, a no-op when messaging already started).
+                runCatching { koin.get<MessagingRepository>().ensurePassiveIdentity() }
+                koin.get<PushTokenRegistrar>().registerCurrentToken("fcm", token)
             }
         }
     }
@@ -207,7 +211,11 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                     .onFailure { e -> println("D2MFirebaseMessagingService: ensurePassiveIdentity failed: ${e.message ?: e::class.simpleName}") }
                     .getOrNull()
                 val decrypted = if (myUsername != null && messageId != null && ciphertextType != null && ciphertext != null && sentAt != null) {
-                    val envelope = MessageEnvelope(messageId, sender, myUsername, ciphertextType, ciphertext, sentAt)
+                    val envelope = MessageEnvelope(
+                        messageId, sender, myUsername, ciphertextType, ciphertext, sentAt,
+                        // The ciphertext is for ONE device's session; decryptAndPersistIncoming refuses a push meant for another device.
+                        fromDevice = message.data["fromDevice"]?.toIntOrNull(), toDevice = message.data["toDevice"]?.toIntOrNull(),
+                    )
                     runCatching { messagingRepo.decryptAndPersistIncoming(envelope) }
                         .onFailure { e -> println("D2MFirebaseMessagingService: decryptAndPersistIncoming failed for $messageId: ${e.message ?: e::class.simpleName}") }
                         .getOrNull()
@@ -295,7 +303,10 @@ class D2MFirebaseMessagingService : FirebaseMessagingService() {
                     .onFailure { e -> println("D2MFirebaseMessagingService: refreshConnection failed for incoming_call: ${e.message ?: e::class.simpleName}") }
                 val myUsername = runCatching { messagingRepo.ensurePassiveIdentity() }.getOrNull()
                 if (myUsername != null && messageId != null && ciphertextType != null && ciphertext != null && sentAt != null) {
-                    val envelope = MessageEnvelope(messageId, sender, myUsername, ciphertextType, ciphertext, sentAt, ephemeral = true, callInvite = true)
+                    val envelope = MessageEnvelope(
+                        messageId, sender, myUsername, ciphertextType, ciphertext, sentAt, ephemeral = true, callInvite = true,
+                        fromDevice = message.data["fromDevice"]?.toIntOrNull(), toDevice = message.data["toDevice"]?.toIntOrNull(),
+                    )
                     runCatching { messagingRepo.decryptAndPersistIncoming(envelope) }
                         .onFailure { e -> println("D2MFirebaseMessagingService: incoming_call decrypt failed for $messageId: ${e.message ?: e::class.simpleName}") }
                 } else {

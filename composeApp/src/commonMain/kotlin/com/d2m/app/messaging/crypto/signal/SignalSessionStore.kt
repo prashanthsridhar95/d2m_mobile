@@ -1,5 +1,6 @@
 package com.d2m.app.messaging.crypto.signal
 
+import com.d2m.app.messaging.DEFAULT_DEVICE
 import com.russhwolf.settings.Settings
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -26,7 +27,8 @@ import kotlinx.serialization.json.Json
  * makes its own 10-entry cap a no-op in practice -- this cap is a real one).
  *
  * Persisted via `multiplatform-settings` (already a project dependency),
- * namespaced `signal:<username>:...` so this doesn't collide with
+ * namespaced `signal:<username>:...` (identity, prekeys and device id are per install; sessions are per
+ * `(peer, peerDevice)` pair -- see [SignalSessionStore.getSession]) so this doesn't collide with
  * `IdentityStore`'s own keys in the same underlying SharedPreferences file
  * (see `createSettings()`'s doc comment -- one shared file today).
  */
@@ -121,20 +123,65 @@ internal class SignalSessionStore(private val settings: Settings, private val us
 
     fun oneTimePreKeyCountLocal(): Int = getOneTimePreKeys().size
 
-    fun getSession(peerUsername: String): SessionRecord? =
-        settings.getStringOrNull(key("session:$peerUsername"))?.let { runCatching { json.decodeFromString<SessionRecord>(it) }.getOrNull() }
+    // ---- This device's id ----
+    // Stored next to the identity under the account's namespace. Deliberately NOT part of the identity record and never
+    // touched by saveIdentity: it is the server-assigned address of THIS install and must survive prekey top-ups.
 
-    fun saveSession(peerUsername: String, session: SessionRecord) {
+    fun getDeviceId(): Int? = settings.getIntOrNull(key("deviceId"))
+
+    fun saveDeviceId(id: Int) {
+        settings.putInt(key("deviceId"), id)
+    }
+
+    // ---- Sessions: one per (peer, peerDevice) pair ----
+    // Key `signal:<me>:session:<peer>:<peerDevice>`. A session saved before multi-device lives at
+    // `signal:<me>:session:<peer>` and belongs to the peer's device 1; it is read as such and rewritten under the
+    // device-qualified key on the next save.
+
+    private fun sessionKey(peer: String, device: Int) = key("session:$peer:$device")
+    private fun legacySessionKey(peer: String) = key("session:$peer")
+
+    fun getSession(peerUsername: String, device: Int): SessionRecord? {
+        val stored = settings.getStringOrNull(sessionKey(peerUsername, device))
+            ?: if (device == DEFAULT_DEVICE) settings.getStringOrNull(legacySessionKey(peerUsername)) else null
+        return stored?.let { runCatching { json.decodeFromString<SessionRecord>(it) }.getOrNull() }
+    }
+
+    fun hasSession(peerUsername: String, device: Int): Boolean = getSession(peerUsername, device) != null
+
+    fun saveSession(peerUsername: String, device: Int, session: SessionRecord) {
         // Evict oldest retired RECEIVING chains beyond the cap -- see class doc comment.
         val retired = session.chains.entries.filter { it.value.type == "RECEIVING" && it.value.key == null }
         if (retired.size > MAX_RETIRED_CHAINS) {
             val toRemove = retired.sortedBy { it.value.retiredAtMillis ?: 0L }.take(retired.size - MAX_RETIRED_CHAINS)
             for (entry in toRemove) session.chains.remove(entry.key)
         }
-        settings.putString(key("session:$peerUsername"), json.encodeToString(session))
+        settings.putString(sessionKey(peerUsername, device), json.encodeToString(session))
+        if (device == DEFAULT_DEVICE) settings.remove(legacySessionKey(peerUsername))
     }
 
-    fun clearSession(peerUsername: String) {
-        settings.remove(key("session:$peerUsername"))
+    /** Forgets the session with ONE device of the peer; every other device's session is left intact. */
+    fun clearSession(peerUsername: String, device: Int) {
+        settings.remove(sessionKey(peerUsername, device))
+        if (device == DEFAULT_DEVICE) settings.remove(legacySessionKey(peerUsername))
+    }
+
+    /** Device ids of [peerUsername] that we hold a session with. */
+    fun sessionDevices(peerUsername: String): List<Int> {
+        val prefix = key("session:$peerUsername:")
+        val found = settings.keys.filter { it.startsWith(prefix) }.mapNotNull { it.removePrefix(prefix).toIntOrNull() }.toMutableSet()
+        if (settings.hasKey(legacySessionKey(peerUsername))) found.add(DEFAULT_DEVICE)
+        return found.sorted()
+    }
+
+    /** Forgets the sessions with EVERY device of the peer (a legacy `session.reset` that doesn't say which device). */
+    fun clearAllSessions(peerUsername: String) {
+        for (d in sessionDevices(peerUsername)) clearSession(peerUsername, d)
+    }
+
+    /** Logout: wipes everything this install holds for the account (identity, prekeys, device id, all sessions). */
+    fun clearAll() {
+        val prefix = key("")
+        for (k in settings.keys.filter { it.startsWith(prefix) }) settings.remove(k)
     }
 }
