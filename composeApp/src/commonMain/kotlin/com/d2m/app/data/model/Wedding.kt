@@ -109,6 +109,8 @@ data class WeddingCommentOut(
     val body: String,
     val createdAt: String,
     val mine: Boolean = false,
+    /** Roles @mentioned in [body] (the body itself stores tokens like @{bride}). */
+    val mentions: List<String> = emptyList(),
 )
 
 @Serializable

@@ -50,4 +50,12 @@ class NotificationsLogicTest {
         assertEquals("3h ago", relativeTime(3 * 3_600_000L, "9:00 AM", s))
         assertEquals("9:00 AM", relativeTime(30 * 3_600_000L, "9:00 AM", s))
     }
+
+    @Test fun weddingMentionHasCopyAndOpensTheChecklist() {
+        val note = n("wedding_mention", "author_label" to "Priya", "task_title" to "Book venue")
+        assertEquals("You were mentioned", notificationTitle("wedding_mention", s))
+        assertEquals("Priya mentioned you on a wedding to-do.", notificationBody(note, s))
+        assertEquals(Routes.WEDDING_CHECKLIST, notificationCta(note, D2MRole.PARENT)?.route)
+        assertEquals(Routes.WEDDING_CHECKLIST, notificationCta(note, D2MRole.CHILD)?.route)
+    }
 }

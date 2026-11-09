@@ -107,7 +107,7 @@ private fun WeddingWorkspace(primaryId: String) {
     LaunchedEffect(view, listGroup, boardGroup) { prefs.save(view, listGroup, boardGroup) }
     var filters by remember { mutableStateOf(Filters()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var creating by remember { mutableStateOf<Pair<String, String?>?>(null) } // (phase, due)
+    var creating by remember { mutableStateOf<NewPreset?>(null) }
     var dayOpen by remember { mutableStateOf<String?>(null) }
     var filtersOpen by remember { mutableStateOf(false) }
     var datesOpen by remember { mutableStateOf(false) }
@@ -150,7 +150,7 @@ private fun WeddingWorkspace(primaryId: String) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SearchBox(filters.q, s.searchPlaceholder, { filters = filters.copy(q = it) }, Modifier.weight(1f))
                     if (view != "calendar") GroupMenu(groupBy, s) { if (view == "board") boardGroup = it else listGroup = it }
-                    D2MButton(s.newTaskButton, { selectedId = null; creating = "planning" to null }, size = D2MButtonSize.SM)
+                    D2MButton(s.newTaskButton, { selectedId = null; creating = NewPreset() }, size = D2MButtonSize.SM)
                 }
                 // Summary: progress, countdown, and tappable quick filters.
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -184,11 +184,12 @@ private fun WeddingWorkspace(primaryId: String) {
                     view == "list" -> WeddingListView(
                         buildGroups(filtered, d.phases, groupBy, env.label, env.today, s), c.busy,
                         onOpen = { creating = null; selectedId = it }, onToggle = c::toggle,
-                        onAddInGroup = { selectedId = null; creating = it to null },
+                        onAddInGroup = { selectedId = null; creating = NewPreset(phase = it) },
                     )
                     view == "board" -> WeddingBoardView(
                         buildGroups(filtered, d.phases, groupBy, env.label, env.today, s), c.busy,
                         onOpen = { creating = null; selectedId = it }, onToggle = c::toggle,
+                        onAddInLane = { lane -> selectedId = null; creating = lanePreset(lane, groupBy, env.today) },
                     )
                     else -> WeddingCalendarView(filtered, d.plan, dayOpen, onOpenDay = { selectedId = null; creating = null; dayOpen = it })
                 }
@@ -200,7 +201,7 @@ private fun WeddingWorkspace(primaryId: String) {
         val dayTasks = dayOpen?.let { day -> filtered.filter { it.dueDate == day } }.orEmpty()
         when {
             creating != null -> NewTaskSheet(
-                d.phases, d.plan.myRole, creating!!.first, creating!!.second, c.busy,
+                d.phases, d.plan.myRole, creating!!, c.busy,
                 onCreate = { body -> c.create(body) { id -> creating = null; selectedId = id } },
                 onDismiss = { creating = null },
             )
@@ -209,7 +210,7 @@ private fun WeddingWorkspace(primaryId: String) {
                 dayOpen!!, dayTasks,
                 listOf(d.plan.engagementDate to s.engagement, d.plan.marriageDate to s.marriage, d.plan.honeymoonDate to s.honeymoon).firstOrNull { it.first == dayOpen }?.second,
                 c.busy, onOpen = { selectedId = it }, onToggle = c::toggle,
-                onAdd = { creating = "planning" to it }, onDismiss = { dayOpen = null },
+                onAdd = { creating = NewPreset(due = it) }, onDismiss = { dayOpen = null },
             )
         }
         if (filtersOpen && !wide) WeddingFilterSheet(filters, { filters = it }, d.phases, d.tasks, filtered.size, onDismiss = { filtersOpen = false })

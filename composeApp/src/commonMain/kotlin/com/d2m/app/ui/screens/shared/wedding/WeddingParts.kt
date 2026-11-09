@@ -129,11 +129,11 @@ private fun TagPill(text: String, bg: Color, fg: Color, border: Color? = null, l
     }
 }
 
-/** Who the task needs outside the families ("Consult | Priest"). */
+/** Who the to-do involves outside the families ("Priest", "Astrologer"). */
 @Composable
 fun ConsultChip(party: String) {
     val p = LocalD2MStatusPalette.current
-    TagPill(party.capitalised(), p.info.bg, p.info.fg, lead = LocalWedding.current.s.consult)
+    TagPill(party.capitalised(), p.info.bg, p.info.fg)
 }
 
 /** Consult chip plus comment / attachment counts as proper tags (nothing when there is nothing to show). */
@@ -167,6 +167,19 @@ fun DueChip(task: WeddingTaskOut) {
         Text(relDue(task, env.today, env.s), style = MaterialTheme.typography.labelMedium, color = color, fontWeight = if (task.overdue && task.status != "done") FontWeight.SemiBold else FontWeight.Normal)
         PmBadges(task.dueDate)
     }
+}
+
+/** A comment's text with its @mentions highlighted, worded for the viewer. */
+@Composable
+fun CommentText(body: String, modifier: Modifier = Modifier) {
+    val env = LocalWedding.current
+    val (shown, spans) = displayMentions(body, env.label)
+    val style = androidx.compose.ui.text.SpanStyle(color = d2m.accent, fontWeight = FontWeight.SemiBold, background = d2m.accentSoft)
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(shown)
+        spans.forEach { addStyle(style, it.first, it.last + 1) }
+    }
+    Text(text, modifier, style = MaterialTheme.typography.bodyMedium)
 }
 
 /* ---------------------------------------------------------------- panchangam */

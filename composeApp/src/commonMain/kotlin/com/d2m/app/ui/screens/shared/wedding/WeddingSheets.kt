@@ -153,6 +153,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
     var err by remember(task.id) { mutableStateOf<String?>(null) }
     var comment by remember(task.id) { mutableStateOf("") }
     var posting by remember(task.id) { mutableStateOf(false) }
+    var picks by remember(task.id) { mutableStateOf(listOf<Pair<String, String>>()) } // role to the label typed for it
     var uploading by remember(task.id) { mutableStateOf(false) }
     var expandedImage by remember(task.id) { mutableStateOf<String?>(null) }
     var confirmRemove by remember(task.id) { mutableStateOf(false) }
@@ -320,12 +321,35 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                                 }
                             })
                         }
-                        Text(cm.body, style = MaterialTheme.typography.bodyMedium)
+                        CommentText(cm.body)
+                    }
+                }
+                val mentionQuery = mentionQueryOf(comment)
+                val suggestions = mentionOptions(mentionQuery, ROLES, env.label, s.me)
+                if (suggestions.isNotEmpty() && mentionQuery != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        suggestions.forEach { role ->
+                            val label = env.label(role)
+                            Text(
+                                "@$label", style = MaterialTheme.typography.labelLarge, color = d2m.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(d2m.accentSoft)
+                                    .border(1.dp, d2m.accent, RoundedCornerShape(99.dp))
+                                    .clickable {
+                                        comment = comment.dropLast(mentionQuery.length + 1) + "@$label "
+                                        picks = picks.filter { it.first != role } + (role to label)
+                                    }.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
                     }
                 }
                 D2MTextField(
                     label = "", value = comment, onValueChange = { if (it.length <= 2000) comment = it },
                     placeholder = s.writeComment, singleLine = false, minLines = 2,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                D2MButton(
+                    "@", onClick = { comment = comment + (if (comment.isNotEmpty() && !comment.endsWith(" ") && !comment.endsWith("\n")) " @" else "@") },
+                    variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM,
                 )
                 D2MButton(
                     text = if (posting) s.posting else s.commentButton,
@@ -334,14 +358,15 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                         if (body.isEmpty()) return@D2MButton
                         scope.launch {
                             posting = true; err = null
-                            runCatching { c.repo.addComment(c.primaryId, task.id, body) }
-                                .onSuccess { cm -> activity?.let { sync(it.copy(comments = it.comments + cm)) }; comment = "" }
+                            runCatching { c.repo.addComment(c.primaryId, task.id, toStoredMentions(body, picks)) }
+                                .onSuccess { cm -> activity?.let { sync(it.copy(comments = it.comments + cm)) }; comment = ""; picks = emptyList() }
                                 .onFailure { err = friendlyError(it, s.couldntPost) }
                             posting = false
                         }
                     },
                     enabled = comment.isNotBlank() && !posting, size = D2MButtonSize.SM,
                 )
+                }
             }
 
             if (task.canDelete) {
@@ -397,16 +422,16 @@ fun DaySheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTaskSheet(
-    phases: List<WeddingPhaseOut>, myRole: String, presetPhase: String, presetDue: String?, busy: Boolean,
+    phases: List<WeddingPhaseOut>, myRole: String, preset: NewPreset, busy: Boolean,
     onCreate: (WeddingTaskCreateIn) -> Unit, onDismiss: () -> Unit,
 ) {
     val env = LocalWedding.current
     val s = env.s
     var title by remember { mutableStateOf("") }
-    var phase by remember { mutableStateOf(presetPhase) }
-    var participants by remember { mutableStateOf(setOf(myRole)) }
+    var phase by remember { mutableStateOf(preset.phase) }
+    var participants by remember { mutableStateOf((preset.participants ?: listOf(myRole)).toSet()) }
     var visibility by remember { mutableStateOf("all") }
-    var due by remember { mutableStateOf(presetDue) }
+    var due by remember { mutableStateOf(preset.due) }
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,

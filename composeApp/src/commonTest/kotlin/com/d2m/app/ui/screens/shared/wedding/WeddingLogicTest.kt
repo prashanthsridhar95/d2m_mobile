@@ -115,6 +115,44 @@ class WeddingLogicTest {
         assertEquals("இன்று", relDue(task("x", due = "2026-11-09"), today, WeddingStringsTa))
     }
 
+    @Test fun mentionsRoundTripBetweenDraftStoredAndDisplay() {
+        val label = labeler(plan(myRole = "groom"), en)
+        // typing: suggestions come from everyone except me, matched loosely
+        assertEquals("", mentionQueryOf("hello @"))
+        assertEquals("pri", mentionQueryOf("hello @pri"))
+        assertEquals(null, mentionQueryOf("mail me at a@b.com now"))
+        assertEquals(listOf("bride", "bride_parents", "groom_parents"), mentionOptions("", ROLES, label, "Me"))
+        assertEquals(listOf("bride", "bride_parents"), mentionOptions("priya", ROLES, label, "Me"))
+        assertEquals(listOf("bride_parents"), mentionOptions("priya's p", ROLES, label, "Me"))
+        // sending: longest label first so "@Priya" can't eat "@Priya's parents"
+        val stored = toStoredMentions("@Priya's parents please check, cc @Priya", listOf("bride" to "Priya", "bride_parents" to "Priya's parents"))
+        assertEquals("@{bride_parents} please check, cc @{bride}", stored)
+        // reading: worded for the viewer, with the ranges to highlight
+        val (shown, spans) = displayMentions(stored, label)
+        assertEquals("@Priya's parents please check, cc @Priya", shown)
+        assertEquals(listOf(0..15, 34..39), spans.map { it })
+        val (asBride, _) = displayMentions("hi @{groom}", labeler(plan(myRole = "groom"), en))
+        assertEquals("hi @Me", asBride)
+    }
+
+    @Test fun laneAddsLandInTheirLane() {
+        val lane = { k: String -> TaskGroup(k, k, null, emptyList()) }
+        assertEquals(NewPreset(phase = "foundations"), lanePreset(lane("foundations"), "phase", today))
+        assertEquals(NewPreset(participants = listOf("bride")), lanePreset(lane("bride"), "owner", today))
+        assertEquals(NewPreset(participants = listOf("bride", "groom")), lanePreset(lane("shared"), "owner", today))
+        assertEquals(NewPreset(due = "2026-11-12"), lanePreset(lane("week"), "due", today))
+        assertEquals(NewPreset(due = "2026-11-23"), lanePreset(lane("month"), "due", today))
+        assertEquals(NewPreset(due = null), lanePreset(lane("overdue"), "due", today))
+    }
+
+    @Test fun wordingIsToDoNotTask() {
+        listOf(WeddingStringsEn, WeddingStringsHi, WeddingStringsTa).forEach { x ->
+            val all = listOf(x.noTasksTitle, x.searchPlaceholder, x.createTask, x.removeTask, x.addOnThisDay, x.quickMine, x.matchesCount(2, 5), x.showTasks(3), x.dueThisMonth(2))
+            all.forEach { assertTrue(!it.contains("task", ignoreCase = true) && !it.contains("कार्य") && !it.contains("பணி"), "still formal: $it") }
+        }
+        assertEquals("1 to-do · 0 done", WeddingStringsEn.tasksSummary(1, 0))
+    }
+
     @Test fun searchMatchesTitles() {
         val t = task("7")
         assertTrue(passes(t, Filters(q = "task 7"), today))

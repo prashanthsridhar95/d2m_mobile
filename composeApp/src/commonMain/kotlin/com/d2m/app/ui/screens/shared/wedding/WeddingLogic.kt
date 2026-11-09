@@ -31,6 +31,21 @@ val BUCKET_KEYS = listOf("overdue", "week", "month", "later", "nodate", "done")
 val VISIBILITY_KEYS = listOf("all", "side", "private")
 val TRADITION_KEYS = listOf("", "tamil", "telugu", "kannada", "malayali", "north", "bengali", "marathi", "gujarati", "odia")
 val GROUP_KEYS = listOf("phase", "due", "owner")
+/** What a new to-do starts with (from a list group's + , a calendar day, or a board lane). */
+data class NewPreset(val phase: String = "planning", val due: String? = null, val participants: List<String>? = null)
+
+/** A to-do added from a board lane should land in that lane. */
+fun lanePreset(lane: TaskGroup, groupBy: String, today: LocalDate): NewPreset = when (groupBy) {
+    "phase" -> NewPreset(phase = lane.key)
+    "owner" -> NewPreset(participants = if (lane.key == "shared") listOf("bride", "groom") else listOf(lane.key))
+    else -> NewPreset(due = when (lane.key) {
+        "week" -> today.plus(DatePeriod(days = 3)).toString()
+        "month" -> today.plus(DatePeriod(days = 14)).toString()
+        "later" -> today.plus(DatePeriod(days = 60)).toString()
+        else -> null
+    })
+}
+
 val QUICK_KEYS = listOf("mine", "overdue", "week", "joint")
 val SCOPE_KEYS = listOf("individual", "couple", "parents", "family", "group")
 
@@ -195,4 +210,40 @@ class PanchangamStore(
 
     private fun lastDay(ym: String): String =
         LocalDate(ym.take(4).toInt(), ym.takeLast(2).toInt(), 1).plus(DatePeriod(months = 1)).minus(DatePeriod(days = 1)).toString()
+}
+
+/* ------------------------------------------------------------------ @mentions */
+
+/** A comment stores @{role} tokens; every client words them for the viewer ("@Me", "@Priya", "@Priya's parents"). */
+val MENTION_TOKEN = Regex("""@\{(bride|groom|bride_parents|groom_parents)\}""")
+private val MENTION_QUERY = Regex("""(^|\s)@([^\s@]*)$""")
+
+/** The text typed after a trailing "@" (empty right after the @), or null when the draft isn't ending in a mention. */
+fun mentionQueryOf(text: String): String? = MENTION_QUERY.find(text)?.groupValues?.get(2)
+
+/** Who can be suggested for [query]: everyone on the plan except me, matched loosely against their display name. */
+fun mentionOptions(query: String?, roles: List<String>, label: (String) -> String, me: String): List<String> {
+    if (query == null) return emptyList()
+    val q = query.replace(" ", "")
+    return roles.filter { r -> label(r) != me && (q.isEmpty() || label(r).replace(" ", "").contains(q, ignoreCase = true)) }
+}
+
+/** Draft text -> stored text: "@Priya's parents" becomes "@{bride_parents}" (longest names first so "@Priya" can't eat part of it). */
+fun toStoredMentions(text: String, picks: List<Pair<String, String>>): String =
+    picks.sortedByDescending { it.second.length }.fold(text) { acc, (role, label) -> acc.replace("@$label", "@{$role}") }
+
+/** Stored text -> display text for the viewer, with the character ranges of each mention (for highlighting). */
+fun displayMentions(body: String, label: (String) -> String): Pair<String, List<IntRange>> {
+    val sb = StringBuilder()
+    val spans = mutableListOf<IntRange>()
+    var last = 0
+    for (m in MENTION_TOKEN.findAll(body)) {
+        sb.append(body, last, m.range.first)
+        val shown = "@" + label(m.groupValues[1])
+        spans += sb.length until sb.length + shown.length
+        sb.append(shown)
+        last = m.range.last + 1
+    }
+    sb.append(body, last, body.length)
+    return sb.toString() to spans
 }

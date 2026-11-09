@@ -37,6 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -128,7 +130,7 @@ fun WeddingListView(
 @Composable
 fun WeddingBoardView(
     lanes: List<TaskGroup>, busy: Boolean,
-    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit,
+    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAddInLane: (TaskGroup) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val s = LocalWedding.current.s
@@ -141,6 +143,13 @@ fun WeddingBoardView(
                 ) {
                     Text(lane.label, style = MaterialTheme.typography.titleSmall, color = if (lane.key == "overdue") LocalD2MStatusPalette.current.danger.fg else d2m.ink, modifier = Modifier.weight(1f))
                     Text("${lane.rows.count { it.status == "done" }}/${lane.rows.size}", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+                    if (lane.key != "done") {
+                        Box(
+                            Modifier.padding(start = 10.dp).size(28.dp).clip(CircleShape).border(BorderStroke(1.dp, d2m.borderStrong), CircleShape)
+                                .clickable { onAddInLane(lane) }.semantics { contentDescription = s.laneAdd(lane.label) },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("+", style = MaterialTheme.typography.titleMedium, color = d2m.ink) }
+                    }
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(lane.rows.take(80), key = { it.id }) { t ->

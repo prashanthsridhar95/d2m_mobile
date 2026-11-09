@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -93,7 +94,7 @@ class WeddingUiTest {
     @Test fun consultAndCountTagsAreProperChips() = runComposeUiTest {
         val e = env()
         render(e) { WeddingListView(buildGroups(tasks, phases, "phase", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInGroup = {}) }
-        onNodeWithText("Consult").assertIsDisplayed()
+        assertTrue(onAllNodesWithText("Consult").fetchSemanticsNodes().isEmpty(), "the involves chip is just the name now")
         onNodeWithText("Astrologer").assertIsDisplayed() // capitalised from the server's lower-case "astrologer"
         onNodeWithText("💬 2 comments").assertIsDisplayed()
     }
@@ -105,9 +106,19 @@ class WeddingUiTest {
         onNodeWithContentDescription("Loading…").assertIsDisplayed()
     }
 
+    @Test fun everyBoardLaneHasAPlusThatAddsIntoIt() = runComposeUiTest {
+        val e = env()
+        var added: String? = null
+        val lanes = buildGroups(tasks, phases, "due", e.label, today, e.s)
+        render(e) { WeddingBoardView(lanes, busy = false, onOpen = {}, onToggle = {}, onAddInLane = { added = it.key }) }
+        onNodeWithContentDescription("Add a to-do to Next 7 days").performClick()
+        assertEquals("week", added)
+        assertTrue(onAllNodesWithContentDescription("Add a to-do to Done").fetchSemanticsNodes().isEmpty(), "no + on the Done lane")
+    }
+
     @Test fun boardShowsOneLanePerBucket() = runComposeUiTest {
         val e = env()
-        render(e) { WeddingBoardView(buildGroups(tasks, phases, "due", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}) }
+        render(e) { WeddingBoardView(buildGroups(tasks, phases, "due", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInLane = {}) }
         onNodeWithText("Overdue").assertIsDisplayed()
         onNodeWithText("Next 7 days").assertIsDisplayed()
         onNodeWithText("Fix the muhurtham").assertIsDisplayed()
@@ -130,7 +141,7 @@ class WeddingUiTest {
         onNodeWithText("Priya").assertIsDisplayed()
         onNodeWithText("Priya's parents").assertIsDisplayed()
         assertTrue(onAllNodesWithText("Me").fetchSemanticsNodes().isNotEmpty())
-        onNodeWithText("5 of 5 tasks match").assertIsDisplayed()
+        onNodeWithText("5 of 5 to-dos match").assertIsDisplayed()
     }
 
     @Test fun timelineShowsMilestonesAndFansOutCloseOnes() = runComposeUiTest {
@@ -151,7 +162,7 @@ class WeddingUiTest {
 
     @Test fun hindiRendersLocalizedLabels() = runComposeUiTest {
         val e = env(WeddingStringsHi)
-        render(e) { WeddingBoardView(buildGroups(tasks, phases, "due", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}) }
+        render(e) { WeddingBoardView(buildGroups(tasks, phases, "due", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInLane = {}) }
         onNodeWithText("विलंबित").assertIsDisplayed()
         onNodeWithText("अगले 7 दिन").assertIsDisplayed()
     }
