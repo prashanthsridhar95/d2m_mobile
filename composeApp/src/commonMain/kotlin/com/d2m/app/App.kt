@@ -303,15 +303,19 @@ fun App() {
     // Union confirmed -> Discover/Browse are hidden (not removed) and the wedding checklist takes their tab.
     val dashboardRepo: DashboardRepository = koinInject()
     val weddingMode by WeddingMode.active.collectAsState()
+    val settings: com.russhwolf.settings.Settings = koinInject()
     LaunchedEffect(identity.role, identity.sponsorId, identity.primaryId, identity.childPrimaryId, currentRoute) {
         val role = identity.role ?: run { WeddingMode.active.value = false; return@LaunchedEffect }
+        // Last known answer first, so the home and tabs open in the right mode (no flash of the match-finding layout).
+        val cacheKey = "wedding_mode_${identity.sponsorId ?: identity.primaryId}"
+        if (settings.hasKey(cacheKey)) WeddingMode.active.value = settings.getBoolean(cacheKey, false)
         // Dashboards are cached for 30s in the repository, so route hops cost nothing; failures leave the flag as it was.
         runCatching {
             when (role) {
                 D2MRole.CHILD -> identity.primaryId?.let { dashboardRepo.getPrimaryDashboard(it).weddingMode }
                 D2MRole.PARENT -> identity.sponsorId?.let { dashboardRepo.getSponsorDashboard(it).weddingMode }
             }
-        }.getOrNull()?.let { WeddingMode.active.value = it }
+        }.getOrNull()?.let { WeddingMode.active.value = it; settings.putBoolean(cacheKey, it) }
     }
     LaunchedEffect(weddingMode, currentRoute) {
         if (weddingMode && (currentRoute == Routes.DISCOVERY || currentRoute == Routes.PARENT_BROWSE)) {

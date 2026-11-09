@@ -242,7 +242,7 @@ fun ParentHomeScreen(
                         D2MEmptyState(strings.waitingOnChildTitle, strings.waitingOnChildBody)
                     }
 
-                    loading -> item(key = "skeleton", contentType = "skeleton") { HomeSkeleton() }
+                    loading -> item(key = "skeleton", contentType = "skeleton") { if (weddingActive) WeddingHomeSkeleton() else HomeSkeleton() }
 
                     error != null -> item(key = "error", contentType = "state") {
                         D2MErrorBanner(error!!, onRetry = { refresh() }, modifier = Modifier.fillParentMaxSize())
@@ -528,6 +528,21 @@ private fun StatLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         MetaText(label)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** The wedding home: header, then one card with a countdown + progress and a few next-up rows. */
+@Composable
+private fun WeddingHomeSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            D2MSkeleton(width = 200.dp, height = 28.dp)
+            D2MSkeleton(width = 96.dp, height = 24.dp, radius = 12.dp)
+        }
+        D2MSkeleton(height = 48.dp, radius = 12.dp)
+        D2MSkeleton(width = 90.dp, height = 36.dp)
+        D2MSkeleton(height = 8.dp, radius = 4.dp)
+        repeat(3) { D2MSkeleton(height = 20.dp, radius = 6.dp) }
     }
 }
 
