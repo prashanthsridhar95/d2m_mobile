@@ -151,6 +151,7 @@ fun D2MNavGraph(
                 onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) },
                 onOpenChildProfileDialog = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
                 onOpenMessages = { navController.navigate(Routes.PARENT_MESSAGES) },
+                onOpenChecklist = { navController.navigate(Routes.WEDDING_CHECKLIST) },
             )
         }
 

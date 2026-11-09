@@ -181,6 +181,12 @@ interface WeddingStrings {
     val uploading: String
     val attachmentsHint: String
     val opening: String
+    val openWith: String
+    val homeEyebrow: String
+    val homeSetDates: String
+    fun progressOf(done: Int, total: Int): String
+    val nextUp: String
+    val openChecklist: String
     val tapToOpen: String
     val remove: String
     val comments: String
@@ -407,6 +413,12 @@ object WeddingStringsEn : WeddingStrings {
     override val uploading = "Uploading…"
     override val attachmentsHint = "Quotes, photos, PDFs — both families can see them."
     override val opening = "Opening…"
+    override val openWith = "Open with…"
+    override val homeEyebrow = "Getting married soon"
+    override val homeSetDates = "Set the key dates to start the countdown"
+    override fun progressOf(done: Int, total: Int) = "$done of $total to-dos done"
+    override val nextUp = "Next up"
+    override val openChecklist = "Open checklist"
     override val tapToOpen = "Tap a document to open it."
     override val remove = "Remove"
     override val comments = "Comments"
@@ -633,6 +645,12 @@ object WeddingStringsHi : WeddingStrings {
     override val uploading = "अपलोड हो रहा है…"
     override val attachmentsHint = "कोटेशन, फ़ोटो, PDF — दोनों परिवार देख सकते हैं।"
     override val opening = "खुल रहा है…"
+    override val openWith = "दूसरे ऐप में खोलें"
+    override val homeEyebrow = "जल्द ही विवाह"
+    override val homeSetDates = "उलटी गिनती शुरू करने के लिए मुख्य तिथियाँ तय करें"
+    override fun progressOf(done: Int, total: Int) = "$total में से $done काम पूरे"
+    override val nextUp = "आगे"
+    override val openChecklist = "चेकलिस्ट खोलें"
     override val tapToOpen = "दस्तावेज़ खोलने के लिए उस पर टैप करें।"
     override val remove = "हटाएँ"
     override val comments = "टिप्पणियाँ"
@@ -859,6 +877,12 @@ object WeddingStringsTa : WeddingStrings {
     override val uploading = "பதிவேற்றுகிறது…"
     override val attachmentsHint = "விலைப்புள்ளிகள், புகைப்படங்கள், PDF — இரு குடும்பங்களும் பார்க்கலாம்."
     override val opening = "திறக்கிறது…"
+    override val openWith = "வேறு ஆப்பில் திறக்க"
+    override val homeEyebrow = "விரைவில் திருமணம்"
+    override val homeSetDates = "கவுண்டவுன் தொடங்க முக்கிய தேதிகளை அமைக்கவும்"
+    override fun progressOf(done: Int, total: Int) = "$total இல் $done பணிகள் முடிந்தன"
+    override val nextUp = "அடுத்து"
+    override val openChecklist = "சரிபார்ப்புப் பட்டியலைத் திற"
     override val tapToOpen = "ஆவணத்தைத் திறக்க அதைத் தட்டவும்."
     override val remove = "நீக்கு"
     override val comments = "கருத்துகள்"

@@ -120,6 +120,7 @@ fun ParentHomeScreen(
     onOpenProfile: (String) -> Unit,
     onOpenChildProfileDialog: () -> Unit,
     onOpenMessages: () -> Unit,
+    onOpenChecklist: () -> Unit = {},
 ) {
     val identityStore: IdentityStore = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
@@ -259,6 +260,11 @@ fun ParentHomeScreen(
                         if (refreshError != null) {
                             item(key = "refresh-error", contentType = "state") { D2MErrorBanner(refreshError!!) }
                         }
+                        if (weddingActive) {
+                            item(key = "wedding-card", contentType = "wedding") {
+                                childPrimaryId?.let { WeddingHomeCard(it, onOpenChecklist) }
+                            }
+                        } else {
                         item(key = "next-action", contentType = "action") {
                             val profileComplete = dashboard?.childProfileCompleted == true
                             NextActionCard(
@@ -315,6 +321,7 @@ fun ParentHomeScreen(
                                 }
                             }
                         }
+                        }
                         // Once the union is confirmed the serious-exploration / request-access card no longer applies.
                         if (sponsorId != null && !weddingActive) {
                             item(key = "serious-row", contentType = "disclosure") {
@@ -329,6 +336,7 @@ fun ParentHomeScreen(
                                 )
                             }
                         }
+                        if (!weddingActive) {
                         item(key = "activity-row", contentType = "disclosure") {
                             var expanded by rememberSaveable { mutableStateOf(false) }
                             val d = dashboard
@@ -350,6 +358,7 @@ fun ParentHomeScreen(
                                     }
                                 }
                             }
+                        }
                         }
                     }
                 }

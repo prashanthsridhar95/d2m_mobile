@@ -210,7 +210,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
     var posting by remember(task.id) { mutableStateOf(false) }
     var picks by remember(task.id) { mutableStateOf(listOf<Pair<String, String>>()) } // role to the label typed for it
     var uploading by remember(task.id) { mutableStateOf(false) }
-    var expandedImage by remember(task.id) { mutableStateOf<String?>(null) }
+    var viewingId by remember(task.id) { mutableStateOf<String?>(null) }
     var confirmRemove by remember(task.id) { mutableStateOf(false) }
     var opening by remember(task.id) { mutableStateOf<String?>(null) }
     var titleDraft by remember(task.id) { mutableStateOf(task.title) }
@@ -268,7 +268,6 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             }
 
             HorizontalDivider(color = d2m.borderSoft)
-            task.externalParty?.let { ConsultChip(it) }
             if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LabelText(s.assigned)
@@ -281,6 +280,9 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                         }
                     }
                 }
+            }
+            task.externalParty?.let {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { LabelText(s.groupParty); ConsultChip(it) }
             }
             // Anyone who can see the task may reschedule it.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -309,7 +311,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                 files.forEach { a ->
                     Column(Modifier.border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(6.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth().clickable(enabled = opening == null) {
-                            if (a.isImage) expandedImage = if (expandedImage == a.id) null else a.id
+                            if (a.viewerKind() != null) viewingId = a.id
                             else scope.launch {
                                 opening = a.id; err = null
                                 runCatching { c.repo.download(c.primaryId, task.id, a.id) }
@@ -340,15 +342,18 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                                 }
                             })
                         }
-                        if (a.isImage && expandedImage == a.id) {
-                            AsyncImage(
-                                model = c.repo.attachmentUrl(c.primaryId, task.id, a.id), imageLoader = loader, contentDescription = a.filename,
-                                contentScale = ContentScale.FillWidth, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)),
-                            )
-                        }
                     }
                 }
-                if (files.any { !it.isImage }) MetaText(s.tapToOpen)
+                viewingId?.let { id ->
+                    val viewable = files.filter { it.viewerKind() != null }
+                    if (viewable.any { it.id == id }) WeddingFileViewer(
+                        files = viewable, startId = id,
+                        imageModel = { f -> c.repo.attachmentUrl(c.primaryId, task.id, f.id) },
+                        download = { f -> c.repo.download(c.primaryId, task.id, f.id) },
+                        onClose = { viewingId = null },
+                    )
+                }
+                if (files.any { it.viewerKind() == null }) MetaText(s.tapToOpen)
             }
 
             // ---- comments ----
