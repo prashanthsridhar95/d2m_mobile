@@ -52,6 +52,8 @@ class WeddingModelsTest {
     @Test fun requestBodiesUseSnakeCaseAndTouchOnlyWhatTheyShould() {
         assertEquals("""{"due_date":null}""", json.encodeToString(WeddingDuePatchIn(null)))
         assertEquals("""{"due_date":"2027-02-02"}""", json.encodeToString(WeddingDuePatchIn("2027-02-02")))
+        assertEquals("""{"title":"New name"}""", json.encodeToString(WeddingTitlePatchIn("New name")))
+        assertEquals("""{"visibility":"side"}""", json.encodeToString(WeddingVisibilityPatchIn("side")))
         assertEquals("""{"tradition":"tamil"}""", json.encodeToString(WeddingTraditionIn("tamil")))
         assertEquals("""{"body":"hello"}""", json.encodeToString(WeddingCommentIn("hello")))
         assertEquals(

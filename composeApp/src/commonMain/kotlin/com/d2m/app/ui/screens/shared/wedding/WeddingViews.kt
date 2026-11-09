@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -93,6 +94,7 @@ fun WeddingListView(
     modifier: Modifier = Modifier,
 ) {
     var collapsed by remember { mutableStateOf(setOf<String>()) }
+    val s = LocalWedding.current.s
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         groups.forEach { g ->
             val isCollapsed = g.key in collapsed
@@ -108,7 +110,7 @@ fun WeddingListView(
                     Text(g.label, style = MaterialTheme.typography.titleSmall, color = d2m.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val done = g.rows.count { it.status == "done" }
                     Text("$done/${g.rows.size}", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
-                    g.phase?.let { LinkText("+ Add", onClick = { onAddInGroup(it) }) }
+                    g.phase?.let { LinkText(s.addInGroup, onClick = { onAddInGroup(it) }) }
                 }
             }
             if (!isCollapsed) items(g.rows, key = { it.id }) { t ->
@@ -129,6 +131,7 @@ fun WeddingBoardView(
     onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalWedding.current.s
     LazyRow(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(lanes, key = { it.key }) { lane ->
             D2MCard(Modifier.width(284.dp).fillMaxHeight()) {
@@ -159,7 +162,7 @@ fun WeddingBoardView(
                             }
                         }
                     }
-                    if (lane.rows.size > 80) item { Text("+${lane.rows.size - 80} more — narrow it with filters", style = MaterialTheme.typography.labelMedium, color = d2m.meta) }
+                    if (lane.rows.size > 80) item { Text(s.moreNarrow(lane.rows.size - 80), style = MaterialTheme.typography.labelMedium, color = d2m.meta) }
                 }
             }
         }
@@ -167,8 +170,6 @@ fun WeddingBoardView(
 }
 
 /* ------------------------------------------------------------------ calendar */
-
-private val DOW = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 /** One month that fits the screen: rows share the height, each day shows its panchangam markers and a dot per task. Tap a day for its list. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -189,7 +190,8 @@ fun WeddingCalendarView(
     val weeks = (startOffset + daysInMonth + 6) / 7
     val gridStart = first.plus(DatePeriod(days = -startOffset))
     val byDay = remember(tasks) { tasks.filter { it.dueDate != null }.groupBy { it.dueDate!! } }
-    val milestones = mapOf(plan.engagementDate to "Eng", plan.marriageDate to "Wed", plan.honeymoonDate to "Hon")
+    val s = env.s
+    val milestones = mapOf(plan.engagementDate to s.engagementShort, plan.marriageDate to s.weddingShort, plan.honeymoonDate to s.honeymoonShort)
     val inMonth = tasks.count { it.dueDate?.startsWith("${year}-${month.toString().padStart(2, '0')}") == true }
     val undated = tasks.count { it.dueDate == null }
 
@@ -201,20 +203,22 @@ fun WeddingCalendarView(
     Column(modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             D2MButton("‹", { go(-1) }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
-            Text(monthTitle(year, month), style = MaterialTheme.typography.titleMedium, color = d2m.ink, modifier = Modifier.weight(1f), maxLines = 1)
+            Text(monthTitle(year, month, s), style = MaterialTheme.typography.titleMedium, color = d2m.ink, modifier = Modifier.weight(1f), maxLines = 1)
             D2MButton("›", { go(1) }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
-            D2MButton("Today", { year = today.year; month = today.month.ordinal + 1 }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
-            plan.marriageDate?.let { m -> D2MButton("Wedding", { val d = m.toDate(); year = d.year; month = d.month.ordinal + 1 }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM) }
+            D2MButton(s.calToday, { year = today.year; month = today.month.ordinal + 1 }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
+            plan.marriageDate?.let { m -> D2MButton(s.calWedding, { val d = m.toDate(); year = d.year; month = d.month.ordinal + 1 }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM) }
         }
         Text(
-            "$inMonth task${if (inMonth == 1) "" else "s"} due this month" + if (undated > 0) " · $undated without a date" else "",
+            s.dueThisMonth(inMonth) + if (undated > 0) " · " + s.withoutDate(undated) else "",
             style = MaterialTheme.typography.labelMedium, color = d2m.meta,
         )
         if (env.pm.available) CalendarLegend()
         Row(Modifier.fillMaxWidth()) {
-            DOW.forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = d2m.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            s.weekdaysShort.forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = d2m.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
-        Column(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(8.dp))) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(8.dp))) {
+          val chipMode = maxWidth / 7 >= 88.dp
+          Column(Modifier.fillMaxSize()) {
             repeat(weeks) { w ->
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     repeat(7) { dIdx ->
@@ -248,17 +252,41 @@ fun WeddingCalendarView(
                             }
                             if (ms != null) Text(ms, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = d2m.goldStrong)
                             if (list.isNotEmpty()) {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp), maxLines = 2) {
-                                    list.take(6).forEach { t ->
-                                        Box(Modifier.size(7.dp).clip(CircleShape).background(when { t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.accent }))
+                                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                                    if (chipMode) {
+                                        // Roomy cell (tablet / landscape): task titles as chips, as many as fit, then "+N".
+                                        val capacity = (maxHeight / 17.dp).toInt().coerceAtLeast(1)
+                                        val fit = list.size <= capacity
+                                        val shown = if (fit) list else list.take((capacity - 1).coerceAtLeast(0))
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            shown.forEach { t ->
+                                                Text(
+                                                    t.title, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                    color = when { t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.textPrimary },
+                                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(3.dp))
+                                                        .background(when { t.status == "done" -> p.success.bg; t.overdue -> p.danger.bg; else -> d2m.accentSoft })
+                                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                                )
+                                            }
+                                            if (!fit) Text("+${list.size - shown.size}", fontSize = 9.sp, color = d2m.meta)
+                                        }
+                                    } else {
+                                        Column {
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp), maxLines = 2) {
+                                                list.take(6).forEach { t ->
+                                                    Box(Modifier.size(7.dp).clip(CircleShape).background(when { t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.accent }))
+                                                }
+                                            }
+                                            if (list.size > 6) Text("+${list.size - 6}", fontSize = 8.sp, color = d2m.meta)
+                                        }
                                     }
                                 }
-                                if (list.size > 6) Text("+${list.size - 6}", fontSize = 8.sp, color = d2m.meta)
                             }
                         }
                     }
                 }
             }
+          }
         }
     }
 }
@@ -267,12 +295,13 @@ fun WeddingCalendarView(
 @Composable
 private fun CalendarLegend() {
     val p = LocalD2MStatusPalette.current
+    val s = LocalWedding.current.s
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         @Composable fun item(content: @Composable () -> Unit, label: String) =
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { content(); Text(label, style = MaterialTheme.typography.labelSmall, color = d2m.meta) }
-        item({ Text("★", color = p.success.fg, fontSize = 11.sp) }, "Muhoortham")
-        item({ Box(Modifier.size(9.dp).clip(CircleShape).background(p.warning.fg)) }, "Purnima")
-        item({ Box(Modifier.size(9.dp).clip(CircleShape).background(d2m.meta)) }, "Amavasya")
-        item({ Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(p.danger.bg).border(1.dp, p.danger.fg, RoundedCornerShape(3.dp))) }, "Chandrashtamam")
+        item({ Text("★", color = p.success.fg, fontSize = 11.sp) }, s.pmMuhoortham)
+        item({ Box(Modifier.size(9.dp).clip(CircleShape).background(p.warning.fg)) }, s.pmPurnima)
+        item({ Box(Modifier.size(9.dp).clip(CircleShape).background(d2m.meta)) }, s.pmAmavasya)
+        item({ Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(p.danger.bg).border(1.dp, p.danger.fg, RoundedCornerShape(3.dp))) }, s.pmChandrashtamam)
     }
 }

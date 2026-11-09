@@ -32,12 +32,13 @@ import androidx.compose.ui.unit.sp
 import com.d2m.app.data.model.WeddingTaskOut
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
+import com.d2m.app.ui.strings.WeddingStrings
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
 import kotlinx.datetime.LocalDate
 
 /** What every wedding composable needs: role names ("Me", "Priya's parents"), panchangam flags, today. */
-class WeddingEnv(val label: (String) -> String, val pm: PanchangamStore, val today: LocalDate)
+class WeddingEnv(val label: (String) -> String, val pm: PanchangamStore, val today: LocalDate, val s: WeddingStrings)
 
 val LocalWedding = compositionLocalOf<WeddingEnv> { error("WeddingEnv not provided") }
 
@@ -61,7 +62,7 @@ fun Avatars(task: WeddingTaskOut, modifier: Modifier = Modifier, named: Boolean 
             task.participants.take(4).forEachIndexed { i, r ->
                 val on = r in task.confirmedBy
                 val c = roleColor(r)
-                val me = env.label(r) == "Me"
+                val me = env.label(r) == env.s.me
                 Box(
                     Modifier.offset(x = (-6 * i).dp).then(if (me) Modifier.height(22.dp) else Modifier.size(22.dp))
                         .clip(CircleShape).background(if (on) c else MaterialTheme.colorScheme.surface)
@@ -70,7 +71,7 @@ fun Avatars(task: WeddingTaskOut, modifier: Modifier = Modifier, named: Boolean 
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        if (me) "Me" else ROLE_SHORT[r] ?: "",
+                        if (me) env.s.me else ROLE_SHORT[r] ?: "",
                         fontSize = 9.sp, fontWeight = FontWeight.Bold,
                         color = if (on) MaterialTheme.colorScheme.surface else c,
                     )
@@ -94,7 +95,7 @@ fun CheckCircle(task: WeddingTaskOut, busy: Boolean, onToggle: () -> Unit, modif
             .background(if (done) green else MaterialTheme.colorScheme.surface)
             .border(BorderStroke(2.dp, if (done) green else d2m.borderStrong), CircleShape)
             .clickable(enabled = enabled, onClick = onToggle)
-            .semantics { contentDescription = if (done) "Completed: ${task.title}" else "Mark done: ${task.title}" },
+            .semantics { contentDescription = task.title },
         contentAlignment = Alignment.Center,
     ) { if (done) Text("✓", color = MaterialTheme.colorScheme.surface, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 }
@@ -108,7 +109,7 @@ fun TypeTag(task: WeddingTaskOut) {
         "family" -> D2MBadgeTone.SUCCESS
         else -> D2MBadgeTone.NEUTRAL
     }
-    D2MBadge(SCOPE_LABEL[task.scope] ?: task.scope, tone)
+    D2MBadge(LocalWedding.current.s.scope(task.scope), tone)
 }
 
 @Composable
@@ -126,7 +127,7 @@ fun Counts(task: WeddingTaskOut) {
 fun DueChip(task: WeddingTaskOut) {
     val env = LocalWedding.current
     if (task.dueDate == null) {
-        Text("No date", style = MaterialTheme.typography.labelMedium, color = d2m.faint)
+        Text(env.s.noDate, style = MaterialTheme.typography.labelMedium, color = d2m.faint)
         return
     }
     val danger = LocalD2MStatusPalette.current.danger.fg
@@ -136,7 +137,7 @@ fun DueChip(task: WeddingTaskOut) {
         else -> d2m.meta
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(relDue(task, env.today), style = MaterialTheme.typography.labelMedium, color = color, fontWeight = if (task.overdue && task.status != "done") FontWeight.SemiBold else FontWeight.Normal)
+        Text(relDue(task, env.today, env.s), style = MaterialTheme.typography.labelMedium, color = color, fontWeight = if (task.overdue && task.status != "done") FontWeight.SemiBold else FontWeight.Normal)
         PmBadges(task.dueDate)
     }
 }
@@ -168,15 +169,15 @@ fun PmNote(date: String?, modifier: Modifier = Modifier) {
     val env = LocalWedding.current
     if (date == null || !env.pm.available) return
     val d = env.pm.get(date)
-    if (d == null) { Text("Checking panchangam…", style = MaterialTheme.typography.labelSmall, color = d2m.faint, modifier = modifier); return }
+    if (d == null) { Text(env.s.pmChecking, style = MaterialTheme.typography.labelSmall, color = d2m.faint, modifier = modifier); return }
     val p = LocalD2MStatusPalette.current
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("${d.tithi.replace(Regex(" \\(.*\\)"), "")} · ${d.nakshatra}", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
         @Composable fun tag(text: String, bg: Color, fg: Color) =
             Text(text, style = MaterialTheme.typography.labelSmall, color = fg, modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(bg).padding(horizontal = 8.dp, vertical = 2.dp))
-        if (d.isMuhoortham) tag("Shubh muhoortham", p.success.bg, p.success.fg)
-        if (d.isPurnima) tag("Purnima", p.warning.bg, p.warning.fg)
-        if (d.isAmavasya) tag("Amavasya — usually avoided", p.neutral.bg, p.neutral.fg)
-        if (d.chandrashtamam.isNotEmpty()) tag("Chandrashtamam — ${d.chandrashtamam.joinToString(" & ") { env.label(it) }}", p.danger.bg, p.danger.fg)
+        if (d.isMuhoortham) tag(env.s.pmShubh, p.success.bg, p.success.fg)
+        if (d.isPurnima) tag(env.s.pmPurnima, p.warning.bg, p.warning.fg)
+        if (d.isAmavasya) tag(env.s.pmAmavasyaAvoid, p.neutral.bg, p.neutral.fg)
+        if (d.chandrashtamam.isNotEmpty()) tag(env.s.pmChandrashtamamFor(d.chandrashtamam.joinToString(" & ") { env.label(it) }), p.danger.bg, p.danger.fg)
     }
 }

@@ -6,6 +6,9 @@ import com.d2m.app.data.model.WeddingPlanOut
 import com.d2m.app.data.model.WeddingTaskOut
 import com.d2m.app.ui.components.FacetMode
 import com.d2m.app.ui.components.FacetState
+import com.d2m.app.ui.strings.WeddingStringsEn
+import com.d2m.app.ui.strings.WeddingStringsHi
+import com.d2m.app.ui.strings.WeddingStringsTa
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,6 +16,7 @@ import kotlin.test.assertTrue
 
 class WeddingLogicTest {
     private val today = LocalDate(2026, 11, 9)
+    private val en = WeddingStringsEn
 
     private fun plan(myRole: String = "groom", bride: String? = "Priya", groom: String? = "Prakash") = WeddingPlanOut(
         id = "p", unionId = "u", myRole = myRole, names = WeddingNamesOut(bride, groom),
@@ -27,19 +31,19 @@ class WeddingLogicTest {
     )
 
     @Test fun labelsUseNamesAndMe() {
-        val label = labeler(plan(myRole = "groom"))
+        val label = labeler(plan(myRole = "groom"), en)
         assertEquals("Me", label("groom"))
         assertEquals("Priya", label("bride"))
         assertEquals("Priya's parents", label("bride_parents"))
         assertEquals("Prakash's parents", label("groom_parents"))
         // a parent viewing: their own role is "Me", their child is named
-        val parent = labeler(plan(myRole = "groom_parents"))
+        val parent = labeler(plan(myRole = "groom_parents"), en)
         assertEquals("Me", parent("groom_parents"))
         assertEquals("Prakash", parent("groom"))
     }
 
     @Test fun labelsFallBackWhenNamesAreMissing() {
-        val label = labeler(plan(myRole = "groom", bride = null, groom = null))
+        val label = labeler(plan(myRole = "groom", bride = null, groom = null), en)
         assertEquals("Bride", label("bride"))
         assertEquals("Bride's parents", label("bride_parents"))
     }
@@ -54,11 +58,11 @@ class WeddingLogicTest {
     }
 
     @Test fun relativeDueText() {
-        assertEquals("Today", relDue(task("a", due = "2026-11-09"), today))
-        assertEquals("Tomorrow", relDue(task("b", due = "2026-11-10"), today))
-        assertEquals("3d overdue", relDue(task("c", due = "2026-11-06"), today))
-        assertEquals("In 5 days", relDue(task("d", due = "2026-11-14"), today))
-        assertEquals("25 Dec", relDue(task("e", due = "2026-12-25"), today))
+        assertEquals("Today", relDue(task("a", due = "2026-11-09"), today, en))
+        assertEquals("Tomorrow", relDue(task("b", due = "2026-11-10"), today, en))
+        assertEquals("3d overdue", relDue(task("c", due = "2026-11-06"), today, en))
+        assertEquals("In 5 days", relDue(task("d", due = "2026-11-14"), today, en))
+        assertEquals("25 Dec", relDue(task("e", due = "2026-12-25"), today, en))
     }
 
     @Test fun groupingByPhaseOwnerAndDue() {
@@ -68,12 +72,12 @@ class WeddingLogicTest {
             task("3", phase = "planning", participants = listOf("bride", "groom"), scope = "couple"),
         )
         val phases = listOf(WeddingPhaseOut("foundations", "Foundations"), WeddingPhaseOut("planning", "Planning"), WeddingPhaseOut("empty", "Empty"))
-        val label = labeler(plan())
-        assertEquals(listOf("foundations", "planning"), buildGroups(tasks, phases, "phase", label, today).map { it.key })
-        val owners = buildGroups(tasks, phases, "owner", label, today)
+        val label = labeler(plan(), en)
+        assertEquals(listOf("foundations", "planning"), buildGroups(tasks, phases, "phase", label, today, en).map { it.key })
+        val owners = buildGroups(tasks, phases, "owner", label, today, en)
         assertEquals(listOf("bride", "groom", "shared"), owners.map { it.key })
         assertEquals("Me", owners.first { it.key == "groom" }.label)
-        assertEquals(listOf("month", "nodate"), buildGroups(tasks, phases, "due", label, today).map { it.key })
+        assertEquals(listOf("month", "nodate"), buildGroups(tasks, phases, "due", label, today, en).map { it.key })
     }
 
     @Test fun filtersAndFacetedCounts() {
@@ -91,6 +95,24 @@ class WeddingLogicTest {
         // skipping a facet leaves it out of the predicate (what the counts rely on)
         assertEquals(3, tasks.count { passes(it, include, today, skip = "owners") })
         assertTrue(Filters().activeCount == 0 && include.activeCount == 1 && Filters(q = "x").activeCount == 1)
+    }
+
+    @Test fun everyLanguageHasEveryCalendarListAndTradition() {
+        listOf(WeddingStringsEn, WeddingStringsHi, WeddingStringsTa).forEach { x ->
+            assertEquals(12, x.monthsShort.size); assertEquals(12, x.monthsLong.size)
+            assertEquals(7, x.weekdaysShort.size); assertEquals(7, x.weekdaysLong.size)
+            assertEquals(TRADITION_KEYS.toSet(), x.traditionNames.keys)
+            BUCKET_KEYS.forEach { k -> assertTrue(x.bucket(k).isNotBlank()) }
+            SCOPE_KEYS.forEach { k -> assertTrue(x.scope(k).isNotBlank()) }
+        }
+    }
+
+    @Test fun localizedLabelsAndDates() {
+        val hi = labeler(plan(myRole = "groom"), WeddingStringsHi)
+        assertEquals("मैं", hi("groom"))
+        assertEquals("Priya के माता-पिता", hi("bride_parents"))
+        assertEquals("9 नव॰ 2026", today.medium(WeddingStringsHi))
+        assertEquals("இன்று", relDue(task("x", due = "2026-11-09"), today, WeddingStringsTa))
     }
 
     @Test fun searchMatchesTitles() {

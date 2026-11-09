@@ -51,7 +51,9 @@ import com.d2m.app.data.model.WeddingPhaseOut
 import com.d2m.app.data.model.WeddingTaskCreateIn
 import com.d2m.app.data.model.WeddingTaskOut
 import com.d2m.app.data.network.friendlyError
+import com.d2m.app.ui.strings.WeddingStrings
 import com.d2m.app.messaging.ui.rememberMediaAttachLauncher
+import com.d2m.app.platform.openDocument
 import com.d2m.app.ui.components.D2MBadge
 import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MButton
@@ -92,9 +94,9 @@ fun DatePickDialog(initial: String?, onDismiss: () -> Unit, onPick: (String) -> 
         confirmButton = {
             TextButton(onClick = {
                 state.selectedDateMillis?.let { onPick(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date.toString()) }
-            }) { Text("OK") }
+            }) { Text(LocalWedding.current.s.ok) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(LocalWedding.current.s.cancel) } },
     ) { DatePicker(state) }
 }
 
@@ -102,11 +104,12 @@ fun DatePickDialog(initial: String?, onDismiss: () -> Unit, onPick: (String) -> 
 @Composable
 private fun DateField(label: String, value: String?, onChange: (String?) -> Unit, clearable: Boolean = false) {
     var picking by remember { mutableStateOf(false) }
+    val s = LocalWedding.current.s
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            D2MButton(value?.toDate()?.medium() ?: "Set date", { picking = true }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
-            if (clearable && value != null) LinkText("Clear", onClick = { onChange(null) })
+            D2MButton(value?.toDate()?.medium(s) ?: s.setDate, { picking = true }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
+            if (clearable && value != null) LinkText(s.clear, onClick = { onChange(null) })
         }
         PmNote(value)
     }
@@ -115,31 +118,32 @@ private fun DateField(label: String, value: String?, onChange: (String?) -> Unit
 
 /* ------------------------------------------------------------------ task detail */
 
-private fun agoText(iso: String): String {
+private fun agoText(iso: String, s: WeddingStrings): String {
     val then = runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() ?: return ""
-    val s = (Clock.System.now().toEpochMilliseconds() - then) / 1000
+    val secs = (Clock.System.now().toEpochMilliseconds() - then) / 1000
     return when {
-        s < 60 -> "just now"
-        s < 3600 -> "${s / 60}m ago"
-        s < 86400 -> "${s / 3600}h ago"
-        s < 604800 -> "${s / 86400}d ago"
-        else -> Instant.fromEpochMilliseconds(then).toLocalDateTime(TimeZone.currentSystemDefault()).date.medium()
+        secs < 60 -> s.agoJustNow
+        secs < 3600 -> s.agoMinutes((secs / 60).toInt())
+        secs < 86400 -> s.agoHours((secs / 3600).toInt())
+        secs < 604800 -> s.agoDays((secs / 86400).toInt())
+        else -> Instant.fromEpochMilliseconds(then).toLocalDateTime(TimeZone.currentSystemDefault()).date.medium(s)
     }
 }
 
 private fun sizeText(n: Int) = if (n < 1024) "$n B" else if (n < 1048576) "${n / 1024} KB" else "${(n * 10 / 1048576) / 10.0} MB"
 
-private fun anchorText(t: WeddingTaskOut): String {
-    if (t.dueDateIsCustom) return "Custom date"
-    val a = t.anchor ?: "marriage"
+private fun anchorText(t: WeddingTaskOut, s: WeddingStrings): String {
+    if (t.dueDateIsCustom) return s.anchorCustom
+    val a = s.anchorName(t.anchor)
     val n = t.offsetDays
-    return if (n == 0) "On the $a date" else "${if (n < 0) -n else n} days ${if (n < 0) "before" else "after"} the $a date"
+    return when { n == 0 -> s.anchorOn(a); n < 0 -> s.anchorBefore(-n, a); else -> s.anchorAfter(n, a) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPhaseOut>, onDismiss: () -> Unit) {
     val env = LocalWedding.current
+    val s = env.s
     val scope = rememberCoroutineScope()
     var activity by remember(task.id) { mutableStateOf<WeddingActivityOut?>(null) }
     var err by remember(task.id) { mutableStateOf<String?>(null) }
@@ -148,23 +152,25 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
     var uploading by remember(task.id) { mutableStateOf(false) }
     var expandedImage by remember(task.id) { mutableStateOf<String?>(null) }
     var confirmRemove by remember(task.id) { mutableStateOf(false) }
+    var opening by remember(task.id) { mutableStateOf<String?>(null) }
+    var titleDraft by remember(task.id) { mutableStateOf(task.title) }
     val loader = rememberPhotoImageLoader()
     val done = task.status == "done"
 
     LaunchedEffect(task.id) {
         runCatching { c.repo.activity(c.primaryId, task.id) }
             .onSuccess { activity = it; c.updateCounts(task.id, it.comments.size, it.attachments.size) }
-            .onFailure { err = friendlyError(it, "Couldn't load comments.") }
+            .onFailure { err = friendlyError(it, s.couldntLoadComments) }
     }
     fun sync(a: WeddingActivityOut) { activity = a; c.updateCounts(task.id, a.comments.size, a.attachments.size) }
 
     val pick = rememberMediaAttachLauncher { m ->
-        if (m.bytes.size > MAX_ATTACHMENT_BYTES) { err = "${m.fileName} is over 8 MB."; return@rememberMediaAttachLauncher }
+        if (m.bytes.size > MAX_ATTACHMENT_BYTES) { err = s.overLimit(m.fileName); return@rememberMediaAttachLauncher }
         scope.launch {
             uploading = true; err = null
             runCatching { c.repo.upload(c.primaryId, task.id, m.fileName, m.mime, m.bytes) }
                 .onSuccess { f -> activity?.let { sync(it.copy(attachments = it.attachments + f)) } }
-                .onFailure { err = friendlyError(it, "Couldn't upload ${m.fileName}.") }
+                .onFailure { err = friendlyError(it, s.couldntUpload(m.fileName)) }
             uploading = false
         }
     }
@@ -176,64 +182,82 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
     ) {
         Column(Modifier.verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                MetaText(phases.firstOrNull { it.key == task.phase }?.label ?: "Task")
-                SectionHeading(task.title)
+                MetaText(phases.firstOrNull { it.key == task.phase }?.label ?: s.taskFallback)
+                // A custom task's creator can rename it and choose who sees it; template tasks keep their wording.
+                if (task.canChangeVisibility) {
+                    D2MTextField("", titleDraft, { if (it.length <= 200) titleDraft = it }, placeholder = s.titlePlaceholder)
+                    if (titleDraft.trim().isNotEmpty() && titleDraft.trim() != task.title) {
+                        D2MButton(s.saveTitle, { c.setTitle(task, titleDraft) }, size = D2MButtonSize.SM, enabled = !c.busy)
+                    }
+                } else SectionHeading(task.title)
             }
 
             // Status: only the assignees can change it (and only the signer can reopen).
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 D2MButton(
-                    text = if (done) "✓ Done — reopen" else if (task.participants.size > 1) "Mark as agreed / done" else "Mark as done",
+                    text = if (done) s.doneReopen else if (task.participants.size > 1) s.markAgreed else s.markDone,
                     onClick = { c.toggle(task) },
                     variant = if (done) D2MButtonVariant.OUTLINE else D2MButtonVariant.SOLID,
                     enabled = !c.busy && task.iAmParticipant && !(done && !task.iConfirmed),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 when {
-                    !task.iAmParticipant -> MetaText("Assigned to ${task.participants.joinToString { env.label(it) }} — only they can mark it done")
-                    done && !task.iConfirmed -> MetaText("Signed off by ${task.confirmedBy.joinToString { env.label(it) }}")
+                    !task.iAmParticipant -> MetaText(s.assignedOnly(task.participants.joinToString { env.label(it) }))
+                    done && !task.iConfirmed -> MetaText(s.signedOffBy(task.confirmedBy.joinToString { env.label(it) }))
                 }
             }
 
             HorizontalDivider(color = d2m.borderSoft)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TypeTag(task)
-                task.externalParty?.let { D2MBadge("with $it", D2MBadgeTone.INFO) }
+                task.externalParty?.let { D2MBadge(s.withParty(it), D2MBadgeTone.INFO) }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Assigned", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+                Text(s.assigned, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
                 task.participants.forEach { r ->
                     val signed = r in task.confirmedBy
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(env.label(r) + if (r == task.createdByRole) " · creator" else "", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        Text(if (signed) "signed off" else "pending", style = MaterialTheme.typography.labelMedium, color = if (signed) LocalD2MStatusPalette.current.success.fg else d2m.faint)
+                        Text(env.label(r) + if (r == task.createdByRole) s.creatorSuffix else "", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(if (signed) s.signedOff else s.pending, style = MaterialTheme.typography.labelMedium, color = if (signed) LocalD2MStatusPalette.current.success.fg else d2m.faint)
                     }
                 }
             }
             // Anyone who can see the task may reschedule it.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                DateField("Due", task.dueDate, onChange = { c.setDue(task, it) })
+                DateField(s.due, task.dueDate, onChange = { c.setDue(task, it) })
                 Text(
-                    (if (task.dueDate != null) anchorText(task) else "Set the key dates to schedule this"),
+                    (if (task.dueDate != null) anchorText(task, s) else s.setKeyDatesToSchedule),
                     style = MaterialTheme.typography.labelSmall, color = d2m.faint,
                 )
-                if (task.dueDateIsCustom && !task.isCustom) LinkText("Reset to calculated date", onClick = { c.setDue(task, null) })
+                if (task.dueDateIsCustom && !task.isCustom) LinkText(s.resetDate, onClick = { c.setDue(task, null) })
             }
 
+            if (task.canChangeVisibility) {
+                D2MSelectField(s.visibleTo, task.visibility, VISIBILITY_KEYS, { if (it.isNotEmpty()) c.setVisibility(task, it) }, optionLabel = { k -> s.visibility(k) })
+            }
             HorizontalDivider(color = d2m.borderSoft)
             err?.let { Text(it, color = LocalD2MStatusPalette.current.danger.fg, style = MaterialTheme.typography.bodyMedium) }
 
             // ---- attachments ----
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Attachments", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    LinkText(if (uploading) "Uploading…" else "+ Add file", onClick = { pick() }, enabled = !uploading)
+                    Text(s.attachments, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    LinkText(if (uploading) s.uploading else s.addFile, onClick = { pick() }, enabled = !uploading)
                 }
                 val files = activity?.attachments.orEmpty()
-                if (files.isEmpty() && !uploading) MetaText("Quotes, photos, PDFs — both families can see them.")
+                if (files.isEmpty() && !uploading) MetaText(s.attachmentsHint)
                 files.forEach { a ->
                     Column(Modifier.border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(6.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(Modifier.fillMaxWidth().clickable(enabled = a.isImage) { expandedImage = if (expandedImage == a.id) null else a.id }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth().clickable(enabled = opening == null) {
+                            if (a.isImage) expandedImage = if (expandedImage == a.id) null else a.id
+                            else scope.launch {
+                                opening = a.id; err = null
+                                runCatching { c.repo.download(c.primaryId, task.id, a.id) }
+                                    .onSuccess { bytes -> if (!openDocument(a.filename, a.contentType, bytes)) err = s.noAppCanOpen(a.filename) }
+                                    .onFailure { err = friendlyError(it, s.couldntOpen(a.filename)) }
+                                opening = null
+                            }
+                        }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (a.isImage) {
                                 AsyncImage(
                                     model = c.repo.attachmentUrl(c.primaryId, task.id, a.id), imageLoader = loader, contentDescription = a.filename,
@@ -246,13 +270,13 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                             }
                             Column(Modifier.weight(1f)) {
                                 Text(a.filename, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                Text("${sizeText(a.sizeBytes)} · ${env.label(a.uploadedByRole)} · ${agoText(a.createdAt)}", style = MaterialTheme.typography.labelSmall, color = d2m.meta)
+                                Text((if (opening == a.id) s.opening + " · " else "") + "${sizeText(a.sizeBytes)} · ${env.label(a.uploadedByRole)} · ${agoText(a.createdAt, s)}", style = MaterialTheme.typography.labelSmall, color = d2m.meta)
                             }
-                            if (a.mine) LinkText("Remove", onClick = {
+                            if (a.mine) LinkText(s.remove, onClick = {
                                 scope.launch {
                                     runCatching { c.repo.deleteAttachment(c.primaryId, task.id, a.id) }
                                         .onSuccess { activity?.let { cur -> sync(cur.copy(attachments = cur.attachments.filter { it.id != a.id })) } }
-                                        .onFailure { err = friendlyError(it, "Couldn't remove the file.") }
+                                        .onFailure { err = friendlyError(it, s.couldntRemoveFile) }
                                 }
                             })
                         }
@@ -264,30 +288,30 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                         }
                     }
                 }
-                if (files.any { !it.isImage }) MetaText("Open PDFs and documents from the web app.")
+                if (files.any { !it.isImage }) MetaText(s.tapToOpen)
             }
 
             // ---- comments ----
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Comments", style = MaterialTheme.typography.titleSmall)
+                Text(s.comments, style = MaterialTheme.typography.titleSmall)
                 activity?.legacyNote?.let { note ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).border(1.dp, d2m.borderSoft, RoundedCornerShape(6.dp)).padding(10.dp)) {
-                        Text("Earlier note", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+                        Text(s.earlierNote, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
                         Text(note, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 val comments = activity?.comments.orEmpty()
-                if (activity != null && comments.isEmpty() && activity?.legacyNote == null) MetaText("No comments yet. Start the conversation — both families can see it.")
+                if (activity != null && comments.isEmpty() && activity?.legacyNote == null) MetaText(s.noComments)
                 comments.forEach { cm ->
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(env.label(cm.authorRole), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                            Text(agoText(cm.createdAt), style = MaterialTheme.typography.labelSmall, color = d2m.meta, modifier = Modifier.weight(1f))
-                            if (cm.mine) LinkText("Delete", onClick = {
+                            Text(agoText(cm.createdAt, s), style = MaterialTheme.typography.labelSmall, color = d2m.meta, modifier = Modifier.weight(1f))
+                            if (cm.mine) LinkText(s.delete, onClick = {
                                 scope.launch {
                                     runCatching { c.repo.deleteComment(c.primaryId, task.id, cm.id) }
                                         .onSuccess { activity?.let { cur -> sync(cur.copy(comments = cur.comments.filter { it.id != cm.id })) } }
-                                        .onFailure { err = friendlyError(it, "Couldn't delete the comment.") }
+                                        .onFailure { err = friendlyError(it, s.couldntDeleteComment) }
                                 }
                             })
                         }
@@ -296,10 +320,10 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                 }
                 D2MTextField(
                     label = "", value = comment, onValueChange = { if (it.length <= 2000) comment = it },
-                    placeholder = "Write a comment…", singleLine = false, minLines = 2,
+                    placeholder = s.writeComment, singleLine = false, minLines = 2,
                 )
                 D2MButton(
-                    text = if (posting) "Posting…" else "Comment",
+                    text = if (posting) s.posting else s.commentButton,
                     onClick = {
                         val body = comment.trim()
                         if (body.isEmpty()) return@D2MButton
@@ -307,7 +331,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                             posting = true; err = null
                             runCatching { c.repo.addComment(c.primaryId, task.id, body) }
                                 .onSuccess { cm -> activity?.let { sync(it.copy(comments = it.comments + cm)) }; comment = "" }
-                                .onFailure { err = friendlyError(it, "Couldn't post the comment.") }
+                                .onFailure { err = friendlyError(it, s.couldntPost) }
                             posting = false
                         }
                     },
@@ -317,16 +341,16 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
 
             if (task.canDelete) {
                 HorizontalDivider(color = d2m.borderSoft)
-                LinkText("Remove task", onClick = { confirmRemove = true })
+                LinkText(s.removeTask, onClick = { confirmRemove = true })
             }
         }
     }
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove this task?") }, text = { Text("It disappears for everyone.") },
-            confirmButton = { TextButton(onClick = { confirmRemove = false; c.delete(task) { onDismiss() } }) { Text("Remove") } },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+            title = { Text(s.removeTaskTitle) }, text = { Text(s.removeTaskBody) },
+            confirmButton = { TextButton(onClick = { confirmRemove = false; c.delete(task) { onDismiss() } }) { Text(s.remove) } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(s.cancel) } },
         )
     }
 }
@@ -339,6 +363,7 @@ fun DaySheet(
     date: String, tasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
     onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onDismiss: () -> Unit,
 ) {
+    val s = LocalWedding.current.s
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
@@ -346,9 +371,9 @@ fun DaySheet(
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 milestone?.let { D2MBadge(it, D2MBadgeTone.GOLD_OUTLINE) }
-                SectionHeading(date.toDate().full())
+                SectionHeading(date.toDate().full(s))
                 PmNote(date)
-                MetaText(if (tasks.isEmpty()) "Nothing is due this day" else "${tasks.size} task${if (tasks.size == 1) "" else "s"} · ${tasks.count { it.status == "done" }} done")
+                MetaText(if (tasks.isEmpty()) s.nothingDue else s.tasksSummary(tasks.size, tasks.count { it.status == "done" }))
             }
             Spacer(Modifier.height(8.dp))
             tasks.forEach { t ->
@@ -356,7 +381,7 @@ fun DaySheet(
                 TaskRow(t, busy, onOpen = { onOpen(t.id) }, onToggle = { onToggle(t) })
             }
             Box(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                D2MButton("+ Add a task on this day", { onAdd(date) }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
+                D2MButton(s.addOnThisDay, { onAdd(date) }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -371,6 +396,7 @@ fun NewTaskSheet(
     onCreate: (WeddingTaskCreateIn) -> Unit, onDismiss: () -> Unit,
 ) {
     val env = LocalWedding.current
+    val s = env.s
     var title by remember { mutableStateOf("") }
     var phase by remember { mutableStateOf(presetPhase) }
     var participants by remember { mutableStateOf(setOf(myRole)) }
@@ -381,19 +407,19 @@ fun NewTaskSheet(
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionHeading("New task")
-            D2MTextField("What needs to be done?", title, { if (it.length <= 200) title = it })
-            D2MCheckboxGroup(label = "Assign to", first = true) {
+            SectionHeading(s.newTaskTitle)
+            D2MTextField(s.whatNeedsDoing, title, { if (it.length <= 200) title = it })
+            D2MCheckboxGroup(label = s.assignTo, first = true) {
                 ROLES.forEach { r ->
                     D2MCheckboxRow(env.label(r), r in participants, { on -> participants = if (on) participants + r else participants - r })
                 }
-                MetaText("Anyone you pick can mark it done.")
+                MetaText(s.anyoneCanMark)
             }
-            D2MSelectField("Phase", phase, phases.map { it.key }, { if (it.isNotEmpty()) phase = it }, optionLabel = { k -> phases.firstOrNull { it.key == k }?.label ?: k })
-            DateField("Due date", due, onChange = { due = it }, clearable = true)
-            D2MSelectField("Visible to", visibility, VISIBILITY.map { it.first }, { if (it.isNotEmpty()) visibility = it }, optionLabel = { k -> VISIBILITY.first { it.first == k }.second })
+            D2MSelectField(s.phase, phase, phases.map { it.key }, { if (it.isNotEmpty()) phase = it }, optionLabel = { k -> phases.firstOrNull { it.key == k }?.label ?: k })
+            DateField(s.dueDate, due, onChange = { due = it }, clearable = true)
+            D2MSelectField(s.visibleTo, visibility, VISIBILITY_KEYS, { if (it.isNotEmpty()) visibility = it }, optionLabel = { k -> s.visibility(k) })
             D2MButton(
-                "Create task", { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants })) },
+                s.createTask, { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants })) },
                 enabled = title.isNotBlank() && participants.isNotEmpty() && !busy, modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -408,6 +434,7 @@ fun KeyDatesDialog(
     onSave: (String?, String?, String?, String?) -> Unit, onDismiss: () -> Unit,
 ) {
     val env = LocalWedding.current
+    val s = env.s
     var e by remember { mutableStateOf(engagement) }
     var m by remember { mutableStateOf(marriage) }
     var h by remember { mutableStateOf(honeymoon) }
@@ -415,19 +442,19 @@ fun KeyDatesDialog(
     LaunchedEffect(e, m, h) { env.pm.ensure(listOf(e, m, h)) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Key dates") },
+        title = { Text(s.keyDates) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetaText("Every task's due date is worked out from these. Change one and the whole plan reschedules.")
-                DateField("Engagement", e, { e = it }, clearable = true)
-                DateField("Marriage", m, { m = it }, clearable = true)
-                DateField("Honeymoon", h, { h = it }, clearable = true)
-                D2MSelectField("Tradition", t, TRADITIONS.map { it.first }.filter { it.isNotEmpty() }, { t = it }, optionLabel = { k -> TRADITIONS.first { it.first == k }.second }, placeholderWhenEmpty = TRADITIONS[0].second)
-                MetaText("Engagement must be on or before the marriage, and the honeymoon on or after it.")
+                MetaText(s.keyDatesIntro)
+                DateField(s.engagement, e, { e = it }, clearable = true)
+                DateField(s.marriage, m, { m = it }, clearable = true)
+                DateField(s.honeymoon, h, { h = it }, clearable = true)
+                D2MSelectField(s.tradition, t, TRADITION_KEYS.filter { it.isNotEmpty() }, { t = it }, optionLabel = { k -> s.traditionNames[k] ?: k }, placeholderWhenEmpty = s.traditionNames[""] ?: "")
+                MetaText(s.keyDatesRule)
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(e, m, h, t) }, enabled = !busy) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(e, m, h, t) }, enabled = !busy) { Text(s.save) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
 }
 
@@ -436,13 +463,14 @@ fun KeyDatesDialog(
 @Composable
 private fun Facet(title: String, options: List<Pair<String, String>>, counts: Map<String, Int>, state: FacetState, first: Boolean = false, onChange: (FacetState) -> Unit) {
     if (options.isEmpty()) return
+    val s = LocalWedding.current.s
     D2MCheckboxGroup(
         label = title, first = first,
-        trailing = { if (state.isActive) LinkText("Clear", onClick = { onChange(state.copy(values = emptySet())) }) },
+        trailing = { if (state.isActive) LinkText(s.clear, onClick = { onChange(state.copy(values = emptySet())) }) },
     ) {
         if (state.isActive) {
             D2MSegmented(
-                options = listOf("Include", "Exclude"), selectedIndex = if (state.mode == FacetMode.EXCLUDE) 1 else 0,
+                options = listOf(s.include, s.exclude), selectedIndex = if (state.mode == FacetMode.EXCLUDE) 1 else 0,
                 onSelect = { onChange(state.copy(mode = if (it == 1) FacetMode.EXCLUDE else FacetMode.INCLUDE)) },
                 accentActive = true, small = true, modifier = Modifier.padding(bottom = 8.dp),
             )
@@ -454,13 +482,14 @@ private fun Facet(title: String, options: List<Pair<String, String>>, counts: Ma
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** The filter groups themselves -- shown in a bottom sheet on phones and as a persistent rail on tablets. */
 @Composable
-fun WeddingFilterSheet(
+fun WeddingFilterContent(
     filters: Filters, onChange: (Filters) -> Unit, phases: List<WeddingPhaseOut>,
-    tasks: List<WeddingTaskOut>, resultCount: Int, onDismiss: () -> Unit,
+    tasks: List<WeddingTaskOut>, resultCount: Int, modifier: Modifier = Modifier,
 ) {
     val env = LocalWedding.current
+    val s = env.s
     val today = env.today
     // Faceted counts: each option is counted over the tasks that pass every OTHER filter.
     fun count(skip: String, values: (WeddingTaskOut) -> List<String>): Map<String, Int> {
@@ -472,32 +501,44 @@ fun WeddingFilterSheet(
     val scope = count("scope") { listOf(it.scope) }
     val phase = count("phase") { listOf(it.phase) }
     val status = count("status") { listOf(it.status) }
-    val quick = HashMap<String, Int>().also { q -> tasks.forEach { t -> if (passes(t, filters, today, "quick")) QUICK.forEach { (k, _) -> if (quickMatches(k, t, today)) q[k] = (q[k] ?: 0) + 1 } } }
+    val quick = HashMap<String, Int>().also { q -> tasks.forEach { t -> if (passes(t, filters, today, "quick")) QUICK_KEYS.forEach { k -> if (quickMatches(k, t, today)) q[k] = (q[k] ?: 0) + 1 } } }
 
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionHeading(s.filtersTitle, Modifier.weight(1f))
+            LinkText(s.clearAll, onClick = { onChange(Filters(q = filters.q)) }, enabled = filters.quick.isNotEmpty() || listOf(filters.owners, filters.scope, filters.phase, filters.status).any { it.isActive })
+        }
+        MetaText(s.matchesCount(resultCount, tasks.size), Modifier.padding(bottom = 6.dp))
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            D2MCheckboxGroup(label = s.quickViews, first = true, trailing = { if (filters.quick.isNotEmpty()) LinkText(s.clear, onClick = { onChange(filters.copy(quick = emptySet())) }) }) {
+                QUICK_KEYS.forEach { k ->
+                    val n = quick[k] ?: 0
+                    D2MCheckboxRow(s.quick(k), k in filters.quick, { on -> onChange(filters.copy(quick = if (on) filters.quick + k else filters.quick - k)) }, count = n, dimmed = n == 0 && k !in filters.quick)
+                }
+            }
+            Facet(s.facetAssignedTo, ROLES.map { it to env.label(it) }, owners, filters.owners) { onChange(filters.copy(owners = it)) }
+            Facet(s.facetType, SCOPE_KEYS.map { it to s.scope(it) }, scope, filters.scope) { onChange(filters.copy(scope = it)) }
+            Facet(s.facetPhase, phases.map { it.key to it.label }, phase, filters.phase) { onChange(filters.copy(phase = it)) }
+            Facet(s.facetStatus, listOf("todo" to s.statusTodo, "done" to s.statusDone), status, filters.status) { onChange(filters.copy(status = it)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeddingFilterSheet(
+    filters: Filters, onChange: (Filters) -> Unit, phases: List<WeddingPhaseOut>,
+    tasks: List<WeddingTaskOut>, resultCount: Int, onDismiss: () -> Unit,
+) {
+    val s = LocalWedding.current.s
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionHeading("Filters", Modifier.weight(1f))
-                LinkText("Clear all", onClick = { onChange(Filters(q = filters.q)) }, enabled = filters.quick.isNotEmpty() || listOf(filters.owners, filters.scope, filters.phase, filters.status).any { it.isActive })
-            }
-            MetaText("$resultCount of ${tasks.size} tasks match", Modifier.padding(bottom = 6.dp))
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                D2MCheckboxGroup(label = "Quick views", first = true, trailing = { if (filters.quick.isNotEmpty()) LinkText("Clear", onClick = { onChange(filters.copy(quick = emptySet())) }) }) {
-                    QUICK.forEach { (k, label) ->
-                        val n = quick[k] ?: 0
-                        D2MCheckboxRow(label, k in filters.quick, { on -> onChange(filters.copy(quick = if (on) filters.quick + k else filters.quick - k)) }, count = n, dimmed = n == 0 && k !in filters.quick)
-                    }
-                }
-                Facet("Assigned to", ROLES.map { it to env.label(it) }, owners, filters.owners) { onChange(filters.copy(owners = it)) }
-                Facet("Type", SCOPE_LABEL.filterKeys { it != "mixed" }.toList(), scope, filters.scope) { onChange(filters.copy(scope = it)) }
-                Facet("Phase", phases.map { it.key to it.label }, phase, filters.phase) { onChange(filters.copy(phase = it)) }
-                Facet("Status", listOf("todo" to "To do", "done" to "Done"), status, filters.status) { onChange(filters.copy(status = it)) }
-            }
+            WeddingFilterContent(filters, onChange, phases, tasks, resultCount, Modifier.weight(1f, fill = false))
             Spacer(Modifier.height(12.dp))
-            D2MButton("Show $resultCount tasks", onDismiss, modifier = Modifier.fillMaxWidth())
+            D2MButton(s.showTasks(resultCount), onDismiss, modifier = Modifier.fillMaxWidth())
         }
     }
 }

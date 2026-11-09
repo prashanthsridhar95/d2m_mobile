@@ -88,6 +88,13 @@ data class WeddingTaskCreateIn(
 @Serializable
 data class WeddingTraditionIn(val tradition: String? = null)
 
+/** PATCH bodies for the creator's edits of a custom task -- one field each, so nothing else is touched. */
+@Serializable
+data class WeddingTitlePatchIn(val title: String)
+
+@Serializable
+data class WeddingVisibilityPatchIn(val visibility: String)
+
 /** PATCH body that touches only the due date (null = back to the calculated date). */
 @Serializable
 data class WeddingDuePatchIn(val dueDate: String? = null)

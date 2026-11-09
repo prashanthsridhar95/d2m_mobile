@@ -5,10 +5,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.d2m.app.data.model.WeddingPanchangamDay
+import com.d2m.app.data.model.WeddingPanchangamOut
 import com.d2m.app.data.model.WeddingPhaseOut
 import com.d2m.app.data.model.WeddingPlanOut
 import com.d2m.app.data.model.WeddingTaskOut
-import com.d2m.app.domain.repository.WeddingRepository
+import com.d2m.app.ui.strings.WeddingStrings
 import com.d2m.app.ui.components.FacetMode
 import com.d2m.app.ui.components.FacetState
 import kotlin.time.Clock
@@ -26,31 +27,36 @@ import kotlinx.datetime.toLocalDateTime
 
 val ROLES = listOf("bride", "groom", "bride_parents", "groom_parents")
 val ROLE_SHORT = mapOf("bride" to "B", "groom" to "G", "bride_parents" to "BP", "groom_parents" to "GP")
-val SCOPE_LABEL = mapOf(
-    "individual" to "Individual", "couple" to "Bride & groom", "parents" to "Both parents",
-    "family" to "Within family", "group" to "All four", "mixed" to "Shared",
-)
-val VISIBILITY = listOf("all" to "Everyone", "side" to "My family only", "private" to "Only me")
-val TRADITIONS = listOf(
-    "" to "All Brahmin traditions", "tamil" to "Tamil (Iyer / Iyengar)", "telugu" to "Telugu",
-    "kannada" to "Kannada (Smarta / Madhwa)", "malayali" to "Malayali (Nambudiri / Iyer)",
-    "north" to "North Indian", "bengali" to "Bengali", "marathi" to "Marathi", "gujarati" to "Gujarati", "odia" to "Odia",
-)
-val BUCKETS = listOf(
-    "overdue" to "Overdue", "week" to "Next 7 days", "month" to "Next 30 days", "later" to "Later", "nodate" to "No date", "done" to "Done",
-)
-val GROUP_OPTIONS = listOf("phase" to "Phase", "due" to "Due date", "owner" to "Owner")
+val BUCKET_KEYS = listOf("overdue", "week", "month", "later", "nodate", "done")
+val VISIBILITY_KEYS = listOf("all", "side", "private")
+val TRADITION_KEYS = listOf("", "tamil", "telugu", "kannada", "malayali", "north", "bengali", "marathi", "gujarati", "odia")
+val GROUP_KEYS = listOf("phase", "due", "owner")
+val QUICK_KEYS = listOf("mine", "overdue", "week", "joint")
+val SCOPE_KEYS = listOf("individual", "couple", "parents", "family", "group")
+
+fun WeddingStrings.scope(k: String) = when (k) {
+    "individual" -> scopeIndividual; "couple" -> scopeCouple; "parents" -> scopeParents
+    "family" -> scopeFamily; "group" -> scopeGroup; else -> scopeShared
+}
+fun WeddingStrings.bucket(k: String) = when (k) {
+    "overdue" -> bucketOverdue; "week" -> bucketNext7; "month" -> bucketNext30
+    "later" -> bucketLater; "nodate" -> bucketNoDate; else -> bucketDone
+}
+fun WeddingStrings.visibility(k: String) = when (k) { "all" -> visEveryone; "side" -> visMyFamily; else -> visOnlyMe }
+fun WeddingStrings.group(k: String) = when (k) { "phase" -> groupPhase; "due" -> groupDue; else -> groupOwner }
+fun WeddingStrings.quick(k: String) = when (k) { "mine" -> quickMine; "overdue" -> quickOverdue; "week" -> quickWeek; else -> quickJoint }
+fun WeddingStrings.anchorName(a: String?) = when (a) { "engagement" -> anchorEngagement; "honeymoon" -> anchorHoneymoon; else -> anchorMarriage }
 
 /** "Me" / the person's first name / "<name>'s parents" -- falls back to Bride/Groom when no name is available. */
-fun labeler(plan: WeddingPlanOut): (String) -> String = { role ->
+fun labeler(plan: WeddingPlanOut, s: WeddingStrings): (String) -> String = { role ->
     val bride = plan.names.bride
     val groom = plan.names.groom
     when {
-        role == plan.myRole -> "Me"
-        role == "bride" -> bride ?: "Bride"
-        role == "groom" -> groom ?: "Groom"
-        role == "bride_parents" -> if (bride != null) "$bride's parents" else "Bride's parents"
-        role == "groom_parents" -> if (groom != null) "$groom's parents" else "Groom's parents"
+        role == plan.myRole -> s.me
+        role == "bride" -> bride ?: s.bride
+        role == "groom" -> groom ?: s.groom
+        role == "bride_parents" -> if (bride != null) s.parentsOf(bride) else s.brideParents
+        role == "groom_parents" -> if (groom != null) s.parentsOf(groom) else s.groomParents
         else -> role
     }
 }
@@ -61,25 +67,22 @@ fun today(): LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSyst
 fun String.toDate(): LocalDate = LocalDate.parse(this)
 fun daysBetween(a: LocalDate, b: LocalDate): Int = a.daysUntil(b)
 
-private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-private val MONTHS_LONG = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
-private val WEEKDAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-fun LocalDate.short(): String = "$day ${MONTHS[month.ordinal]}"
-fun LocalDate.medium(): String = "$day ${MONTHS[month.ordinal]} $year"
-fun LocalDate.full(): String = "${WEEKDAYS[dayOfWeek.ordinal]}, $day ${MONTHS_LONG[month.ordinal]} $year"
-fun monthTitle(year: Int, month: Int): String = "${MONTHS_LONG[month - 1]} $year"
+fun LocalDate.short(s: WeddingStrings): String = "$day ${s.monthsShort[month.ordinal]}"
+fun LocalDate.medium(s: WeddingStrings): String = "$day ${s.monthsShort[month.ordinal]} $year"
+fun LocalDate.full(s: WeddingStrings): String = "${s.weekdaysLong[dayOfWeek.ordinal]}, $day ${s.monthsLong[month.ordinal]} $year"
+fun monthTitle(year: Int, month: Int, s: WeddingStrings): String = "${s.monthsLong[month - 1]} $year"
 
-fun relDue(t: WeddingTaskOut, today: LocalDate): String {
+fun relDue(t: WeddingTaskOut, today: LocalDate, s: WeddingStrings): String {
     val due = t.dueDate?.toDate() ?: return ""
-    if (t.status == "done") return due.short()
+    if (t.status == "done") return due.short(s)
     val n = daysBetween(today, due)
     return when {
-        n == 0 -> "Today"
-        n == 1 -> "Tomorrow"
-        n == -1 -> "Yesterday"
-        n < 0 -> "${-n}d overdue"
-        n <= 14 -> "In $n days"
-        else -> due.short()
+        n == 0 -> s.relToday
+        n == 1 -> s.relTomorrow
+        n == -1 -> s.relYesterday
+        n < 0 -> s.relDaysOverdue(-n)
+        n <= 14 -> s.relInDays(n)
+        else -> due.short(s)
     }
 }
 
@@ -101,17 +104,15 @@ data class TaskGroup(val key: String, val label: String, val phase: String?, val
 
 private val byDue = compareBy<WeddingTaskOut>({ it.dueDate ?: "9999" }, { it.title })
 
-fun buildGroups(tasks: List<WeddingTaskOut>, phases: List<WeddingPhaseOut>, groupBy: String, label: (String) -> String, today: LocalDate): List<TaskGroup> {
+fun buildGroups(tasks: List<WeddingTaskOut>, phases: List<WeddingPhaseOut>, groupBy: String, label: (String) -> String, today: LocalDate, s: WeddingStrings): List<TaskGroup> {
     val defs: List<TaskGroup> = when (groupBy) {
-        "due" -> BUCKETS.map { (k, l) -> TaskGroup(k, l, null, tasks.filter { bucketOf(it, today) == k }) }
+        "due" -> BUCKET_KEYS.map { k -> TaskGroup(k, s.bucket(k), null, tasks.filter { bucketOf(it, today) == k }) }
         "owner" -> ROLES.map { r -> TaskGroup(r, label(r), null, tasks.filter { it.participants.size == 1 && it.participants[0] == r }) } +
-            TaskGroup("shared", "Shared decisions", null, tasks.filter { it.participants.size > 1 })
+            TaskGroup("shared", s.sharedDecisions, null, tasks.filter { it.participants.size > 1 })
         else -> phases.map { p -> TaskGroup(p.key, p.label, p.key, tasks.filter { it.phase == p.key }) }
     }
     return defs.filter { it.rows.isNotEmpty() }.map { it.copy(rows = it.rows.sortedWith(byDue)) }
 }
-
-val QUICK = listOf("mine" to "My open tasks", "overdue" to "Overdue", "week" to "Due in the next 7 days", "joint" to "Joint decisions")
 
 data class Filters(
     val q: String = "",
@@ -151,7 +152,10 @@ fun FacetState.withMode(mode: FacetMode) = copy(mode = mode)
 /* ------------------------------------------------------------------ panchangam cache */
 
 /** Lazy, per-month cache of the couple's panchangam flags; reading [get] subscribes the caller to updates. */
-class PanchangamStore(private val repo: WeddingRepository, private val primaryId: String, private val scope: CoroutineScope) {
+class PanchangamStore(
+    private val fetch: suspend (start: String, end: String) -> WeddingPanchangamOut,
+    private val scope: CoroutineScope,
+) {
     private val days = HashMap<String, WeddingPanchangamDay>()
     private val asked = HashSet<String>()
     private var version by mutableIntStateOf(0)
@@ -175,7 +179,7 @@ class PanchangamStore(private val repo: WeddingRepository, private val primaryId
         }
         for (run in runs) {
             scope.launch {
-                runCatching { repo.panchangam(primaryId, "${run.first()}-01", lastDay(run.last())) }
+                runCatching { fetch("${run.first()}-01", lastDay(run.last())) }
                     .onSuccess { r ->
                         if (!r.available) available = false else { r.days.forEach { days[it.date] = it }; version++ }
                     }

@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import com.d2m.app.data.model.*
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.domain.repository.WeddingRepository
+import com.d2m.app.ui.strings.WeddingStrings
+import com.d2m.app.ui.strings.WeddingStringsEn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -22,14 +24,16 @@ class WeddingController(
     var error by mutableStateOf<String?>(null)
     var busy by mutableStateOf(false)
         private set
-    val pm = PanchangamStore(repo, primaryId, scope)
+    val pm = PanchangamStore({ start, end -> repo.panchangam(primaryId, start, end) }, scope)
+    /** Current language; the screen refreshes it on every composition so error text follows a language switch. */
+    var s: WeddingStrings = WeddingStringsEn
 
     fun load() {
         scope.launch {
             loading = true
             runCatching { repo.get(primaryId) }
                 .onSuccess { data = it; error = null; ensurePanchangam(it) }
-                .onFailure { error = friendlyError(it, "Couldn't load the wedding checklist.") }
+                .onFailure { error = friendlyError(it, s.loadError) }
             loading = false
         }
     }
@@ -60,7 +64,7 @@ class WeddingController(
     private fun act(block: suspend () -> Unit) {
         scope.launch {
             busy = true
-            try { block(); error = null } catch (e: Exception) { error = friendlyError(e, "That didn't work. Please try again."); reload() } finally { busy = false }
+            try { block(); error = null } catch (e: Exception) { error = friendlyError(e, s.actionError); reload() } finally { busy = false }
         }
     }
 
@@ -79,6 +83,17 @@ class WeddingController(
     fun setDue(task: WeddingTaskOut, due: String?) {
         if (due != null) pm.ensure(listOf(due))
         act { replace(repo.setDue(primaryId, task.id, due)) }
+    }
+
+    fun setTitle(task: WeddingTaskOut, title: String) {
+        val t = title.trim()
+        if (t.isEmpty() || t == task.title) return
+        act { replace(repo.setTitle(primaryId, task.id, t)) }
+    }
+
+    fun setVisibility(task: WeddingTaskOut, visibility: String) {
+        if (visibility == task.visibility) return
+        act { replace(repo.setVisibility(primaryId, task.id, visibility)) }
     }
 
     fun delete(task: WeddingTaskOut, done: () -> Unit) {

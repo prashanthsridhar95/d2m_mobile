@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Documents opened from the wedding checklist are written here (cache, never backed up) and handed to the viewer app. -->
+<paths>
+    <cache-path name="opened_documents" path="opened_documents/" />
+</paths>

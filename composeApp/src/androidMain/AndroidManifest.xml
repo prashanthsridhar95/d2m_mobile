@@ -52,6 +52,17 @@
              makes the OS resize the window instead of panning it, which is
              the correct pairing with edge-to-edge (enableEdgeToEdge() in
              MainActivity.kt) + Compose's own insets-driven imePadding(). -->
+        <!-- Lets other apps read a document the user taps open (wedding checklist attachments) for the duration of the intent only. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/d2m_file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

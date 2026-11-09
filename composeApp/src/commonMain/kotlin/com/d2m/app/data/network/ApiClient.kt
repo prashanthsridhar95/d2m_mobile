@@ -310,6 +310,18 @@ class ApiClient(
             })
         }
 
+    /** Raw response bytes (documents/images behind an authenticated route), with the same error mapping as the JSON calls. */
+    suspend fun getBytes(path: String): ByteArray =
+        withRateLimitRetry {
+            val response = client.get(url(path)) { applyAuthHeader() }
+            if (!response.status.isSuccess()) {
+                notifySessionExpiredIfAuthenticated(response.status.value)
+                val detail = runCatching { response.body<ApiErrorBodyDto>().detail }.getOrNull()
+                throw ApiError(status = response.status.value, detail = detail, message = detail ?: friendlyStatusMessage(response.status))
+            }
+            response.body<ByteArray>()
+        }
+
     /** Multipart photo upload -- mirrors postForm() in apiClient.js. */
     suspend inline fun <reified T> postForm(path: String, fileName: String, contentType: String, bytes: ByteArray): T =
         withRateLimitRetry {

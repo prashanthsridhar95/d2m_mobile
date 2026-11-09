@@ -26,6 +26,12 @@ class WeddingApi(private val api: ApiClient) {
     suspend fun patchDue(primaryId: String, taskId: String, dueDate: String?): WeddingTaskOut =
         api.patch("${base(primaryId)}/tasks/$taskId", WeddingDuePatchIn(dueDate))
 
+    suspend fun patchTitle(primaryId: String, taskId: String, title: String): WeddingTaskOut =
+        api.patch("${base(primaryId)}/tasks/$taskId", WeddingTitlePatchIn(title))
+
+    suspend fun patchVisibility(primaryId: String, taskId: String, visibility: String): WeddingTaskOut =
+        api.patch("${base(primaryId)}/tasks/$taskId", WeddingVisibilityPatchIn(visibility))
+
     suspend fun deleteTask(primaryId: String, taskId: String): WeddingDeleteOut =
         api.delete("${base(primaryId)}/tasks/$taskId")
 
@@ -47,6 +53,9 @@ class WeddingApi(private val api: ApiClient) {
     /** Absolute URL of an attachment's bytes -- loaded with the authenticated photo ImageLoader (images only). */
     fun attachmentUrl(primaryId: String, taskId: String, attachmentId: String): String =
         api.resolveMediaUrl("${base(primaryId)}/tasks/$taskId/attachments/$attachmentId")
+
+    suspend fun downloadAttachment(primaryId: String, taskId: String, attachmentId: String): ByteArray =
+        api.getBytes("${base(primaryId)}/tasks/$taskId/attachments/$attachmentId")
 
     suspend fun panchangam(primaryId: String, start: String, end: String): WeddingPanchangamOut =
         api.get("${base(primaryId)}/panchangam", mapOf("start" to start, "end" to end))

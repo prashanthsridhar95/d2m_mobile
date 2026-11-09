@@ -5,6 +5,7 @@ import com.d2m.app.ui.components.overallRating
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class CompatibilityTierTest {
     @Test
@@ -39,7 +40,7 @@ class CompatibilityTierTest {
             val pill = overallRating(score)
             val order = listOf("Low", "Medium", "High", "Exceptional")
             // High/Exceptional may differ by at most one step (tiers split 60-89 into good/very good).
-            assert(kotlin.math.abs(order.indexOf(tier) - order.indexOf(pill)) <= 1) { "score $score: tier $tier vs pill $pill" }
+            assertTrue(kotlin.math.abs(order.indexOf(tier) - order.indexOf(pill)) <= 1, "score $score: tier $tier vs pill $pill")
         }
     }
 }

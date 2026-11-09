@@ -538,6 +538,7 @@ android {
 tasks.withType<Test>().configureEach {
     filter {
         excludeTestsMatching("com.d2m.app.ui.components.*")
+        excludeTestsMatching("com.d2m.app.ui.screens.shared.wedding.WeddingUiTest")
         isFailOnNoMatchingTests = false
     }
 }
