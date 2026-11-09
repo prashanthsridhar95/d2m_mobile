@@ -241,7 +241,35 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
     ) {
         Column(Modifier.verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (task.kind == "event") {
+                // An event is an occasion, so it opens on its date: a date block beside the title, not a status button.
+                val pal = LocalD2MStatusPalette.current
+                val day = task.dueDate?.toDate()
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                    Column(
+                        Modifier.width(72.dp).clip(RoundedCornerShape(12.dp)).background(pal.warning.bg).padding(vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        if (day != null) {
+                            Text(s.monthsShort[day.month.ordinal].uppercase(), style = MaterialTheme.typography.labelSmall, color = pal.warning.fg, fontWeight = FontWeight.Bold)
+                            Text(day.day.toString(), style = MaterialTheme.typography.headlineMedium, color = pal.warning.fg)
+                            Text(s.weekdaysShort[day.dayOfWeek.ordinal], style = MaterialTheme.typography.labelSmall, color = pal.warning.fg)
+                        } else Text(s.noDate, style = MaterialTheme.typography.labelMedium, color = pal.warning.fg, modifier = Modifier.padding(vertical = 14.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("\u25C6 " + s.kindEvent, style = MaterialTheme.typography.labelLarge, color = pal.warning.fg,
+                            modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(pal.warning.bg).padding(horizontal = 12.dp, vertical = 4.dp))
+                        if (task.canChangeVisibility) {
+                            D2MTextField("", titleDraft, { if (it.length <= 200) titleDraft = it }, placeholder = s.titlePlaceholder)
+                            if (titleDraft.trim().isNotEmpty() && titleDraft.trim() != task.title) {
+                                D2MButton(s.saveTitle, { c.setTitle(task, titleDraft) }, size = D2MButtonSize.SM, enabled = !c.busy)
+                            }
+                        } else SectionHeading(task.title)
+                        task.externalParty?.let { ConsultChip(it) }
+                    }
+                }
+                PmCard(task.dueDate)
+            } else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 MetaText(phases.firstOrNull { it.key == task.phase }?.label ?: s.taskFallback)
                 // A custom task's creator can rename it and choose who sees it; template tasks keep their wording.
                 if (task.canChangeVisibility) {
@@ -253,11 +281,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             }
 
             // Status: only the assignees can change it (and only the signer can reopen). An event is an occasion: nothing to tick off.
-            if (task.kind == "event") {
-                val pal = LocalD2MStatusPalette.current
-                Text("\u25C6 " + s.eventNote, style = MaterialTheme.typography.labelLarge, color = pal.warning.fg,
-                    modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(pal.warning.bg).padding(horizontal = 14.dp, vertical = 8.dp))
-            } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (task.kind != "event") Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 D2MButton(
                     text = if (done) s.doneReopen else if (task.participants.size > 1) s.markAgreed else s.markDone,
                     onClick = { c.toggle(task) },
@@ -285,7 +309,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                     }
                 }
             }
-            task.externalParty?.let {
+            if (task.kind != "event") task.externalParty?.let {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { LabelText(s.groupParty); ConsultChip(it) }
             }
             // Anyone who can see the task may reschedule it.
