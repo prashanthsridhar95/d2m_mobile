@@ -132,24 +132,24 @@ fun WeddingBoardView(
     modifier: Modifier = Modifier,
 ) {
     val s = LocalWedding.current.s
-    LazyRow(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         items(lanes, key = { it.key }) { lane ->
-            D2MCard(Modifier.width(284.dp).fillMaxHeight()) {
+            D2MCard(Modifier.width(340.dp).fillMaxHeight()) {
                 Row(
-                    Modifier.fillMaxWidth().background(d2m.surfaceSunken).padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().background(d2m.surfaceSunken).padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(lane.label, style = MaterialTheme.typography.titleSmall, color = if (lane.key == "overdue") LocalD2MStatusPalette.current.danger.fg else d2m.ink, modifier = Modifier.weight(1f))
                     Text("${lane.rows.count { it.status == "done" }}/${lane.rows.size}", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
                 }
-                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(lane.rows.take(80), key = { it.id }) { t ->
                         Column(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(6.dp))
-                                .clickable { onOpen(t.id) }.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                .clickable { onOpen(t.id) }.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                                 CheckCircle(t, busy, { onToggle(t) })
                                 Text(
                                     t.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),

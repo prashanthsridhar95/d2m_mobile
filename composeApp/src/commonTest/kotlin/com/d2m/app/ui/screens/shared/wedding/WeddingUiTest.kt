@@ -7,6 +7,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +18,8 @@ import com.d2m.app.data.model.WeddingPanchangamOut
 import com.d2m.app.data.model.WeddingPhaseOut
 import com.d2m.app.data.model.WeddingPlanOut
 import com.d2m.app.data.model.WeddingTaskOut
+import com.d2m.app.ui.strings.EnStrings
+import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.strings.WeddingStrings
 import com.d2m.app.ui.strings.WeddingStringsEn
 import com.d2m.app.ui.strings.WeddingStringsHi
@@ -93,6 +96,13 @@ class WeddingUiTest {
         onNodeWithText("Consult").assertIsDisplayed()
         onNodeWithText("Astrologer").assertIsDisplayed() // capitalised from the server's lower-case "astrologer"
         onNodeWithText("💬 2 comments").assertIsDisplayed()
+    }
+
+    @Test fun loadingSkeletonRendersAndIsAnnounced() = runComposeUiTest {
+        setContent {
+            MaterialTheme { D2MTheme(flow = D2MFlow.CHILD) { CompositionLocalProvider(LocalStrings provides EnStrings) { WeddingSkeleton() } } }
+        }
+        onNodeWithContentDescription("Loading…").assertIsDisplayed()
     }
 
     @Test fun boardShowsOneLanePerBucket() = runComposeUiTest {

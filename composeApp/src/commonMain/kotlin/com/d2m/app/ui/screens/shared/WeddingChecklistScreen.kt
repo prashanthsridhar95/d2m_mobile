@@ -86,7 +86,7 @@ fun WeddingChecklistScreen() {
         when {
             primaryId != null -> WeddingWorkspace(primaryId)
             unresolved -> Box(Modifier.fillMaxSize().padding(24.dp)) { D2MEmptyState(s.notAvailableTitle, s.notAvailableBody) }
-            else -> Box(Modifier.fillMaxSize().padding(24.dp)) { MetaText(s.loading) }
+            else -> WeddingSkeleton()
         }
     }
 }
@@ -114,9 +114,8 @@ private fun WeddingWorkspace(primaryId: String) {
 
     val d = c.data
     if (d == null) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-            c.error?.let { D2MErrorBanner(message = it, onRetry = { c.load() }) } ?: MetaText(if (c.loading) s.loading else "")
-        }
+        val err = c.error
+        if (err != null) Column(Modifier.fillMaxSize().padding(16.dp)) { D2MErrorBanner(message = err, onRetry = { c.load() }) } else WeddingSkeleton()
         return
     }
 
