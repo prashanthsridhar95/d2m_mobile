@@ -115,6 +115,22 @@ class WeddingUiTest {
         onNodeWithText("5 of 5 tasks match").assertIsDisplayed()
     }
 
+    @Test fun timelineShowsMilestonesAndFansOutCloseOnes() = runComposeUiTest {
+        val e = env()
+        render(e) { MilestoneTimeline("2026-11-03", "2026-11-20", "2026-11-28") }
+        onNodeWithText("Engagement").assertIsDisplayed()
+        onNodeWithText("Marriage").assertIsDisplayed()
+        onNodeWithText("Honeymoon").assertIsDisplayed()
+        onNodeWithText("Today").assertIsDisplayed()
+        onNodeWithText("20 Nov 2026").assertIsDisplayed()
+    }
+
+    @Test fun timelineRendersNothingWithoutDates() = runComposeUiTest {
+        val e = env()
+        render(e) { MilestoneTimeline(null, null, null) }
+        assertTrue(onAllNodesWithText("Marriage").fetchSemanticsNodes().isEmpty())
+    }
+
     @Test fun hindiRendersLocalizedLabels() = runComposeUiTest {
         val e = env(WeddingStringsHi)
         render(e) { WeddingBoardView(buildGroups(tasks, phases, "due", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}) }

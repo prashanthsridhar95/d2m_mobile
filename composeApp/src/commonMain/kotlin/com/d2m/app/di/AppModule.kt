@@ -77,6 +77,7 @@ val appModule = module {
     single { PublicLinksRepository(get()) }
     single { TrustRepository(get(), get()) }
     single { ShareLinkFieldsCache(createSettings()) }
+    single { com.d2m.app.ui.screens.shared.wedding.WeddingPrefs(createSettings()) }
     single { LeadKeyCache(createSettings()) }
     single { PanchangamRepository(get(), get()) }
     single { OffboardingRepository(get(), get()) }

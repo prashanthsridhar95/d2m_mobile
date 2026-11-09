@@ -5,6 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -45,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.d2m.app.data.model.WeddingActivityOut
 import com.d2m.app.data.model.WeddingPhaseOut
@@ -212,6 +216,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                 TypeTag(task)
                 task.externalParty?.let { D2MBadge(s.withParty(it), D2MBadgeTone.INFO) }
             }
+            if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(s.assigned, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
                 task.participants.forEach { r ->
@@ -446,6 +451,7 @@ fun KeyDatesDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 MetaText(s.keyDatesIntro)
+                MilestoneTimeline(e, m, h)
                 DateField(s.engagement, e, { e = it }, clearable = true)
                 DateField(s.marriage, m, { m = it }, clearable = true)
                 DateField(s.honeymoon, h, { h = it }, clearable = true)
@@ -539,6 +545,54 @@ fun WeddingFilterSheet(
             WeddingFilterContent(filters, onChange, phases, tasks, resultCount, Modifier.weight(1f, fill = false))
             Spacer(Modifier.height(12.dp))
             D2MButton(s.showTasks(resultCount), onDismiss, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ milestone timeline */
+
+/** Engagement / marriage / honeymoon on a line with a Today marker; labels of close milestones fan out instead of overlapping. */
+@Composable
+fun MilestoneTimeline(engagement: String?, marriage: String?, honeymoon: String?) {
+    val env = LocalWedding.current
+    val s = env.s
+    val p = LocalD2MStatusPalette.current
+    val marks = listOf(
+        Triple(s.engagement, engagement, d2m.accent),
+        Triple(s.marriage, marriage, d2m.goldStrong),
+        Triple(s.honeymoon, honeymoon, p.success.fg),
+    ).mapNotNull { (label, date, color) -> date?.let { Triple(label, it.toDate(), color) } }.sortedBy { it.second }
+    if (marks.isEmpty()) return
+    val todayDate = env.today
+    val all = marks.map { it.second } + todayDate
+    val min = all.min()
+    val max = all.max()
+    val span = maxOf(1, daysBetween(min, max))
+    fun frac(d: kotlinx.datetime.LocalDate) = daysBetween(min, d).toFloat() / span
+
+    BoxWithConstraints(Modifier.fillMaxWidth().height(86.dp).padding(horizontal = 36.dp)) {
+        val w = maxWidth
+        Box(Modifier.fillMaxWidth().padding(top = 14.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(d2m.surfaceSunken))
+        if (todayDate >= min && todayDate <= max) {
+            Box(Modifier.offset(x = w * frac(todayDate)).width(2.dp).height(34.dp).background(LocalD2MStatusPalette.current.danger.fg))
+            Text(s.calToday, fontSize = 9.sp, color = LocalD2MStatusPalette.current.danger.fg, modifier = Modifier.offset(x = w * frac(todayDate) + 4.dp, y = (-1).dp))
+        }
+        marks.forEachIndexed { i, (label, date, color) ->
+            val x = w * frac(date)
+            val close = { other: Int -> kotlin.math.abs(frac(marks[other].second) - frac(date)) * 100 < 24 }
+            val side = when {
+                i + 1 < marks.size && close(i + 1) -> -1 // earlier of a close pair: label ends at its dot
+                i > 0 && close(i - 1) -> 1               // later of a close pair: label starts at its dot
+                else -> 0
+            }
+            Box(Modifier.offset(x = x - 8.dp, y = 6.dp).size(16.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface).border(3.dp, color, CircleShape))
+            val labelWidth = 96.dp
+            val lx = when (side) { -1 -> x + 8.dp - labelWidth; 1 -> x - 8.dp; else -> x - labelWidth / 2 }
+            val align = when (side) { -1 -> androidx.compose.ui.text.style.TextAlign.End; 1 -> androidx.compose.ui.text.style.TextAlign.Start; else -> androidx.compose.ui.text.style.TextAlign.Center }
+            Column(Modifier.offset(x = lx, y = 28.dp).width(labelWidth)) {
+                Text(label, Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, textAlign = align, maxLines = 1)
+                Text(date.medium(s), Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelSmall, color = d2m.meta, textAlign = align, maxLines = 1)
+            }
         }
     }
 }

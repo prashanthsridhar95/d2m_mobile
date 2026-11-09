@@ -31,7 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,9 +100,11 @@ private fun WeddingWorkspace(primaryId: String) {
     c.s = s
     LaunchedEffect(c) { c.load() }
 
-    var view by rememberSaveable { mutableStateOf("list") }
-    var listGroup by rememberSaveable { mutableStateOf("phase") }
-    var boardGroup by rememberSaveable { mutableStateOf("due") }
+    val prefs: WeddingPrefs = koinInject()
+    var view by remember { mutableStateOf(prefs.view()) }
+    var listGroup by remember { mutableStateOf(prefs.listGroup()) }
+    var boardGroup by remember { mutableStateOf(prefs.boardGroup()) }
+    LaunchedEffect(view, listGroup, boardGroup) { prefs.save(view, listGroup, boardGroup) }
     var filters by remember { mutableStateOf(Filters()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf<Pair<String, String?>?>(null) } // (phase, due)
