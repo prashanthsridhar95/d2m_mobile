@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -70,6 +71,7 @@ import com.d2m.app.ui.components.D2MSelectField
 import com.d2m.app.ui.components.D2MTextField
 import com.d2m.app.ui.components.FacetMode
 import com.d2m.app.ui.components.FacetState
+import com.d2m.app.ui.components.LabelText
 import com.d2m.app.ui.components.LinkText
 import com.d2m.app.ui.components.MetaText
 import com.d2m.app.ui.components.SectionHeading
@@ -77,7 +79,9 @@ import com.d2m.app.ui.components.rememberPhotoImageLoader
 import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.Instant
+import kotlinx.datetime.plus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
@@ -213,18 +217,15 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             }
 
             HorizontalDivider(color = d2m.borderSoft)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                TypeTag(task)
-                task.externalParty?.let { ConsultChip(it) }
-            }
+            task.externalParty?.let { ConsultChip(it) }
             if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(s.assigned, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+                LabelText(s.assigned)
                 task.participants.forEach { r ->
                     val signed = r in task.confirmedBy
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(env.label(r) + if (r == task.createdByRole) s.creatorSuffix else "", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        Text(if (signed) s.signedOff else s.pending, style = MaterialTheme.typography.labelMedium, color = if (signed) LocalD2MStatusPalette.current.success.fg else d2m.faint)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        PersonPill(r, size = 28.dp, signed = signed)
+                        Text((if (signed) s.signedOff else s.pending) + if (r == task.createdByRole) s.creatorSuffix else "", style = MaterialTheme.typography.labelMedium, color = if (signed) LocalD2MStatusPalette.current.success.fg else d2m.faint)
                     }
                 }
             }
@@ -394,32 +395,49 @@ fun DaySheet(
     onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onDismiss: () -> Unit,
 ) {
     val s = LocalWedding.current.s
+    val d = date.toDate()
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
     ) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            // Hero: the big day number, month + weekday, and a milestone tag.
+            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(d.day.toString(), style = MaterialTheme.typography.displayMedium, color = d2m.accent)
+                Column(Modifier.weight(1f)) {
+                    Text("${s.monthsLong[d.month.ordinal]} ${d.year}", style = MaterialTheme.typography.titleLarge, color = d2m.ink)
+                    MetaText(s.weekdaysLong[d.dayOfWeek.ordinal])
+                }
                 milestone?.let { D2MBadge(it, D2MBadgeTone.GOLD_OUTLINE) }
-                SectionHeading(date.toDate().full(s))
-                PmNote(date)
-                MetaText(if (tasks.isEmpty()) s.nothingDue else s.tasksSummary(tasks.size, tasks.count { it.status == "done" }))
             }
-            Spacer(Modifier.height(8.dp))
+            PmCard(date, Modifier.padding(horizontal = 20.dp))
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LabelText(s.todosOnThisDay, Modifier.weight(1f))
+                    if (tasks.isNotEmpty()) MetaText(s.doneOfTotal(tasks.count { it.status == "done" }, tasks.size))
+                }
+                if (tasks.isEmpty()) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, d2m.borderStrong), RoundedCornerShape(6.dp)).padding(vertical = 26.dp, horizontal = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(s.nothingDue, style = MaterialTheme.typography.titleSmall, color = d2m.ink)
+                    }
+                }
+            }
             tasks.forEach { t ->
-                HorizontalDivider(color = d2m.borderSoft)
-                TaskRow(t, busy, onOpen = { onOpen(t.id) }, onToggle = { onToggle(t) })
+                Box(Modifier.padding(horizontal = 20.dp).clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(6.dp))) {
+                    TaskRow(t, busy, onOpen = { onOpen(t.id) }, onToggle = { onToggle(t) })
+                }
             }
-            Box(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                D2MButton(s.addOnThisDay, { onAdd(date) }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
-            }
+            D2MButton(s.addOnThisDay, { onAdd(date) }, modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth())
         }
     }
 }
 
 /* ------------------------------------------------------------------ new task */
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewTaskSheet(
     phases: List<WeddingPhaseOut>, myRole: String, preset: NewPreset, busy: Boolean,
@@ -432,32 +450,88 @@ fun NewTaskSheet(
     var participants by remember { mutableStateOf((preset.participants ?: listOf(myRole)).toSet()) }
     var visibility by remember { mutableStateOf("all") }
     var due by remember { mutableStateOf(preset.due) }
+    val today = remember { today() }
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
     ) {
-        Column(Modifier.verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionHeading(s.newTaskTitle)
-            D2MTextField(s.whatNeedsDoing, title, { if (it.length <= 200) title = it })
-            D2MCheckboxGroup(label = s.assignTo, first = true) {
-                ROLES.forEach { r ->
-                    D2MCheckboxRow(env.label(r), r in participants, { on -> participants = if (on) participants + r else participants - r })
+        Column(Modifier.imePadding()) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SectionHeading(s.addTodoTitle)
+                    MetaText(s.addTodoIntro)
                 }
-                MetaText(s.anyoneCanMark)
+                D2MTextField(s.whatNeedsDoing, title, { if (it.length <= 200) title = it })
+
+                FormSection(s.assignTo, hint = s.ownersHint) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ROLES.forEach { r ->
+                            PersonPill(r, size = 28.dp, selected = r in participants, onClick = { participants = if (r in participants) participants - r else participants + r })
+                        }
+                    }
+                    MetaText(s.anyOwnerCanMark)
+                }
+
+                FormSection(s.whenLabel) {
+                    DateField(s.dueDate, due, onChange = { due = it }, clearable = false)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            s.chipToday to today.toString(),
+                            s.chipInWeek to today.plus(DatePeriod(days = 7)).toString(),
+                            s.chipInMonth to today.plus(DatePeriod(days = 30)).toString(),
+                        ).forEach { (label, value) -> ChoiceChip(label, selected = due == value) { due = value } }
+                        if (due != null) LinkText(s.noDateChip, onClick = { due = null })
+                    }
+                }
+
+                D2MSelectField(s.phase, phase, phases.map { it.key }, { if (it.isNotEmpty()) phase = it }, optionLabel = { k -> phases.firstOrNull { it.key == k }?.label ?: k })
+
+                FormSection(s.visibleTo) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        VISIBILITY_KEYS.forEach { k -> ChoiceChip(s.visibility(k), selected = visibility == k) { visibility = k } }
+                    }
+                    MetaText(when (visibility) { "all" -> s.visibilityEveryoneHint; "side" -> s.visibilitySideHint; else -> s.visibilityOnlyMeHint })
+                }
+                Spacer(Modifier.height(4.dp))
             }
-            D2MSelectField(s.phase, phase, phases.map { it.key }, { if (it.isNotEmpty()) phase = it }, optionLabel = { k -> phases.firstOrNull { it.key == k }?.label ?: k })
-            DateField(s.dueDate, due, onChange = { due = it }, clearable = true)
-            D2MSelectField(s.visibleTo, visibility, VISIBILITY_KEYS, { if (it.isNotEmpty()) visibility = it }, optionLabel = { k -> s.visibility(k) })
-            D2MButton(
-                s.createTask, { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants })) },
-                enabled = title.isNotBlank() && participants.isNotEmpty() && !busy, modifier = Modifier.fillMaxWidth(),
-            )
+            HorizontalDivider(color = d2m.border)
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                D2MButton(
+                    s.addTodoButton, { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants })) },
+                    enabled = title.isNotBlank() && participants.isNotEmpty() && !busy, modifier = Modifier.fillMaxWidth(),
+                )
+                D2MButton(s.cancel, onDismiss, variant = D2MButtonVariant.GHOST, modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }
 
+@Composable
+private fun FormSection(label: String, hint: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            LabelText(label, Modifier.weight(1f))
+            if (hint != null) Text(hint, style = MaterialTheme.typography.labelSmall, color = d2m.faint)
+        }
+        content()
+    }
+}
+
+/** A pill-shaped single choice, selected = accent outline on a soft accent wash (same as the product's filter chips). */
+@Composable
+private fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text, style = MaterialTheme.typography.labelLarge, color = if (selected) d2m.accent else d2m.meta,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        modifier = Modifier.clip(CircleShape).background(if (selected) d2m.accentSoft else MaterialTheme.colorScheme.surface)
+            .border(BorderStroke(1.dp, if (selected) d2m.accent else d2m.borderStrong), CircleShape)
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}
+
 /* ------------------------------------------------------------------ key dates */
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun KeyDatesDialog(
     engagement: String?, marriage: String?, honeymoon: String?, tradition: String?, busy: Boolean,
@@ -470,21 +544,58 @@ fun KeyDatesDialog(
     var h by remember { mutableStateOf(honeymoon) }
     var t by remember { mutableStateOf(tradition ?: "") }
     LaunchedEffect(e, m, h) { env.pm.ensure(listOf(e, m, h)) }
+    val engagementError = if (e != null && m != null && e!! > m!!) s.engagementBeforeWedding else null
+    val honeymoonError = if (h != null && m != null && h!! < m!!) s.honeymoonAfterWedding else null
+    val invalid = engagementError != null || honeymoonError != null
+    val changed = e != engagement || m != marriage || h != honeymoon || t != (tradition ?: "")
+    val ok = LocalD2MStatusPalette.current.success.fg
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.keyDates) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 MetaText(s.keyDatesIntro)
-                MilestoneTimeline(e, m, h)
-                DateField(s.engagement, e, { e = it }, clearable = true)
-                DateField(s.marriage, m, { m = it }, clearable = true)
-                DateField(s.honeymoon, h, { h = it }, clearable = true)
-                D2MSelectField(s.tradition, t, TRADITION_KEYS.filter { it.isNotEmpty() }, { t = it }, optionLabel = { k -> s.traditionNames[k] ?: k }, placeholderWhenEmpty = s.traditionNames[""] ?: "")
+                MilestoneTimeline(if (engagementError == null) e else null, m, if (honeymoonError == null) h else null)
+                listOf(
+                    Triple(s.engagement, s.milestoneEngagement, d2m.accent) to Triple(e, engagementError) { v: String? -> e = v },
+                    Triple(s.marriage, s.milestoneMarriage, d2m.goldStrong) to Triple(m, null as String?) { v: String? -> m = v },
+                    Triple(s.honeymoon, s.milestoneHoneymoon, ok) to Triple(h, honeymoonError) { v: String? -> h = v },
+                ).forEachIndexed { i, (meta, state) ->
+                    val (label, sub, color) = meta
+                    val (value, error, set) = state
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, if (error != null) LocalD2MStatusPalette.current.danger.fg else d2m.border), RoundedCornerShape(6.dp)).padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(28.dp).clip(CircleShape).border(2.dp, color, CircleShape), contentAlignment = Alignment.Center) {
+                            Text("${i + 1}", style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                                Text(label, style = MaterialTheme.typography.titleSmall, color = d2m.ink)
+                                Text(sub, style = MaterialTheme.typography.labelSmall, color = d2m.faint)
+                            }
+                            DateField(s.setDate, value, onChange = set, clearable = true)
+                            error?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = LocalD2MStatusPalette.current.danger.fg) }
+                            if (value != null && error == null) {
+                                val n = daysBetween(env.today, value.toDate())
+                                val parts = buildList {
+                                    add(if (n >= 0) s.inDays(n) else s.daysAgo(-n))
+                                    if (i != 1 && m != null && value != m) {
+                                        val w = daysBetween(m!!.toDate(), value.toDate())
+                                        add(if (w < 0) s.daysBeforeWedding(-w) else s.daysAfterWedding(w))
+                                    }
+                                }
+                                Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = d2m.faint)
+                            }
+                        }
+                    }
+                }
+                D2MSelectField(s.tradition, t, TRADITION_KEYS.filter { it.isNotEmpty() }, { t = it }, optionLabel = { k -> s.traditionNames[k] ?: k }, placeholderWhenEmpty = s.traditionNames[""] ?: "", hint = s.traditionHint)
                 MetaText(s.keyDatesRule)
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(e, m, h, t) }, enabled = !busy) { Text(s.save) } },
+        confirmButton = { TextButton(onClick = { onSave(e, m, h, t) }, enabled = !busy && !invalid && changed) { Text(s.saveDates) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
 }
@@ -529,7 +640,6 @@ fun WeddingFilterContent(
         return out
     }
     val owners = count("owners") { it.participants }
-    val scope = count("scope") { listOf(it.scope) }
     val phase = count("phase") { listOf(it.phase) }
     val status = count("status") { listOf(it.status) }
     val quick = HashMap<String, Int>().also { q -> tasks.forEach { t -> if (passes(t, filters, today, "quick")) QUICK_KEYS.forEach { k -> if (quickMatches(k, t, today)) q[k] = (q[k] ?: 0) + 1 } } }
@@ -548,7 +658,6 @@ fun WeddingFilterContent(
                 }
             }
             Facet(s.facetAssignedTo, ROLES.map { it to env.label(it) }, owners, filters.owners) { onChange(filters.copy(owners = it)) }
-            Facet(s.facetType, SCOPE_KEYS.map { it to s.scope(it) }, scope, filters.scope) { onChange(filters.copy(scope = it)) }
             Facet(s.facetPhase, phases.map { it.key to it.label }, phase, filters.phase) { onChange(filters.copy(phase = it)) }
             Facet(s.facetStatus, listOf("todo" to s.statusTodo, "done" to s.statusDone), status, filters.status) { onChange(filters.copy(status = it)) }
         }

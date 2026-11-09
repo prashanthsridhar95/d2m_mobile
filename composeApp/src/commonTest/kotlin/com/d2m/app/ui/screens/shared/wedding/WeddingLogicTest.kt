@@ -153,6 +153,22 @@ class WeddingLogicTest {
         assertEquals("1 to-do · 0 done", WeddingStringsEn.tasksSummary(1, 0))
     }
 
+    @Test fun ownersSummariesAndWho() {
+        val who = whoFor(plan(myRole = "groom"), en) { "https://api$it" }
+        assertEquals(null, ownersSummary(listOf("bride"), who, en))
+        assertEquals(null, ownersSummary(listOf("bride", "groom"), who, en))               // "Priya" + "Me" -> pills
+        assertEquals("Both parents", ownersSummary(listOf("bride_parents", "groom_parents"), who, en))
+        assertEquals("Me & parents", ownersSummary(listOf("groom", "groom_parents"), who, en))
+        assertEquals("Everyone", ownersSummary(ROLES, who, en))
+        assertEquals("3 people", ownersSummary(listOf("bride", "groom", "groom_parents"), who, en))
+        val p = plan(myRole = "groom").copy(photos = com.d2m.app.data.model.WeddingPhotosOut(bride = "/photo/b"))
+        val w = whoFor(p, en) { "https://api$it" }
+        assertEquals("https://api/photo/b", w("bride").photoUrl)
+        assertEquals(null, w("bride_parents").photoUrl)          // parents have no photo of their own
+        assertEquals("Priya's parents", w("bride_parents").name)
+        assertEquals("Me", w("groom").label); assertEquals("Prakash", w("groom").name)
+    }
+
     @Test fun searchMatchesTitles() {
         val t = task("7")
         assertTrue(passes(t, Filters(q = "task 7"), today))

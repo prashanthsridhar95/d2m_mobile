@@ -51,6 +51,9 @@ class WeddingApi(private val api: ApiClient) {
         api.delete("${base(primaryId)}/tasks/$taskId/attachments/$attachmentId")
 
     /** Absolute URL of an attachment's bytes -- loaded with the authenticated photo ImageLoader (images only). */
+    /** Absolute URL for a media path from the API (profile photos). */
+    fun mediaUrl(path: String): String = api.resolveMediaUrl(path)
+
     fun attachmentUrl(primaryId: String, taskId: String, attachmentId: String): String =
         api.resolveMediaUrl("${base(primaryId)}/tasks/$taskId/attachments/$attachmentId")
 

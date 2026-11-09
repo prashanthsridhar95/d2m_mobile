@@ -68,7 +68,7 @@ class WeddingUiTest {
             scope = CoroutineScope(Job() + Dispatchers.Unconfined),
         )
         pm.ensure(listOf("2026-11-12"))
-        return WeddingEnv(labeler(plan, s), pm, today, s)
+        return WeddingEnv(labeler(plan, s), pm, today, s, whoFor(plan, s) { it })
     }
 
     private fun androidx.compose.ui.test.ComposeUiTest.render(e: WeddingEnv, content: @androidx.compose.runtime.Composable () -> Unit) = setContent {
@@ -89,6 +89,31 @@ class WeddingUiTest {
         onNodeWithText("Book the venue").performClick()
         assertEquals("1", opened)
         onNodeWithText("Foundations").performClick() // collapses its group
+    }
+
+    @Test fun ownersReadAsNamedPillsOrOnePhraseSummary() = runComposeUiTest {
+        val e = env()
+        val owned = listOf(
+            task("a", "Pair of people", "2026-11-12", listOf("bride", "groom")),
+            task("b", "Both parents", "2026-11-12", listOf("bride_parents", "groom_parents")),
+            task("c", "Child and parents", "2026-11-12", listOf("groom", "groom_parents")),
+            task("d", "Everybody", "2026-11-12", listOf("bride", "groom", "bride_parents", "groom_parents")),
+        )
+        render(e) { WeddingListView(buildGroups(owned, phases, "phase", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInGroup = {}) }
+        onNodeWithText("Priya").assertIsDisplayed()          // the bride, by name, in an avatar pill
+        onNodeWithText("Both parents").assertIsDisplayed()
+        onNodeWithText("Me & parents").assertIsDisplayed()
+        onNodeWithText("Everyone").assertIsDisplayed()
+        assertTrue(onAllNodesWithText("BP").fetchSemanticsNodes().isEmpty() && onAllNodesWithText("GP").fetchSemanticsNodes().isEmpty(), "no more BP/GP codes")
+    }
+
+    @Test fun panchangamCardExplainsEachMarker() = runComposeUiTest {
+        val e = env()
+        e.pm.ensure(listOf("2026-11-15"))
+        render(e) { PmCard("2026-11-15") }
+        onNodeWithText("Amavasya").assertIsDisplayed()
+        onNodeWithText("Chandrashtamam · Priya").assertIsDisplayed()
+        onNodeWithText("New moon — usually avoided for ceremonies.").assertIsDisplayed()
     }
 
     @Test fun consultAndCountTagsAreProperChips() = runComposeUiTest {

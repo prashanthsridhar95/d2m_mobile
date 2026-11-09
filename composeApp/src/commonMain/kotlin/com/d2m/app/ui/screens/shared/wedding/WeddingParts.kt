@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -38,51 +40,12 @@ import com.d2m.app.ui.theme.d2m
 import kotlinx.datetime.LocalDate
 
 /** What every wedding composable needs: role names ("Me", "Priya's parents"), panchangam flags, today. */
-class WeddingEnv(val label: (String) -> String, val pm: PanchangamStore, val today: LocalDate, val s: WeddingStrings)
+class WeddingEnv(
+    val label: (String) -> String, val pm: PanchangamStore, val today: LocalDate, val s: WeddingStrings,
+    val who: (String) -> Who = { r -> Who(label(r), label(r), null, r.endsWith("_parents")) },
+)
 
 val LocalWedding = compositionLocalOf<WeddingEnv> { error("WeddingEnv not provided") }
-
-@Composable
-private fun roleColor(role: String): Color {
-    val p = LocalD2MStatusPalette.current
-    return when (role) {
-        "bride" -> d2m.accent
-        "groom" -> p.info.fg
-        "bride_parents" -> d2m.goldStrong
-        else -> p.success.fg
-    }
-}
-
-/** Role avatars: filled once that person has signed off, outlined until then; "Me" on my own. */
-@Composable
-fun Avatars(task: WeddingTaskOut, modifier: Modifier = Modifier, named: Boolean = true) {
-    val env = LocalWedding.current
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row {
-            task.participants.take(4).forEachIndexed { i, r ->
-                val on = r in task.confirmedBy
-                val c = roleColor(r)
-                val me = env.label(r) == env.s.me
-                Box(
-                    Modifier.offset(x = (-6 * i).dp).then(if (me) Modifier.height(22.dp) else Modifier.size(22.dp))
-                        .clip(CircleShape).background(if (on) c else MaterialTheme.colorScheme.surface)
-                        .border(BorderStroke(1.5.dp, c), CircleShape)
-                        .padding(horizontal = if (me) 6.dp else 0.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (me) env.s.me else ROLE_SHORT[r] ?: "",
-                        fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                        color = if (on) MaterialTheme.colorScheme.surface else c,
-                    )
-                }
-            }
-        }
-        if (named && task.participants.size == 1) {
-            Text(env.label(task.participants[0]), style = MaterialTheme.typography.labelMedium, color = d2m.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
 
 /** Round tick-box. Disabled for non-assignees, and for a task someone else already signed off. */
 @Composable
@@ -98,18 +61,6 @@ fun CheckCircle(task: WeddingTaskOut, busy: Boolean, onToggle: () -> Unit, modif
             .semantics { contentDescription = task.title },
         contentAlignment = Alignment.Center,
     ) { if (done) Text("✓", color = MaterialTheme.colorScheme.surface, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-}
-
-@Composable
-fun TypeTag(task: WeddingTaskOut) {
-    val tone = when (task.scope) {
-        "couple" -> D2MBadgeTone.ACCENT
-        "parents" -> D2MBadgeTone.WARNING
-        "group" -> D2MBadgeTone.INFO
-        "family" -> D2MBadgeTone.SUCCESS
-        else -> D2MBadgeTone.NEUTRAL
-    }
-    D2MBadge(LocalWedding.current.s.scope(task.scope), tone)
 }
 
 private fun String.capitalised() = replaceFirstChar { it.uppercase() }
@@ -219,5 +170,38 @@ fun PmNote(date: String?, modifier: Modifier = Modifier) {
         if (d.isPurnima) tag(env.s.pmPurnima, p.warning.bg, p.warning.fg)
         if (d.isAmavasya) tag(env.s.pmAmavasyaAvoid, p.neutral.bg, p.neutral.fg)
         if (d.chandrashtamam.isNotEmpty()) tag(env.s.pmChandrashtamamFor(d.chandrashtamam.joinToString(" & ") { env.label(it) }), p.danger.bg, p.danger.fg)
+    }
+}
+
+/** The day's panchangam laid out for reading: tithi + nakshatra, then each marker with what it means. */
+@Composable
+fun PmCard(date: String?, modifier: Modifier = Modifier) {
+    val env = LocalWedding.current
+    if (date == null || !env.pm.available) return
+    val s = env.s
+    val d = env.pm.get(date)
+    val p = LocalD2MStatusPalette.current
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(d2m.surfaceSunken).border(1.dp, d2m.border, RoundedCornerShape(6.dp)).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(s.panchangam.uppercase(), style = MaterialTheme.typography.labelSmall, color = d2m.label, modifier = Modifier.weight(1f))
+            if (d != null) Text("${d.tithi.replace(Regex(" \\(.*\\)"), "")} · ${d.nakshatra}", style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+        }
+        if (d == null) { Text(s.pmChecking, style = MaterialTheme.typography.labelMedium, color = d2m.faint); return@Column }
+        val rows = buildList {
+            if (d.isMuhoortham) add(Triple(s.pmShubh, s.pmMuhoortham1, p.success.fg))
+            if (d.isPurnima) add(Triple(s.pmPurnima, s.pmPurnima1, p.warning.fg))
+            if (d.isAmavasya) add(Triple(s.pmAmavasya, s.pmAmavasya1, d2m.meta))
+            if (d.chandrashtamam.isNotEmpty()) add(Triple(s.pmChandrashtamam + " · " + d.chandrashtamam.joinToString(" & ") { env.label(it) }, s.pmChandra1, p.danger.fg))
+        }
+        if (rows.isEmpty()) Text(s.ordinaryDay, style = MaterialTheme.typography.bodyMedium, color = d2m.meta)
+        rows.forEach { (title, text, color) ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+                Text(text, style = MaterialTheme.typography.labelMedium, color = d2m.meta)
+            }
+        }
     }
 }

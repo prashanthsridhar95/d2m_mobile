@@ -113,6 +113,42 @@ interface WeddingStrings {
     fun commentsPill(n: Int): String
     fun filesPill(n: Int): String
     val assigned: String
+    val everyone: String
+    val bothParents: String
+    fun nameAndParents(name: String): String
+    fun nPeople(n: Int): String
+    val addTodoTitle: String
+    val addTodoIntro: String
+    val ownersHint: String
+    val anyOwnerCanMark: String
+    val whenLabel: String
+    val chipToday: String
+    val chipInWeek: String
+    val chipInMonth: String
+    val noDateChip: String
+    val visibilityEveryoneHint: String
+    val visibilitySideHint: String
+    val visibilityOnlyMeHint: String
+    val addTodoButton: String
+    val milestoneEngagement: String
+    val milestoneMarriage: String
+    val milestoneHoneymoon: String
+    val engagementBeforeWedding: String
+    val honeymoonAfterWedding: String
+    fun daysBeforeWedding(n: Int): String
+    fun daysAfterWedding(n: Int): String
+    fun inDays(n: Int): String
+    fun daysAgo(n: Int): String
+    val saveDates: String
+    val traditionHint: String
+    val ordinaryDay: String
+    val panchangam: String
+    val pmMuhoortham1: String
+    val pmPurnima1: String
+    val pmAmavasya1: String
+    val pmChandra1: String
+    val todosOnThisDay: String
+    fun doneOfTotal(done: Int, total: Int): String
     val creatorSuffix: String
     val signedOff: String
     val pending: String
@@ -287,13 +323,49 @@ object WeddingStringsEn : WeddingStrings {
     override val markDone = "Mark as done"
     override val markAgreed = "Mark as agreed / done"
     override val doneReopen = "✓ Done — reopen"
-    override fun assignedOnly(names: String) = "Assigned to $names — only they can mark it done"
+    override fun assignedOnly(names: String) = "Owned by $names — only they can mark it done"
     override fun signedOffBy(names: String) = "Signed off by $names"
     override fun withParty(party: String) = "with $party"
     override val consult = "Consult"
     override fun commentsPill(n: Int) = if (n == 1) "1 comment" else "$n comments"
     override fun filesPill(n: Int) = if (n == 1) "1 file" else "$n files"
-    override val assigned = "Assigned"
+    override val assigned = "Owners"
+    override val everyone = "Everyone"
+    override val bothParents = "Both parents"
+    override fun nameAndParents(name: String) = "$name & parents"
+    override fun nPeople(n: Int) = "$n people"
+    override val addTodoTitle = "Add a to-do"
+    override val addTodoIntro = "Something your families need to do, decide or arrange."
+    override val ownersHint = "Pick everyone who should take this on"
+    override val anyOwnerCanMark = "Any one owner can mark it done for everyone."
+    override val whenLabel = "When"
+    override val chipToday = "Today"
+    override val chipInWeek = "In a week"
+    override val chipInMonth = "In a month"
+    override val noDateChip = "No date"
+    override val visibilityEveryoneHint = "Both families can see it."
+    override val visibilitySideHint = "Only your own family can see it."
+    override val visibilityOnlyMeHint = "Only you can see it."
+    override val addTodoButton = "Add to-do"
+    override val milestoneEngagement = "The betrothal ceremony"
+    override val milestoneMarriage = "The wedding day itself"
+    override val milestoneHoneymoon = "Time away together"
+    override val engagementBeforeWedding = "The engagement has to be on or before the wedding."
+    override val honeymoonAfterWedding = "The honeymoon has to be on or after the wedding."
+    override fun daysBeforeWedding(n: Int) = "$n day${if (n == 1) "" else "s"} before the wedding"
+    override fun daysAfterWedding(n: Int) = "$n day${if (n == 1) "" else "s"} after the wedding"
+    override fun inDays(n: Int) = if (n == 0) "today" else "in $n day${if (n == 1) "" else "s"}"
+    override fun daysAgo(n: Int) = "$n day${if (n == 1) "" else "s"} ago"
+    override val saveDates = "Save dates"
+    override val traditionHint = "Hides to-dos that belong to other Brahmin traditions."
+    override val ordinaryDay = "No special markers — an ordinary day."
+    override val panchangam = "Panchangam"
+    override val pmMuhoortham1 = "A favourable day for new beginnings."
+    override val pmPurnima1 = "Full moon."
+    override val pmAmavasya1 = "New moon — usually avoided for ceremonies."
+    override val pmChandra1 = "The Moon is in the 8th sign from their birth rashi."
+    override val todosOnThisDay = "To-dos on this day"
+    override fun doneOfTotal(done: Int, total: Int) = "$done of $total done"
     override val creatorSuffix = " · creator"
     override val signedOff = "signed off"
     override val pending = "pending"
@@ -345,7 +417,7 @@ object WeddingStringsEn : WeddingStrings {
     override val addOnThisDay = "+ Add a to-do on this day"
     override val newTaskTitle = "New to-do"
     override val whatNeedsDoing = "What needs to be done?"
-    override val assignTo = "Assign to"
+    override val assignTo = "Owners"
     override val anyoneCanMark = "Anyone you pick can mark it done."
     override val phase = "Phase"
     override val dueDate = "Due date"
@@ -364,7 +436,7 @@ object WeddingStringsEn : WeddingStrings {
     override val clearAll = "Clear all"
     override fun matchesCount(shown: Int, total: Int) = "$shown of $total to-dos match"
     override val quickViews = "Quick views"
-    override val facetAssignedTo = "Assigned to"
+    override val facetAssignedTo = "Owners"
     override val facetType = "Type"
     override val facetPhase = "Phase"
     override val facetStatus = "Status"
@@ -468,13 +540,49 @@ object WeddingStringsHi : WeddingStrings {
     override val markDone = "पूर्ण करें"
     override val markAgreed = "सहमत / पूर्ण करें"
     override val doneReopen = "✓ पूर्ण — फिर खोलें"
-    override fun assignedOnly(names: String) = "$names को सौंपा गया — केवल वही इसे पूर्ण कर सकते हैं"
+    override fun assignedOnly(names: String) = "$names की ज़िम्मेदारी — केवल वही इसे पूर्ण कर सकते हैं"
     override fun signedOffBy(names: String) = "$names ने पूर्ण किया"
     override fun withParty(party: String) = "$party के साथ"
     override val consult = "परामर्श"
     override fun commentsPill(n: Int) = "$n टिप्पणी"
     override fun filesPill(n: Int) = "$n फ़ाइल"
-    override val assigned = "सौंपा गया"
+    override val assigned = "ज़िम्मेदार"
+    override val everyone = "सभी"
+    override val bothParents = "दोनों के माता-पिता"
+    override fun nameAndParents(name: String) = "$name और माता-पिता"
+    override fun nPeople(n: Int) = "$n लोग"
+    override val addTodoTitle = "काम जोड़ें"
+    override val addTodoIntro = "कुछ ऐसा जो आपके परिवारों को करना, तय करना या जुटाना है।"
+    override val ownersHint = "जो इसे संभालें, उन सभी को चुनें"
+    override val anyOwnerCanMark = "कोई भी एक ज़िम्मेदार इसे सबके लिए पूर्ण कर सकता है।"
+    override val whenLabel = "कब"
+    override val chipToday = "आज"
+    override val chipInWeek = "एक सप्ताह में"
+    override val chipInMonth = "एक माह में"
+    override val noDateChip = "तिथि नहीं"
+    override val visibilityEveryoneHint = "दोनों परिवार इसे देख सकते हैं।"
+    override val visibilitySideHint = "केवल आपका परिवार इसे देख सकता है।"
+    override val visibilityOnlyMeHint = "केवल आप इसे देख सकते हैं।"
+    override val addTodoButton = "काम जोड़ें"
+    override val milestoneEngagement = "सगाई की रस्म"
+    override val milestoneMarriage = "विवाह का दिन"
+    override val milestoneHoneymoon = "साथ बिताया समय"
+    override val engagementBeforeWedding = "सगाई विवाह से पहले या उसी दिन होनी चाहिए।"
+    override val honeymoonAfterWedding = "हनीमून विवाह के बाद या उसी दिन होना चाहिए।"
+    override fun daysBeforeWedding(n: Int) = "विवाह से $n दिन पहले"
+    override fun daysAfterWedding(n: Int) = "विवाह के $n दिन बाद"
+    override fun inDays(n: Int) = if (n == 0) "आज" else "$n दिन में"
+    override fun daysAgo(n: Int) = "$n दिन पहले"
+    override val saveDates = "तिथियाँ सहेजें"
+    override val traditionHint = "दूसरी ब्राह्मण परंपराओं के काम छिपा देता है।"
+    override val ordinaryDay = "कोई विशेष चिह्न नहीं — एक सामान्य दिन।"
+    override val panchangam = "पंचांग"
+    override val pmMuhoortham1 = "नई शुरुआत के लिए अनुकूल दिन।"
+    override val pmPurnima1 = "पूर्ण चंद्र।"
+    override val pmAmavasya1 = "अमावस्या — समारोहों के लिए आमतौर पर वर्जित।"
+    override val pmChandra1 = "चंद्रमा उनकी जन्म राशि से आठवें स्थान पर है।"
+    override val todosOnThisDay = "इस दिन के काम"
+    override fun doneOfTotal(done: Int, total: Int) = "$total में से $done पूर्ण"
     override val creatorSuffix = " · निर्माता"
     override val signedOff = "पूर्ण किया"
     override val pending = "लंबित"
@@ -526,7 +634,7 @@ object WeddingStringsHi : WeddingStrings {
     override val addOnThisDay = "+ इस दिन के लिए काम जोड़ें"
     override val newTaskTitle = "नया काम"
     override val whatNeedsDoing = "क्या करना है?"
-    override val assignTo = "किसे सौंपें"
+    override val assignTo = "ज़िम्मेदार"
     override val anyoneCanMark = "आप जिसे चुनेंगे वह इसे पूर्ण कर सकता है।"
     override val phase = "चरण"
     override val dueDate = "नियत तिथि"
@@ -545,7 +653,7 @@ object WeddingStringsHi : WeddingStrings {
     override val clearAll = "सब हटाएँ"
     override fun matchesCount(shown: Int, total: Int) = "$total में से $shown काम मेल खाते हैं"
     override val quickViews = "त्वरित दृश्य"
-    override val facetAssignedTo = "किसे सौंपा"
+    override val facetAssignedTo = "ज़िम्मेदार"
     override val facetType = "प्रकार"
     override val facetPhase = "चरण"
     override val facetStatus = "स्थिति"
@@ -649,13 +757,49 @@ object WeddingStringsTa : WeddingStrings {
     override val markDone = "முடிந்தது எனக் குறி"
     override val markAgreed = "ஒப்புதல் / முடிந்தது எனக் குறி"
     override val doneReopen = "✓ முடிந்தது — மீண்டும் திற"
-    override fun assignedOnly(names: String) = "$names க்கு ஒதுக்கப்பட்டது — அவர்கள் மட்டுமே முடிந்ததாகக் குறிக்கலாம்"
+    override fun assignedOnly(names: String) = "$names பொறுப்பு — அவர்கள் மட்டுமே முடிந்ததாகக் குறிக்கலாம்"
     override fun signedOffBy(names: String) = "$names முடித்தார்"
     override fun withParty(party: String) = "$party உடன்"
     override val consult = "ஆலோசனை"
     override fun commentsPill(n: Int) = "$n கருத்து"
     override fun filesPill(n: Int) = "$n கோப்பு"
-    override val assigned = "ஒதுக்கப்பட்டவர்"
+    override val assigned = "பொறுப்பாளர்கள்"
+    override val everyone = "அனைவரும்"
+    override val bothParents = "இருவரின் பெற்றோர்"
+    override fun nameAndParents(name: String) = "$name & பெற்றோர்"
+    override fun nPeople(n: Int) = "$n பேர்"
+    override val addTodoTitle = "வேலையைச் சேர்"
+    override val addTodoIntro = "உங்கள் குடும்பங்கள் செய்ய, முடிவு செய்ய அல்லது ஏற்பாடு செய்ய வேண்டிய ஒன்று."
+    override val ownersHint = "இதை ஏற்கும் அனைவரையும் தேர்ந்தெடுக்கவும்"
+    override val anyOwnerCanMark = "பொறுப்பாளர்களில் ஒருவர் அனைவருக்காகவும் முடிந்ததாகக் குறிக்கலாம்."
+    override val whenLabel = "எப்போது"
+    override val chipToday = "இன்று"
+    override val chipInWeek = "ஒரு வாரத்தில்"
+    override val chipInMonth = "ஒரு மாதத்தில்"
+    override val noDateChip = "தேதி இல்லை"
+    override val visibilityEveryoneHint = "இரு குடும்பங்களும் பார்க்கலாம்."
+    override val visibilitySideHint = "உங்கள் குடும்பம் மட்டும் பார்க்கலாம்."
+    override val visibilityOnlyMeHint = "நீங்கள் மட்டும் பார்க்கலாம்."
+    override val addTodoButton = "வேலையைச் சேர்"
+    override val milestoneEngagement = "நிச்சயதார்த்த விழா"
+    override val milestoneMarriage = "திருமண நாள்"
+    override val milestoneHoneymoon = "சேர்ந்து செலவிடும் நேரம்"
+    override val engagementBeforeWedding = "நிச்சயதார்த்தம் திருமணத்திற்கு முன் அல்லது அதே நாளில் இருக்க வேண்டும்."
+    override val honeymoonAfterWedding = "தேனிலவு திருமணத்திற்குப் பின் அல்லது அதே நாளில் இருக்க வேண்டும்."
+    override fun daysBeforeWedding(n: Int) = "திருமணத்திற்கு $n நாட்கள் முன்"
+    override fun daysAfterWedding(n: Int) = "திருமணத்திற்கு $n நாட்கள் பின்"
+    override fun inDays(n: Int) = if (n == 0) "இன்று" else "$n நாட்களில்"
+    override fun daysAgo(n: Int) = "$n நாட்கள் முன்"
+    override val saveDates = "தேதிகளைச் சேமி"
+    override val traditionHint = "பிற பிராமண மரபுகளுக்குரிய வேலைகளை மறைக்கும்."
+    override val ordinaryDay = "சிறப்புக் குறிகள் இல்லை — ஒரு சாதாரண நாள்."
+    override val panchangam = "பஞ்சாங்கம்"
+    override val pmMuhoortham1 = "புதிய தொடக்கங்களுக்கு உகந்த நாள்."
+    override val pmPurnima1 = "முழு நிலவு."
+    override val pmAmavasya1 = "அமாவாசை — விழாக்களுக்குப் பொதுவாகத் தவிர்க்கப்படும்."
+    override val pmChandra1 = "சந்திரன் அவர்களின் ஜன்ம ராசியிலிருந்து 8-ஆம் ராசியில் உள்ளது."
+    override val todosOnThisDay = "இந்த நாளின் வேலைகள்"
+    override fun doneOfTotal(done: Int, total: Int) = "$total இல் $done முடிந்தது"
     override val creatorSuffix = " · உருவாக்கியவர்"
     override val signedOff = "முடித்தார்"
     override val pending = "நிலுவையில்"
@@ -707,7 +851,7 @@ object WeddingStringsTa : WeddingStrings {
     override val addOnThisDay = "+ இந்த நாளுக்கு வேலையைச் சேர்"
     override val newTaskTitle = "புதிய வேலை"
     override val whatNeedsDoing = "என்ன செய்ய வேண்டும்?"
-    override val assignTo = "யாருக்கு ஒதுக்குவது"
+    override val assignTo = "பொறுப்பாளர்கள்"
     override val anyoneCanMark = "நீங்கள் தேர்ந்தெடுப்பவர் இதை முடிந்ததாகக் குறிக்கலாம்."
     override val phase = "கட்டம்"
     override val dueDate = "இறுதி தேதி"
@@ -726,7 +870,7 @@ object WeddingStringsTa : WeddingStrings {
     override val clearAll = "அனைத்தையும் நீக்கு"
     override fun matchesCount(shown: Int, total: Int) = "$total இல் $shown வேலைகள் பொருந்துகின்றன"
     override val quickViews = "விரைவுக் காட்சிகள்"
-    override val facetAssignedTo = "ஒதுக்கப்பட்டவர்"
+    override val facetAssignedTo = "பொறுப்பாளர்கள்"
     override val facetType = "வகை"
     override val facetPhase = "கட்டம்"
     override val facetStatus = "நிலை"

@@ -76,6 +76,33 @@ fun labeler(plan: WeddingPlanOut, s: WeddingStrings): (String) -> String = { rol
     }
 }
 
+/** Everything an avatar pill needs for a role: the viewer's wording ("Me"), the real name (for the initial), the photo. */
+data class Who(val label: String, val name: String, val photoUrl: String?, val parents: Boolean)
+
+fun whoFor(plan: WeddingPlanOut, s: WeddingStrings, mediaUrl: (String) -> String): (String) -> Who {
+    val label = labeler(plan, s)
+    return { role ->
+        val bride = role.startsWith("bride")
+        val base = (if (bride) plan.names.bride else plan.names.groom) ?: (if (bride) s.bride else s.groom)
+        val parents = role.endsWith("_parents")
+        val photo = if (parents) null else (if (bride) plan.photos.bride else plan.photos.groom)
+        Who(label(role), if (parents) s.parentsOf(base) else base, photo?.let(mediaUrl), parents)
+    }
+}
+
+/** How a task's owners read in one line: named pills for one or two short names, otherwise a summary phrase. */
+fun ownersSummary(participants: List<String>, who: (String) -> Who, s: WeddingStrings): String? {
+    val labels = participants.map { who(it).label }
+    if (participants.size == 1 || (participants.size == 2 && labels.joinToString("").length <= 16)) return null
+    return when {
+        participants.size == 4 -> s.everyone
+        participants.size == 2 && participants.all { it.endsWith("_parents") } -> s.bothParents
+        participants.size == 2 && participants[0].removeSuffix("_parents") == participants[1].removeSuffix("_parents") ->
+            s.nameAndParents(labels[participants.indexOfFirst { !it.endsWith("_parents") }])
+        else -> s.nPeople(participants.size)
+    }
+}
+
 /* ------------------------------------------------------------------ dates */
 
 fun today(): LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date

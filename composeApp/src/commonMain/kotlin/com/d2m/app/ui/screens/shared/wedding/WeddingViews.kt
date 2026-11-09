@@ -78,8 +78,7 @@ fun TaskRow(task: WeddingTaskOut, busy: Boolean, onOpen: () -> Unit, onToggle: (
             )
             TaskTags(task)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                TypeTag(task)
-                Avatars(task)
+                OwnerPills(task)
                 DueChip(task)
             }
         }
@@ -168,7 +167,7 @@ fun WeddingBoardView(
                             }
                             TaskTags(t)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                                TypeTag(t); Avatars(t, named = false); DueChip(t)
+                                OwnerPills(t); DueChip(t)
                             }
                         }
                     }
@@ -226,7 +225,7 @@ fun WeddingCalendarView(
         Row(Modifier.fillMaxWidth()) {
             s.weekdaysShort.forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = d2m.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(8.dp))) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp)) {
           val chipMode = maxWidth / 7 >= 88.dp
           Column(Modifier.fillMaxSize()) {
             repeat(weeks) { w ->
@@ -239,20 +238,29 @@ fun WeddingCalendarView(
                         val ch = pmd != null && pmd.chandrashtamam.isNotEmpty()
                         val outside = date.month.ordinal + 1 != month
                         val ms = milestones[key]
+                        val isToday = date == today
+                        val selectedDay = key == openDay
+                        val tile = RoundedCornerShape(8.dp)
+                        // Separated rounded tiles like the panchangam calendar. Today = accent outline + filled number; the open day = soft accent wash.
                         val bg = when {
+                            selectedDay -> d2m.accentSoft
+                            outside -> androidx.compose.ui.graphics.Color.Transparent
                             ms != null -> d2m.goldSoft
                             ch -> p.danger.bg
-                            outside -> d2m.surfaceSunken
                             else -> MaterialTheme.colorScheme.surface
                         }
+                        val outline = when {
+                            isToday -> BorderStroke(2.dp, d2m.accent)
+                            outside -> BorderStroke(0.dp, androidx.compose.ui.graphics.Color.Transparent)
+                            selectedDay -> BorderStroke(1.dp, d2m.accentBorder)
+                            else -> BorderStroke(1.dp, d2m.borderSoft)
+                        }
                         Column(
-                            Modifier.weight(1f).fillMaxHeight().background(bg)
-                                .border(BorderStroke(0.5.dp, if (key == openDay) d2m.accent else d2m.borderSoft))
-                                .clickable { onOpenDay(key) }.padding(3.dp),
+                            Modifier.weight(1f).fillMaxHeight().padding(2.dp).clip(tile).background(bg).border(outline, tile)
+                                .clickable { onOpenDay(key) }.padding(4.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                val isToday = date == today
                                 Text(
                                     date.day.toString(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                                     color = when { isToday -> d2m.accentOn; ch -> p.danger.fg; outside -> d2m.faint; else -> d2m.textPrimary },

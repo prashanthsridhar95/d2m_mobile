@@ -119,7 +119,7 @@ private fun WeddingWorkspace(primaryId: String) {
         return
     }
 
-    val env = remember(d.plan.myRole, d.plan.names, c.pm, s) { WeddingEnv(labeler(d.plan, s), c.pm, today(), s) }
+    val env = remember(d.plan.myRole, d.plan.names, d.plan.photos, c.pm, s) { WeddingEnv(labeler(d.plan, s), c.pm, today(), s, whoFor(d.plan, s) { c.repo.mediaUrl(it) }) }
     CompositionLocalProvider(LocalWedding provides env) {
       BoxWithConstraints(Modifier.fillMaxSize()) {
         // Tablets and landscape get the web layout: filters in a persistent rail beside the tasks.

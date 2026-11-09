@@ -21,6 +21,7 @@ class WeddingRepository(private val api: WeddingApi) {
     suspend fun upload(primaryId: String, taskId: String, fileName: String, mime: String, bytes: ByteArray) =
         api.uploadAttachment(primaryId, taskId, fileName, mime, bytes)
     suspend fun deleteAttachment(primaryId: String, taskId: String, attachmentId: String) = api.deleteAttachment(primaryId, taskId, attachmentId)
+    fun mediaUrl(path: String) = api.mediaUrl(path)
     fun attachmentUrl(primaryId: String, taskId: String, attachmentId: String) = api.attachmentUrl(primaryId, taskId, attachmentId)
     suspend fun download(primaryId: String, taskId: String, attachmentId: String) = api.downloadAttachment(primaryId, taskId, attachmentId)
     suspend fun panchangam(primaryId: String, start: String, end: String) = api.panchangam(primaryId, start, end)
