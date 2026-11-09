@@ -112,6 +112,17 @@ fun daysBetween(a: LocalDate, b: LocalDate): Int = a.daysUntil(b)
 fun LocalDate.short(s: WeddingStrings): String = "$day ${s.monthsShort[month.ordinal]}"
 fun LocalDate.medium(s: WeddingStrings): String = "$day ${s.monthsShort[month.ordinal]} $year"
 fun LocalDate.full(s: WeddingStrings): String = "${s.weekdaysLong[dayOfWeek.ordinal]}, $day ${s.monthsLong[month.ordinal]} $year"
+/** Birthdays on an ISO date, worded for the viewer ("Your birthday" / "Priya's birthday"). A 29 Feb birthday is marked on 28 Feb in other years. */
+fun birthdaysOn(plan: WeddingPlanOut, key: String, s: WeddingStrings): List<String> {
+    val md = key.substring(5)
+    val year = key.substring(0, 4).toInt()
+    val leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    fun hit(b: String?) = b != null && (b == md || (!leap && md == "02-28" && b == "02-29"))
+    return listOf("bride" to plan.birthdays.bride, "groom" to plan.birthdays.groom).filter { hit(it.second) }.map { (role, _) ->
+        if (role == plan.myRole) s.birthdayYours else s.birthdayOf((if (role == "bride") plan.names.bride else plan.names.groom) ?: if (role == "bride") "Bride" else "Groom")
+    }
+}
+
 fun monthTitle(year: Int, month: Int, s: WeddingStrings): String = "${s.monthsLong[month - 1]} $year"
 
 fun relDue(t: WeddingTaskOut, today: LocalDate, s: WeddingStrings): String {

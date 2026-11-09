@@ -49,7 +49,7 @@ internal fun notificationBody(n: NotificationOut, s: NotificationsStrings): Stri
     "shortlisted_profile_updated" -> if (n.str("candidate_id") != null) s.previewShortlistedProfileUpdated else ""
     // Unknown type: never dump the raw payload on screen. A counterpart name is the one safe, readable detail.
     // wedding_mention carries an already privacy-resolved author_label instead of counterpart_name.
-    else -> s.extraTypes[n.type]?.let { (_, named, anon) -> (n.str("counterpart_name") ?: n.str("author_label"))?.let { named.replace("{name}", it) } ?: anon }
+    else -> s.extraTypes[n.type]?.let { (_, named, anon) -> (n.str("counterpart_name") ?: n.str("author_label") ?: n.str("partner_name"))?.let { named.replace("{name}", it) } ?: anon }
         ?: n.str("counterpart_name") ?: ""
 }
 
@@ -101,7 +101,7 @@ internal fun notificationCta(n: NotificationOut, role: D2MRole?): NotificationCt
             val c = n.str("candidate_id")
             if (child && c != null) NotificationCta(CtaKind.ViewProfile, profileId = c) else null
         }
-        "wedding_mention" -> NotificationCta(CtaKind.ViewDetails, Routes.WEDDING_CHECKLIST)
+        "wedding_mention", "wedding_birthday" -> NotificationCta(CtaKind.ViewDetails, Routes.WEDDING_CHECKLIST)
         else -> null
     }
 }

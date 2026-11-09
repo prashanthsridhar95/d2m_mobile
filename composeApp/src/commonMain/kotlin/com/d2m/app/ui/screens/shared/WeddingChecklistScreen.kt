@@ -216,7 +216,7 @@ private fun WeddingWorkspace(primaryId: String) {
             )
             selected != null -> TaskSheet(c, selected, d.phases, onDismiss = { selectedId = null })
             dayOpen != null -> DaySheet(
-                dayOpen!!, dayTasks, dayEvents, todos,
+                dayOpen!!, dayTasks, dayEvents, birthdaysOn(d.plan, dayOpen!!, s), todos,
                 listOf(d.plan.engagementDate to s.engagement, d.plan.marriageDate to s.marriage, d.plan.honeymoonDate to s.honeymoon).firstOrNull { it.first == dayOpen }?.second,
                 c.busy, onOpen = { selectedId = it }, onToggle = c::toggle,
                 onAdd = { creating = NewPreset(due = it) }, onAddEvent = { creating = NewPreset(due = it, kind = "event") }, onSchedule = { t -> c.setDue(t, dayOpen) }, onDismiss = { dayOpen = null },

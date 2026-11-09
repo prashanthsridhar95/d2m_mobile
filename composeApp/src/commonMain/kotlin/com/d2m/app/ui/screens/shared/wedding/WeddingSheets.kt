@@ -477,7 +477,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DaySheet(
-    date: String, tasks: List<WeddingTaskOut>, events: List<WeddingTaskOut>, allTasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
+    date: String, tasks: List<WeddingTaskOut>, events: List<WeddingTaskOut>, birthdays: List<String>, allTasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
     onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onAddEvent: (String) -> Unit, onSchedule: (WeddingTaskOut) -> Unit, onDismiss: () -> Unit,
 ) {
     val s = LocalWedding.current.s
@@ -505,9 +505,15 @@ fun DaySheet(
                 milestone?.let { D2MBadge(it, D2MBadgeTone.GOLD_OUTLINE) }
             }
             PmCard(date, Modifier.padding(horizontal = 20.dp))
-            if (events.isNotEmpty()) {
+            if (events.isNotEmpty() || birthdays.isNotEmpty()) {
                 Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LabelText(s.eventsOnThisDay)
+                    birthdays.forEach { b ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(d2m.accentSoft).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("🎂")
+                            Text(b, style = MaterialTheme.typography.bodyMedium, color = d2m.accent, modifier = Modifier.weight(1f))
+                        }
+                    }
                     events.forEach { t ->
                         val pal = LocalD2MStatusPalette.current
                         Row(

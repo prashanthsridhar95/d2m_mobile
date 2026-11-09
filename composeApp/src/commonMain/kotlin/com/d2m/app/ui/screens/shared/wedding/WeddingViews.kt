@@ -271,6 +271,7 @@ fun WeddingCalendarView(
                                 PmBadges(key)
                             }
                             if (ms != null) Text(ms, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = d2m.goldStrong)
+                            if (birthdaysOn(plan, key, env.s).isNotEmpty()) Text("🎂", fontSize = 10.sp)
                             if (list.isNotEmpty()) {
                                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                                     if (chipMode) {

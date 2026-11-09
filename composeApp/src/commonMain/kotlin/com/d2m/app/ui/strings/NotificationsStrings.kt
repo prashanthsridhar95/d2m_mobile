@@ -100,6 +100,7 @@ object NotificationsStringsEn : NotificationsStrings {
     override val ctaViewProfile = "View profile"
     override val extraTypes = mapOf(
         "wedding_mention" to listOf("You were mentioned", "{name} mentioned you on a wedding to-do.", "You were mentioned on a wedding to-do."),
+        "wedding_birthday" to listOf("Partner's birthday", "Today is {name}'s birthday 🎂", "Today is your partner's birthday 🎂"),
         "calls_unlocked" to listOf("Calling unlocked", "You and {name} have both confirmed you met – calling is now open.", "You've both confirmed you met – calling is now open."),
         "horoscope_signoff_complete" to listOf("Horoscope signed off", "You and {name} have both signed off on the horoscope match.", "You've both signed off on the horoscope match."),
         "family_meeting_proposed" to listOf("Meeting proposed", "{name} proposed a time to meet.", "A meeting time has been proposed."),
@@ -158,6 +159,7 @@ object NotificationsStringsHi : NotificationsStrings {
     override val ctaViewProfile = "प्रोफ़ाइल देखें"
     override val extraTypes = mapOf(
         "wedding_mention" to listOf("आपको टैग किया गया", "{name} ने विवाह के एक काम पर आपको टैग किया।", "विवाह के एक काम पर आपको टैग किया गया।"),
+        "wedding_birthday" to listOf("साथी का जन्मदिन", "आज {name} का जन्मदिन है 🎂", "आज आपके साथी का जन्मदिन है 🎂"),
         "calls_unlocked" to listOf("कॉलिंग खुल गई", "आप और {name} दोनों ने मिलने की पुष्टि की – अब कॉलिंग खुली है।", "आप दोनों ने मिलने की पुष्टि की – अब कॉलिंग खुली है।"),
         "horoscope_signoff_complete" to listOf("कुंडली पर सहमति", "आप और {name} दोनों ने कुंडली मिलान पर सहमति दी है।", "आप दोनों ने कुंडली मिलान पर सहमति दी है।"),
         "family_meeting_proposed" to listOf("मुलाक़ात का प्रस्ताव", "{name} ने मिलने का समय सुझाया।", "मिलने का एक समय सुझाया गया है।"),
@@ -216,6 +218,7 @@ object NotificationsStringsTa : NotificationsStrings {
     override val ctaViewProfile = "சுயவிவரத்தைப் பார்க்கவும்"
     override val extraTypes = mapOf(
         "wedding_mention" to listOf("உங்களைக் குறிப்பிட்டனர்", "{name} திருமண வேலை ஒன்றில் உங்களைக் குறிப்பிட்டார்.", "திருமண வேலை ஒன்றில் உங்களைக் குறிப்பிட்டனர்."),
+        "wedding_birthday" to listOf("துணையின் பிறந்தநாள்", "இன்று {name} பிறந்தநாள் 🎂", "இன்று உங்கள் துணையின் பிறந்தநாள் 🎂"),
         "calls_unlocked" to listOf("அழைப்பு திறக்கப்பட்டது", "நீங்களும் {name}-உம் சந்தித்ததை உறுதிசெய்தீர்கள் – அழைப்பு இப்போது திறந்துள்ளது.", "நீங்கள் இருவரும் சந்தித்ததை உறுதிசெய்தீர்கள் – அழைப்பு இப்போது திறந்துள்ளது."),
         "horoscope_signoff_complete" to listOf("ஜாதகம் ஒப்புதல்", "நீங்களும் {name}-உம் ஜாதகப் பொருத்தத்தை ஒப்புக்கொண்டீர்கள்.", "நீங்கள் இருவரும் ஜாதகப் பொருத்தத்தை ஒப்புக்கொண்டீர்கள்."),
         "family_meeting_proposed" to listOf("சந்திப்பு முன்மொழிவு", "{name} சந்திக்க ஒரு நேரத்தை முன்மொழிந்தார்.", "சந்திக்க ஒரு நேரம் முன்மொழியப்பட்டுள்ளது."),

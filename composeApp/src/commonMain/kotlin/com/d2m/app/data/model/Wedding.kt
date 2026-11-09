@@ -6,6 +6,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WeddingNamesOut(val bride: String? = null, val groom: String? = null)
 
+/** Month-day ("07-19") of each person's birthday, never the year. */
+@Serializable
+data class WeddingBirthdaysOut(val bride: String? = null, val groom: String? = null)
+
 /** Main profile photo paths (authenticated image route) of the two people; parents have none. */
 @Serializable
 data class WeddingPhotosOut(val bride: String? = null, val groom: String? = null)
@@ -18,6 +22,7 @@ data class WeddingPlanOut(
     val tradition: String? = null,
     val names: WeddingNamesOut = WeddingNamesOut(),
     val photos: WeddingPhotosOut = WeddingPhotosOut(),
+    val birthdays: WeddingBirthdaysOut = WeddingBirthdaysOut(),
     val engagementDate: String? = null,
     val marriageDate: String? = null,
     val honeymoonDate: String? = null,
