@@ -252,8 +252,12 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
                 } else SectionHeading(task.title)
             }
 
-            // Status: only the assignees can change it (and only the signer can reopen).
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Status: only the assignees can change it (and only the signer can reopen). An event is an occasion: nothing to tick off.
+            if (task.kind == "event") {
+                val pal = LocalD2MStatusPalette.current
+                Text("\u25C6 " + s.eventNote, style = MaterialTheme.typography.labelLarge, color = pal.warning.fg,
+                    modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(pal.warning.bg).padding(horizontal = 14.dp, vertical = 8.dp))
+            } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 D2MButton(
                     text = if (done) s.doneReopen else if (task.participants.size > 1) s.markAgreed else s.markDone,
                     onClick = { c.toggle(task) },
@@ -449,8 +453,8 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DaySheet(
-    date: String, tasks: List<WeddingTaskOut>, allTasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
-    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onSchedule: (WeddingTaskOut) -> Unit, onDismiss: () -> Unit,
+    date: String, tasks: List<WeddingTaskOut>, events: List<WeddingTaskOut>, allTasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
+    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onAddEvent: (String) -> Unit, onSchedule: (WeddingTaskOut) -> Unit, onDismiss: () -> Unit,
 ) {
     val s = LocalWedding.current.s
     val d = date.toDate()
@@ -477,6 +481,21 @@ fun DaySheet(
                 milestone?.let { D2MBadge(it, D2MBadgeTone.GOLD_OUTLINE) }
             }
             PmCard(date, Modifier.padding(horizontal = 20.dp))
+            if (events.isNotEmpty()) {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LabelText(s.eventsOnThisDay)
+                    events.forEach { t ->
+                        val pal = LocalD2MStatusPalette.current
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(pal.warning.bg).clickable { onOpen(t.id) }.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("\u25C6", color = pal.warning.fg, fontSize = 10.sp)
+                            Text(t.title, style = MaterialTheme.typography.bodyMedium, color = pal.warning.fg, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LabelText(s.todosOnThisDay, Modifier.weight(1f))
@@ -518,6 +537,7 @@ fun DaySheet(
             }
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 D2MButton(s.addOnThisDay, { onAdd(date) }, modifier = Modifier.fillMaxWidth())
+                D2MButton(s.addEventHere, { onAddEvent(date) }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
                 if (!picking) D2MButton(s.chooseFromList, { picking = true }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
             }
         }
@@ -539,6 +559,7 @@ fun NewTaskSheet(
     var participants by remember { mutableStateOf((preset.participants ?: listOf(myRole)).toSet()) }
     var visibility by remember { mutableStateOf("all") }
     var due by remember { mutableStateOf(preset.due) }
+    var kind by remember { mutableStateOf(preset.kind) }
     val today = remember { today() }
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -547,8 +568,12 @@ fun NewTaskSheet(
         Column(Modifier.imePadding()) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SectionHeading(s.addTodoTitle)
-                    MetaText(s.addTodoIntro)
+                    SectionHeading(if (kind == "event") s.addEventTitle else s.addTodoTitle)
+                    MetaText(if (kind == "event") s.addEventIntro else s.addTodoIntro)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        ChoiceChip(s.kindTodo, selected = kind == "task") { kind = "task" }
+                        ChoiceChip(s.kindEvent, selected = kind == "event") { kind = "event" }
+                    }
                 }
                 D2MTextField(s.whatNeedsDoing, title, { if (it.length <= 200) title = it })
 
@@ -586,7 +611,7 @@ fun NewTaskSheet(
             HorizontalDivider(color = d2m.border)
             Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 D2MButton(
-                    s.addTodoButton, { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants })) },
+                    if (kind == "event") s.addEventButton else s.addTodoButton, { onCreate(WeddingTaskCreateIn(title.trim(), phase, visibility, due, ROLES.filter { it in participants }, kind)) },
                     enabled = title.isNotBlank() && participants.isNotEmpty() && !busy, modifier = Modifier.fillMaxWidth(),
                 )
                 D2MButton(s.cancel, onDismiss, variant = D2MButtonVariant.GHOST, modifier = Modifier.fillMaxWidth())

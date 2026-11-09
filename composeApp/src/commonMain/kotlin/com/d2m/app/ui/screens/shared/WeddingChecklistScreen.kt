@@ -124,7 +124,10 @@ private fun WeddingWorkspace(primaryId: String) {
       BoxWithConstraints(Modifier.fillMaxSize()) {
         // Tablets and landscape get the web layout: filters in a persistent rail beside the tasks.
         val wide = maxWidth >= 840.dp
-        val filtered = d.tasks.filter { passes(it, filters, env.today) }
+        // To-dos and events arrive in one list; events (ceremonies, gatherings) have no status and never count as work.
+        val todos = d.tasks.filter { it.kind != "event" }
+        val events = d.tasks.filter { it.kind == "event" }
+        val filtered = todos.filter { passes(it, filters, env.today) }
         val groupBy = if (view == "board") boardGroup else listGroup
         val pct = if (d.progress.total == 0) 0 else d.progress.done * 100 / d.progress.total
         val toWedding = d.plan.marriageDate?.let { daysBetween(env.today, it.toDate()) }
@@ -132,7 +135,7 @@ private fun WeddingWorkspace(primaryId: String) {
 
         Row(Modifier.fillMaxSize()) {
         if (wide) D2MCard(Modifier.width(300.dp).fillMaxHeight().padding(start = 16.dp, top = 8.dp, bottom = 12.dp)) {
-            WeddingFilterContent(filters, { filters = it }, d.phases, d.tasks, filtered.size, Modifier.padding(16.dp))
+            WeddingFilterContent(filters, { filters = it }, d.phases, todos, filtered.size, Modifier.padding(16.dp))
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             // ---- controls ----
@@ -167,11 +170,11 @@ private fun WeddingWorkspace(primaryId: String) {
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         QuickChip(s.chipOverdue(d.progress.overdue), "overdue" in filters.quick, danger = d.progress.overdue > 0) { filters = filters.toggleQuick("overdue") }
-                        QuickChip(s.chipThisWeek(d.tasks.count { bucketOf(it, env.today) == "week" }), "week" in filters.quick) { filters = filters.toggleQuick("week") }
+                        QuickChip(s.chipThisWeek(todos.count { bucketOf(it, env.today) == "week" }), "week" in filters.quick) { filters = filters.toggleQuick("week") }
                         QuickChip(s.chipMine(d.progress.myOpen), "mine" in filters.quick) { filters = filters.toggleQuick("mine") }
                         QuickChip(s.keyDates, false) { datesOpen = true }
                     }
-                    Text(s.tasksOfTotal(filtered.size, d.tasks.size), style = MaterialTheme.typography.labelSmall, color = d2m.faint)
+                    Text(s.tasksOfTotal(filtered.size, todos.size), style = MaterialTheme.typography.labelSmall, color = d2m.faint)
                 }
                 c.error?.let { D2MErrorBanner(message = it, onRetry = { c.load() }, inline = true) }
             }
@@ -191,7 +194,7 @@ private fun WeddingWorkspace(primaryId: String) {
                         onOpen = { creating = null; selectedId = it }, onToggle = c::toggle,
                         onAddInLane = { lane -> selectedId = null; creating = lanePreset(lane, groupBy, env.today) },
                     )
-                    else -> WeddingCalendarView(filtered, d.plan, dayOpen, onOpenDay = { selectedId = null; creating = null; dayOpen = it })
+                    else -> WeddingCalendarView(filtered, events, d.plan, dayOpen, onOpenDay = { selectedId = null; creating = null; dayOpen = it })
                 }
             }
         }
@@ -199,6 +202,7 @@ private fun WeddingWorkspace(primaryId: String) {
 
         // ---- sheets (one at a time; closing a task returns to its day) ----
         val dayTasks = dayOpen?.let { day -> filtered.filter { it.dueDate == day } }.orEmpty()
+        val dayEvents = dayOpen?.let { day -> events.filter { it.dueDate == day } }.orEmpty()
         when {
             creating != null -> NewTaskSheet(
                 d.phases, d.plan.myRole, creating!!, c.busy,
@@ -207,13 +211,13 @@ private fun WeddingWorkspace(primaryId: String) {
             )
             selected != null -> TaskSheet(c, selected, d.phases, onDismiss = { selectedId = null })
             dayOpen != null -> DaySheet(
-                dayOpen!!, dayTasks, d.tasks,
+                dayOpen!!, dayTasks, dayEvents, todos,
                 listOf(d.plan.engagementDate to s.engagement, d.plan.marriageDate to s.marriage, d.plan.honeymoonDate to s.honeymoon).firstOrNull { it.first == dayOpen }?.second,
                 c.busy, onOpen = { selectedId = it }, onToggle = c::toggle,
-                onAdd = { creating = NewPreset(due = it) }, onSchedule = { t -> c.setDue(t, dayOpen) }, onDismiss = { dayOpen = null },
+                onAdd = { creating = NewPreset(due = it) }, onAddEvent = { creating = NewPreset(due = it, kind = "event") }, onSchedule = { t -> c.setDue(t, dayOpen) }, onDismiss = { dayOpen = null },
             )
         }
-        if (filtersOpen && !wide) WeddingFilterSheet(filters, { filters = it }, d.phases, d.tasks, filtered.size, onDismiss = { filtersOpen = false })
+        if (filtersOpen && !wide) WeddingFilterSheet(filters, { filters = it }, d.phases, todos, filtered.size, onDismiss = { filtersOpen = false })
         if (datesOpen) KeyDatesDialog(
             d.plan.engagementDate, d.plan.marriageDate, d.plan.honeymoonDate, d.plan.tradition, c.busy,
             onSave = { e, m, h, t -> c.saveDates(e, m, h, t) { datesOpen = false } }, onDismiss = { datesOpen = false },

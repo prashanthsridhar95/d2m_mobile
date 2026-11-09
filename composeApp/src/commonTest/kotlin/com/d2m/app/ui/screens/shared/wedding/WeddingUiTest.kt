@@ -152,7 +152,7 @@ class WeddingUiTest {
     @Test fun calendarShowsMonthMarkersAndOpensADay() = runComposeUiTest {
         val e = env()
         var day: String? = null
-        render(e) { WeddingCalendarView(tasks, plan, openDay = null, onOpenDay = { day = it }) }
+        render(e) { WeddingCalendarView(tasks, emptyList(), plan, openDay = null, onOpenDay = { day = it }) }
         onNodeWithText("November 2026").assertIsDisplayed()
         onNodeWithText("Chandrashtamam").assertIsDisplayed() // legend
         assertTrue(onAllNodesWithText("Ch").fetchSemanticsNodes().isNotEmpty(), "chandrashtamam day should carry the Ch marker")

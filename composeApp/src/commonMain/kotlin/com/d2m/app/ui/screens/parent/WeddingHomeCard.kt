@@ -69,7 +69,7 @@ fun WeddingHomeCard(primaryId: String, onOpenChecklist: () -> Unit) {
             }
             MetaText(s.progressOf(d.progress.done, d.progress.total))
         }
-        val next = d.tasks.filter { it.status != "done" }.sortedWith(compareBy({ it.dueDate ?: "9999" }, { it.title })).take(3)
+        val next = d.tasks.filter { it.kind != "event" && it.status != "done" }.sortedWith(compareBy({ it.dueDate ?: "9999" }, { it.title })).take(3)
         if (next.isNotEmpty()) {
             HorizontalDivider(Modifier.padding(vertical = 12.dp), color = d2m.borderSoft)
             Text(s.nextUp.uppercase(), style = MaterialTheme.typography.labelSmall, color = d2m.meta)

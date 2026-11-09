@@ -32,7 +32,7 @@ val VISIBILITY_KEYS = listOf("all", "side", "private")
 val TRADITION_KEYS = listOf("", "tamil", "telugu", "kannada", "malayali", "north", "bengali", "marathi", "gujarati", "odia")
 val GROUP_KEYS = listOf("phase", "due", "owner", "party")
 /** What a new to-do starts with (from a list group's + , a calendar day, or a board lane). */
-data class NewPreset(val phase: String = "planning", val due: String? = null, val participants: List<String>? = null)
+data class NewPreset(val phase: String = "planning", val due: String? = null, val participants: List<String>? = null, val kind: String = "task")
 
 /** A to-do added from a board lane should land in that lane. */
 fun lanePreset(lane: TaskGroup, groupBy: String, today: LocalDate): NewPreset = when (groupBy) {

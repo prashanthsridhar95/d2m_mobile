@@ -184,7 +184,7 @@ fun WeddingBoardView(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WeddingCalendarView(
-    tasks: List<WeddingTaskOut>, plan: WeddingPlanOut, openDay: String?,
+    tasks: List<WeddingTaskOut>, events: List<WeddingTaskOut>, plan: WeddingPlanOut, openDay: String?,
     onOpenDay: (String) -> Unit, modifier: Modifier = Modifier,
 ) {
     val env = LocalWedding.current
@@ -198,7 +198,7 @@ fun WeddingCalendarView(
     val daysInMonth = first.plus(DatePeriod(months = 1)).let { daysBetween(first, it) }
     val weeks = (startOffset + daysInMonth + 6) / 7
     val gridStart = first.plus(DatePeriod(days = -startOffset))
-    val byDay = remember(tasks) { tasks.filter { it.dueDate != null }.groupBy { it.dueDate!! } }
+    val byDay = remember(tasks, events) { (events + tasks).filter { it.dueDate != null }.groupBy { it.dueDate!! } } // events lead the day
     val s = env.s
     // A Brahmin wedding runs about two and a half days: the day before and after the muhurtham day are the Marriage too.
     val marriageBlock = plan.marriageDate?.toDate()?.let { m -> listOf(m.plus(DatePeriod(days = -1)).toString() to s.weddingShort, m.plus(DatePeriod(days = 1)).toString() to s.weddingShort) }.orEmpty().toMap()
@@ -282,9 +282,9 @@ fun WeddingCalendarView(
                                             shown.forEach { t ->
                                                 Text(
                                                     t.title, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                                    color = when { t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.textPrimary },
+                                                    color = when { t.kind == "event" -> p.warning.fg; t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.textPrimary },
                                                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(3.dp))
-                                                        .background(when { t.status == "done" -> p.success.bg; t.overdue -> p.danger.bg; else -> d2m.accentSoft })
+                                                        .background(when { t.kind == "event" -> p.warning.bg; t.status == "done" -> p.success.bg; t.overdue -> p.danger.bg; else -> d2m.accentSoft })
                                                         .padding(horizontal = 4.dp, vertical = 1.dp),
                                                 )
                                             }
@@ -294,7 +294,7 @@ fun WeddingCalendarView(
                                         Column {
                                             FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp), maxLines = 2) {
                                                 list.take(6).forEach { t ->
-                                                    Box(Modifier.size(7.dp).clip(CircleShape).background(when { t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.accent }))
+                                                    Box(Modifier.size(7.dp).clip(CircleShape).background(when { t.kind == "event" -> p.warning.fg; t.status == "done" -> p.success.fg; t.overdue -> p.danger.fg; else -> d2m.accent }))
                                                 }
                                             }
                                             if (list.size > 6) Text("+${list.size - 6}", fontSize = 8.sp, color = d2m.meta)

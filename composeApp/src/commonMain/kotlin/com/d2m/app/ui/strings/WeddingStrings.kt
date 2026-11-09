@@ -182,6 +182,14 @@ interface WeddingStrings {
     val attachmentsHint: String
     val opening: String
     val openWith: String
+    val eventsOnThisDay: String
+    val kindTodo: String
+    val kindEvent: String
+    val addEventTitle: String
+    val addEventIntro: String
+    val addEventButton: String
+    val eventNote: String
+    val addEventHere: String
     fun tipInvolves(party: String): String
     fun tipComments(n: Int): String
     fun tipFiles(n: Int): String
@@ -417,6 +425,14 @@ object WeddingStringsEn : WeddingStrings {
     override val attachmentsHint = "Quotes, photos, PDFs — both families can see them."
     override val opening = "Opening…"
     override val openWith = "Open with…"
+    override val eventsOnThisDay = "Events on this day"
+    override val kindTodo = "To-do"
+    override val kindEvent = "Event"
+    override val addEventTitle = "Add an event"
+    override val addEventIntro = "A ceremony or gathering on a date — it shows on the calendar, not in the to-do list."
+    override val addEventButton = "Add event"
+    override val eventNote = "Event — an occasion on this date, nothing to tick off"
+    override val addEventHere = "+ Add an event"
     override fun tipInvolves(party: String) = "Involves $party"
     override fun tipComments(n: Int) = if (n == 1) "1 comment" else "$n comments"
     override fun tipFiles(n: Int) = if (n == 1) "1 attachment" else "$n attachments"
@@ -652,6 +668,14 @@ object WeddingStringsHi : WeddingStrings {
     override val attachmentsHint = "कोटेशन, फ़ोटो, PDF — दोनों परिवार देख सकते हैं।"
     override val opening = "खुल रहा है…"
     override val openWith = "दूसरे ऐप में खोलें"
+    override val eventsOnThisDay = "इस दिन के आयोजन"
+    override val kindTodo = "काम"
+    override val kindEvent = "आयोजन"
+    override val addEventTitle = "आयोजन जोड़ें"
+    override val addEventIntro = "किसी तारीख़ का समारोह या मिलन — यह कैलेंडर में दिखता है, कामों की सूची में नहीं।"
+    override val addEventButton = "आयोजन जोड़ें"
+    override val eventNote = "आयोजन — इस तारीख़ का अवसर, इसे पूरा नहीं करना"
+    override val addEventHere = "+ आयोजन जोड़ें"
     override fun tipInvolves(party: String) = "इसमें $party शामिल"
     override fun tipComments(n: Int) = "$n टिप्पणी"
     override fun tipFiles(n: Int) = "$n संलग्नक"
@@ -887,6 +911,14 @@ object WeddingStringsTa : WeddingStrings {
     override val attachmentsHint = "விலைப்புள்ளிகள், புகைப்படங்கள், PDF — இரு குடும்பங்களும் பார்க்கலாம்."
     override val opening = "திறக்கிறது…"
     override val openWith = "வேறு ஆப்பில் திறக்க"
+    override val eventsOnThisDay = "இந்த நாளின் நிகழ்வுகள்"
+    override val kindTodo = "பணி"
+    override val kindEvent = "நிகழ்வு"
+    override val addEventTitle = "நிகழ்வைச் சேர்"
+    override val addEventIntro = "ஒரு தேதியில் நடக்கும் விழா அல்லது கூடுகை — இது நாட்காட்டியில் தெரியும், பணிப் பட்டியலில் அல்ல."
+    override val addEventButton = "நிகழ்வைச் சேர்"
+    override val eventNote = "நிகழ்வு — இந்தத் தேதியின் நிகழ்ச்சி, முடித்துக் குறிக்க ஒன்றுமில்லை"
+    override val addEventHere = "+ நிகழ்வைச் சேர்"
     override fun tipInvolves(party: String) = "$party தொடர்புடையவர்"
     override fun tipComments(n: Int) = "$n கருத்து"
     override fun tipFiles(n: Int) = "$n இணைப்பு"

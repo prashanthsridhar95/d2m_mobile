@@ -62,6 +62,8 @@ data class WeddingTaskOut(
     val canChangeVisibility: Boolean = false,
     val commentCount: Int = 0,
     val attachmentCount: Int = 0,
+    /** "task" (to do, has a status) or "event" (a ceremony / gathering on a date; no status). */
+    val kind: String = "task",
 )
 
 @Serializable
@@ -87,6 +89,7 @@ data class WeddingTaskCreateIn(
     val visibility: String = "all",
     val dueDate: String? = null,
     val participants: List<String>? = null,
+    val kind: String = "task",
 )
 
 /** PUT /wedding/dates body that changes only the tradition (null = all Brahmin traditions). */

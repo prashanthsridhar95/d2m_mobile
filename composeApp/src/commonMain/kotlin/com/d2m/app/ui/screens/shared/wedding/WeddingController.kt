@@ -49,8 +49,9 @@ class WeddingController(
         data = d.copy(tasks = tasks, progress = recount(d.plan, tasks))
     }
 
-    private fun recount(plan: WeddingPlanOut, tasks: List<WeddingTaskOut>): WeddingProgressOut {
+    private fun recount(plan: WeddingPlanOut, all: List<WeddingTaskOut>): WeddingProgressOut {
         val t = today()
+        val tasks = all.filter { it.kind != "event" } // events are occasions, not work to finish
         return WeddingProgressOut(
             total = tasks.size,
             done = tasks.count { it.status == "done" },
