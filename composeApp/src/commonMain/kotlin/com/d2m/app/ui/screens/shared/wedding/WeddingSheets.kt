@@ -290,7 +290,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             }
             // Anyone who can see the task may reschedule it.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                DateField(s.due, task.dueDate, onChange = { c.setDue(task, it) })
+                DateField(if (task.kind == "event") s.happeningOn else s.due, task.dueDate, onChange = { c.setDue(task, it) })
                 Text(
                     (if (task.dueDate != null) anchorText(task, s) else s.setKeyDatesToSchedule),
                     style = MaterialTheme.typography.labelSmall, color = d2m.faint,
@@ -586,8 +586,8 @@ fun NewTaskSheet(
                     MetaText(s.anyOwnerCanMark)
                 }
 
-                FormSection(s.whenLabel) {
-                    DateField(s.dueDate, due, onChange = { due = it }, clearable = false)
+                FormSection(if (kind == "event") s.happeningOn else s.whenLabel) {
+                    DateField(if (kind == "event") s.happeningOn else s.dueDate, due, onChange = { due = it }, clearable = false)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(
                             s.chipToday to today.toString(),

@@ -183,6 +183,7 @@ interface WeddingStrings {
     val opening: String
     val openWith: String
     val eventsOnThisDay: String
+    val happeningOn: String
     val kindTodo: String
     val kindEvent: String
     val addEventTitle: String
@@ -426,6 +427,7 @@ object WeddingStringsEn : WeddingStrings {
     override val opening = "Opening…"
     override val openWith = "Open with…"
     override val eventsOnThisDay = "Events on this day"
+    override val happeningOn = "Happening on"
     override val kindTodo = "To-do"
     override val kindEvent = "Event"
     override val addEventTitle = "Add an event"
@@ -669,6 +671,7 @@ object WeddingStringsHi : WeddingStrings {
     override val opening = "खुल रहा है…"
     override val openWith = "दूसरे ऐप में खोलें"
     override val eventsOnThisDay = "इस दिन के आयोजन"
+    override val happeningOn = "आयोजन की तिथि"
     override val kindTodo = "काम"
     override val kindEvent = "आयोजन"
     override val addEventTitle = "आयोजन जोड़ें"
@@ -912,6 +915,7 @@ object WeddingStringsTa : WeddingStrings {
     override val opening = "திறக்கிறது…"
     override val openWith = "வேறு ஆப்பில் திறக்க"
     override val eventsOnThisDay = "இந்த நாளின் நிகழ்வுகள்"
+    override val happeningOn = "நிகழ்வு நடக்கும் தேதி"
     override val kindTodo = "பணி"
     override val kindEvent = "நிகழ்வு"
     override val addEventTitle = "நிகழ்வைச் சேர்"
