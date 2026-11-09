@@ -30,7 +30,7 @@ val ROLE_SHORT = mapOf("bride" to "B", "groom" to "G", "bride_parents" to "BP", 
 val BUCKET_KEYS = listOf("overdue", "week", "month", "later", "nodate", "done")
 val VISIBILITY_KEYS = listOf("all", "side", "private")
 val TRADITION_KEYS = listOf("", "tamil", "telugu", "kannada", "malayali", "north", "bengali", "marathi", "gujarati", "odia")
-val GROUP_KEYS = listOf("phase", "due", "owner")
+val GROUP_KEYS = listOf("phase", "due", "owner", "party")
 /** What a new to-do starts with (from a list group's + , a calendar day, or a board lane). */
 data class NewPreset(val phase: String = "planning", val due: String? = null, val participants: List<String>? = null)
 
@@ -58,7 +58,7 @@ fun WeddingStrings.bucket(k: String) = when (k) {
     "later" -> bucketLater; "nodate" -> bucketNoDate; else -> bucketDone
 }
 fun WeddingStrings.visibility(k: String) = when (k) { "all" -> visEveryone; "side" -> visMyFamily; else -> visOnlyMe }
-fun WeddingStrings.group(k: String) = when (k) { "phase" -> groupPhase; "due" -> groupDue; else -> groupOwner }
+fun WeddingStrings.group(k: String) = when (k) { "phase" -> groupPhase; "due" -> groupDue; "party" -> groupParty; else -> groupOwner }
 fun WeddingStrings.quick(k: String) = when (k) { "mine" -> quickMine; "overdue" -> quickOverdue; "week" -> quickWeek; else -> quickJoint }
 fun WeddingStrings.anchorName(a: String?) = when (a) { "engagement" -> anchorEngagement; "honeymoon" -> anchorHoneymoon; else -> anchorMarriage }
 
@@ -151,6 +151,9 @@ fun buildGroups(tasks: List<WeddingTaskOut>, phases: List<WeddingPhaseOut>, grou
         "due" -> BUCKET_KEYS.map { k -> TaskGroup(k, s.bucket(k), null, tasks.filter { bucketOf(it, today) == k }) }
         "owner" -> ROLES.map { r -> TaskGroup(r, label(r), null, tasks.filter { it.participants.size == 1 && it.participants[0] == r }) } +
             TaskGroup("shared", s.sharedDecisions, null, tasks.filter { it.participants.size > 1 })
+        "party" -> tasks.mapNotNull { it.externalParty }.distinct().sorted().map { p ->
+            TaskGroup(p, p.replaceFirstChar { c -> c.uppercase() }, null, tasks.filter { it.externalParty == p })
+        } + TaskGroup("none", s.noParty, null, tasks.filter { it.externalParty == null })
         else -> phases.map { p -> TaskGroup(p.key, p.label, p.key, tasks.filter { it.phase == p.key }) }
     }
     return defs.filter { it.rows.isNotEmpty() }.map { it.copy(rows = it.rows.sortedWith(byDue)) }

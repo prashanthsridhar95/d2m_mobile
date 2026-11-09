@@ -26,6 +26,8 @@ interface WeddingStrings {
     val groupPhase: String
     val groupDue: String
     val groupOwner: String
+    val groupParty: String
+    val noParty: String
     val newTaskButton: String
     val addInGroup: String
     fun moreNarrow(n: Int): String
@@ -256,6 +258,8 @@ object WeddingStringsEn : WeddingStrings {
     override val groupPhase = "Phase"
     override val groupDue = "Due date"
     override val groupOwner = "Person"
+    override val groupParty = "Vendor / expert"
+    override val noParty = "Just the families"
     override val newTaskButton = "+ New"
     override val addInGroup = "+ Add"
     override fun moreNarrow(n: Int) = "+$n more — narrow it with filters"
@@ -480,6 +484,8 @@ object WeddingStringsHi : WeddingStrings {
     override val groupPhase = "चरण"
     override val groupDue = "नियत तिथि"
     override val groupOwner = "व्यक्ति"
+    override val groupParty = "वेंडर / विशेषज्ञ"
+    override val noParty = "सिर्फ़ परिवार"
     override val newTaskButton = "+ नया"
     override val addInGroup = "+ जोड़ें"
     override fun moreNarrow(n: Int) = "+$n और — फ़िल्टर से सीमित करें"
@@ -704,6 +710,8 @@ object WeddingStringsTa : WeddingStrings {
     override val groupPhase = "கட்டம்"
     override val groupDue = "இறுதி தேதி"
     override val groupOwner = "நபர்"
+    override val groupParty = "விற்பனையாளர் / நிபுணர்"
+    override val noParty = "குடும்பங்கள் மட்டும்"
     override val newTaskButton = "+ புதிது"
     override val addInGroup = "+ சேர்"
     override fun moreNarrow(n: Int) = "+$n மேலும் — வடிகட்டிகளால் சுருக்கவும்"
