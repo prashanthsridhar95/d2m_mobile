@@ -182,6 +182,9 @@ interface WeddingStrings {
     val attachmentsHint: String
     val opening: String
     val openWith: String
+    fun tipInvolves(party: String): String
+    fun tipComments(n: Int): String
+    fun tipFiles(n: Int): String
     val homeEyebrow: String
     val homeSetDates: String
     fun progressOf(done: Int, total: Int): String
@@ -414,6 +417,9 @@ object WeddingStringsEn : WeddingStrings {
     override val attachmentsHint = "Quotes, photos, PDFs — both families can see them."
     override val opening = "Opening…"
     override val openWith = "Open with…"
+    override fun tipInvolves(party: String) = "Involves $party"
+    override fun tipComments(n: Int) = if (n == 1) "1 comment" else "$n comments"
+    override fun tipFiles(n: Int) = if (n == 1) "1 attachment" else "$n attachments"
     override val homeEyebrow = "Getting married soon"
     override val homeSetDates = "Set the key dates to start the countdown"
     override fun progressOf(done: Int, total: Int) = "$done of $total to-dos done"
@@ -646,6 +652,9 @@ object WeddingStringsHi : WeddingStrings {
     override val attachmentsHint = "कोटेशन, फ़ोटो, PDF — दोनों परिवार देख सकते हैं।"
     override val opening = "खुल रहा है…"
     override val openWith = "दूसरे ऐप में खोलें"
+    override fun tipInvolves(party: String) = "इसमें $party शामिल"
+    override fun tipComments(n: Int) = "$n टिप्पणी"
+    override fun tipFiles(n: Int) = "$n संलग्नक"
     override val homeEyebrow = "जल्द ही विवाह"
     override val homeSetDates = "उलटी गिनती शुरू करने के लिए मुख्य तिथियाँ तय करें"
     override fun progressOf(done: Int, total: Int) = "$total में से $done काम पूरे"
@@ -878,6 +887,9 @@ object WeddingStringsTa : WeddingStrings {
     override val attachmentsHint = "விலைப்புள்ளிகள், புகைப்படங்கள், PDF — இரு குடும்பங்களும் பார்க்கலாம்."
     override val opening = "திறக்கிறது…"
     override val openWith = "வேறு ஆப்பில் திறக்க"
+    override fun tipInvolves(party: String) = "$party தொடர்புடையவர்"
+    override fun tipComments(n: Int) = "$n கருத்து"
+    override fun tipFiles(n: Int) = "$n இணைப்பு"
     override val homeEyebrow = "விரைவில் திருமணம்"
     override val homeSetDates = "கவுண்டவுன் தொடங்க முக்கிய தேதிகளை அமைக்கவும்"
     override fun progressOf(done: Int, total: Int) = "$total இல் $done பணிகள் முடிந்தன"
