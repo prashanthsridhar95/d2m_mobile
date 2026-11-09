@@ -29,6 +29,8 @@ data class PrimaryDashboardOut(
     val topSuggestions: List<DashboardCandidateOut> = emptyList(),
     val threadStatus: String? = null,
     val unreadNotificationCount: Int,
+    /** True once a union is confirmed: Discover/Browse give way to the wedding checklist. */
+    val weddingMode: Boolean = false,
 )
 
 /**
@@ -51,4 +53,5 @@ data class SponsorDashboardOut(
     val pendingConsentRequestCount: Int,
     val unreadNotificationCount: Int,
     val suggestionsSentCount: Int,
+    val weddingMode: Boolean = false,
 )

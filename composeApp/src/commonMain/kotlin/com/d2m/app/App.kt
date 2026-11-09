@@ -64,6 +64,11 @@ import com.d2m.app.ui.components.StepUpConfirmDialogHost
 import com.d2m.app.ui.components.StepUpController
 import com.d2m.app.ui.components.WatermarkOverlay
 import com.d2m.app.ui.navigation.ChildTabs
+import com.d2m.app.ui.navigation.ChildWeddingTabs
+import com.d2m.app.ui.navigation.ParentWeddingTabs
+import com.d2m.app.ui.navigation.WeddingMode
+import com.d2m.app.ui.navigation.navigateToTab
+import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.ui.navigation.D2MShellBottomBar
 import com.d2m.app.ui.navigation.navigateToTab
 import com.d2m.app.ui.components.D2MSnackbarHost
@@ -295,9 +300,28 @@ fun App() {
         }
     }
 
+    // Union confirmed -> Discover/Browse are hidden (not removed) and the wedding checklist takes their tab.
+    val dashboardRepo: DashboardRepository = koinInject()
+    val weddingMode by WeddingMode.active.collectAsState()
+    LaunchedEffect(identity.role, identity.sponsorId, identity.primaryId, identity.childPrimaryId, currentRoute) {
+        val role = identity.role ?: run { WeddingMode.active.value = false; return@LaunchedEffect }
+        // Dashboards are cached for 30s in the repository, so route hops cost nothing; failures leave the flag as it was.
+        runCatching {
+            when (role) {
+                D2MRole.CHILD -> identity.primaryId?.let { dashboardRepo.getPrimaryDashboard(it).weddingMode }
+                D2MRole.PARENT -> identity.sponsorId?.let { dashboardRepo.getSponsorDashboard(it).weddingMode }
+            }
+        }.getOrNull()?.let { WeddingMode.active.value = it }
+    }
+    LaunchedEffect(weddingMode, currentRoute) {
+        if (weddingMode && (currentRoute == Routes.DISCOVERY || currentRoute == Routes.PARENT_BROWSE)) {
+            navController.navigateToTab(Routes.WEDDING_CHECKLIST)
+        }
+    }
+
     val tabs = when (identity.role) {
-        D2MRole.PARENT -> ParentTabs
-        D2MRole.CHILD -> ChildTabs
+        D2MRole.PARENT -> if (weddingMode) ParentWeddingTabs else ParentTabs
+        D2MRole.CHILD -> if (weddingMode) ChildWeddingTabs else ChildTabs
         null -> null
     }
     // "Botton nav bar is not required inside a person's chat" -- currentRoute

@@ -15,6 +15,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -276,6 +277,16 @@ class ApiClient(
     suspend inline fun <reified T> put(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
         withRateLimitRetry {
             unwrap(client.put(url(path)) {
+                applyAuthHeader()
+                contentType(ContentType.Application.Json)
+                extraHeaders.forEach { (k, v) -> header(k, v) }
+                if (body != null) setBody(body)
+            })
+        }
+
+    suspend inline fun <reified T> patch(path: String, body: Any? = null, extraHeaders: Map<String, String> = emptyMap()): T =
+        withRateLimitRetry {
+            unwrap(client.patch(url(path)) {
                 applyAuthHeader()
                 contentType(ContentType.Application.Json)
                 extraHeaders.forEach { (k, v) -> header(k, v) }

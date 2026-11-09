@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
@@ -107,16 +108,27 @@ enum class D2MTab(val label: String, val icon: ImageVector, val route: String) {
     // Messages is the parent-to-parent chat inbox (web has it as a top-level item); Sharing moved into Settings.
     ParentMessages("Messages", Icons.Filled.ChatBubble, Routes.PARENT_MESSAGES),
     ParentSettings("Settings", Icons.Filled.Settings, Routes.SETTINGS),
+    ParentChecklist("Checklist", Icons.Filled.Check, Routes.WEDDING_CHECKLIST),
 
     // Child tabs -- Settings intentionally omitted, see doc comment above.
     ChildHome("Home", Icons.Filled.Home, Routes.CHILD_HOME),
     ChildDiscover("Discover", Icons.Filled.Explore, Routes.DISCOVERY),
     ChildMatches("Matches", Icons.Filled.Favorite, Routes.MATCHES),
     ChildNotifications("Notifications", Icons.Filled.Notifications, Routes.NOTIFICATIONS),
+    ChildChecklist("Checklist", Icons.Filled.Check, Routes.WEDDING_CHECKLIST),
 }
 
 val ParentTabs = listOf(D2MTab.ParentDashboard, D2MTab.ParentSearch, D2MTab.ParentMessages, D2MTab.ParentSettings)
 val ChildTabs = listOf(D2MTab.ChildHome, D2MTab.ChildDiscover, D2MTab.ChildMatches, D2MTab.ChildNotifications)
+
+/** Once a union is confirmed, Browse (parent) / Discover (child) give way to the wedding checklist. */
+val ParentWeddingTabs = listOf(D2MTab.ParentDashboard, D2MTab.ParentChecklist, D2MTab.ParentMessages, D2MTab.ParentSettings)
+val ChildWeddingTabs = listOf(D2MTab.ChildHome, D2MTab.ChildChecklist, D2MTab.ChildMatches, D2MTab.ChildNotifications)
+
+/** Process-wide wedding-mode flag (same pattern as UnreadBadges): written by App.kt from the dashboard, read by the tab bar. */
+object WeddingMode {
+    val active = MutableStateFlow(false)
+}
 
 /** D2MTab.label is a fixed English key; this resolves the localized copy to actually show. */
 fun D2MTab.localizedLabel(common: CommonStrings): String = when (this) {
@@ -128,6 +140,7 @@ fun D2MTab.localizedLabel(common: CommonStrings): String = when (this) {
     D2MTab.ChildDiscover -> common.tabDiscover
     D2MTab.ChildMatches -> common.tabMatches
     D2MTab.ChildNotifications -> common.tabNotifications
+    D2MTab.ParentChecklist, D2MTab.ChildChecklist -> "Checklist"
 }
 
 /**

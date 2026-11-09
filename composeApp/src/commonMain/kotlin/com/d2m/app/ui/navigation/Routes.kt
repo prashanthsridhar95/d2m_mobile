@@ -29,6 +29,9 @@ object Routes {
     const val DISCOVERY = "child/discover"
     const val MATCHES = "child/matches"
 
+    /** Post-union wedding checklist -- replaces Discover/Browse once wedding_mode is on. */
+    const val WEDDING_CHECKLIST = "wedding"
+
     /** A matched thread's profile: Discover's layout, read-only (web: MatchedProfileScreen). */
     const val MATCHED_PROFILE = "child/matched/{candidateId}"
     fun matchedProfile(candidateId: String) = "child/matched/$candidateId"
