@@ -25,15 +25,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +77,7 @@ import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.Instant
 import kotlinx.datetime.plus
 import kotlinx.datetime.TimeZone
@@ -91,21 +89,74 @@ private const val MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 
 /* ------------------------------------------------------------------ date picking */
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DatePickDialog(initial: String?, onDismiss: () -> Unit, onPick: (String) -> Unit) {
-    val state = rememberDatePickerState(
-        initialSelectedDateMillis = initial?.toDate()?.atStartOfDayIn(TimeZone.UTC)?.toEpochMilliseconds(),
-    )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                state.selectedDateMillis?.let { onPick(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date.toString()) }
-            }) { Text(LocalWedding.current.s.ok) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(LocalWedding.current.s.cancel) } },
-    ) { DatePicker(state) }
+    val env = LocalWedding.current
+    val s = env.s
+    val p = LocalD2MStatusPalette.current
+    val today = env.today
+    val chosen = initial?.toDate()
+    val seed = chosen ?: today
+    var year by remember { mutableStateOf(seed.year) }
+    var month by remember { mutableStateOf(seed.month.ordinal + 1) }
+    val first = LocalDate(year, month, 1)
+    val startOffset = first.dayOfWeek.ordinal
+    val daysInMonth = first.plus(DatePeriod(months = 1)).let { daysBetween(first, it) }
+    val weeks = (startOffset + daysInMonth + 6) / 7
+    val gridStart = first.plus(DatePeriod(days = -startOffset))
+    LaunchedEffect(year, month) {
+        env.pm.ensure(listOf(gridStart.toString(), first.toString(), gridStart.plus(DatePeriod(days = weeks * 7 - 1)).toString()))
+    }
+    fun go(n: Int) { val d = first.plus(DatePeriod(months = n)); year = d.year; month = d.month.ordinal + 1 }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).border(1.dp, d2m.borderSoft, RoundedCornerShape(16.dp)).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                D2MButton("‹", { go(-1) }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
+                Text(monthTitle(year, month, s), style = MaterialTheme.typography.titleMedium, color = d2m.ink,
+                    modifier = Modifier.weight(1f), maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                D2MButton("›", { go(1) }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                s.weekdaysShort.forEach {
+                    Text(it.take(3), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = d2m.faint,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (w in 0 until weeks) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (dow in 0 until 7) {
+                            val date = gridStart.plus(DatePeriod(days = w * 7 + dow))
+                            val outside = date.month.ordinal + 1 != month
+                            val sel = date == chosen
+                            val isToday = date == today
+                            val ch = env.pm.get(date.toString())?.chandrashtamam?.isNotEmpty() == true
+                            val shape = RoundedCornerShape(10.dp)
+                            Column(
+                                Modifier.weight(1f).height(46.dp).clip(shape)
+                                    .background(when { sel -> d2m.accent; ch -> p.danger.bg; else -> MaterialTheme.colorScheme.surface })
+                                    .border(if (isToday && !sel) BorderStroke(2.dp, d2m.accent) else BorderStroke(1.dp, if (sel) d2m.accent else d2m.borderSoft), shape)
+                                    .clickable { onPick(date.toString()) },
+                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                            ) {
+                                Text(date.dayOfMonth.toString(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                    color = when { sel -> d2m.accentOn; outside -> d2m.faint; else -> d2m.textPrimary })
+                                if (!sel) PmBadges(date.toString())
+                            }
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                LinkText(s.calToday, onClick = { onPick(today.toString()) })
+                LinkText(s.cancel, onClick = onDismiss)
+            }
+        }
+    }
 }
 
 /** "Tap to set" date button + the day's panchangam note underneath. */
@@ -222,10 +273,9 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LabelText(s.assigned)
                 task.participants.forEach { r ->
-                    val signed = r in task.confirmedBy
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        PersonPill(r, size = 28.dp, signed = signed)
-                        Text((if (signed) s.signedOff else s.pending) + if (r == task.createdByRole) s.creatorSuffix else "", style = MaterialTheme.typography.labelMedium, color = if (signed) LocalD2MStatusPalette.current.success.fg else d2m.faint)
+                        PersonPill(r, size = 28.dp)
+                        if (r == task.createdByRole) Text(s.creatorSuffix.trimStart(' ', '·'), style = MaterialTheme.typography.labelMedium, color = d2m.faint)
                     }
                 }
             }
