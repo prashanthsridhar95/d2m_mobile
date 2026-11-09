@@ -1,294 +1,246 @@
 package com.d2m.app.ui.screens.shared
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
-import com.d2m.app.data.model.WeddingDatesIn
-import com.d2m.app.data.model.WeddingOut
-import com.d2m.app.data.model.WeddingTaskCreateIn
-import com.d2m.app.data.model.WeddingTaskOut
-import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.D2MRole
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.WeddingRepository
-import com.d2m.app.ui.components.D2MBadge
-import com.d2m.app.ui.components.D2MBadgeTone
 import com.d2m.app.ui.components.D2MButton
 import com.d2m.app.ui.components.D2MButtonSize
 import com.d2m.app.ui.components.D2MButtonVariant
-import com.d2m.app.ui.components.D2MCard
-import com.d2m.app.ui.components.D2MCheckboxRow
 import com.d2m.app.ui.components.D2MEmptyState
 import com.d2m.app.ui.components.D2MErrorBanner
-import com.d2m.app.ui.components.D2MSelectField
-import com.d2m.app.ui.components.D2MTextField
-import com.d2m.app.ui.components.PageTitle
+import com.d2m.app.ui.components.D2MSegmented
+import com.d2m.app.ui.components.MetaText
+import com.d2m.app.ui.screens.shared.wedding.*
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MTheme
+import com.d2m.app.ui.theme.LocalD2MStatusPalette
 import com.d2m.app.ui.theme.d2m
-import com.d2m.app.ui.theme.mutedText
-import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-private val ROLE_LABEL = mapOf(
-    "bride" to "Bride", "groom" to "Groom",
-    "bride_parents" to "Bride's parents", "groom_parents" to "Groom's parents",
-)
-private val SCOPE_LABEL = mapOf(
-    "individual" to "Individual", "couple" to "Bride & groom", "parents" to "Both parents",
-    "family" to "Within family", "group" to "All four", "mixed" to "Shared",
-)
-private val VISIBILITY_LABEL = mapOf("all" to "Everyone", "side" to "My side only", "private" to "Only me")
-private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
-
-/** Mirrors screens/shared/WeddingChecklistScreen.jsx -- post-union checklist that replaces Discover/Browse. */
+/**
+ * Post-union wedding checklist (replaces Discover/Browse once wedding_mode is on) -- mirrors d2m_web's
+ * WeddingChecklistScreen: List / Board / Calendar, filters in a bottom sheet, a task sheet with comments and attachments,
+ * names and "Me" instead of role labels, and panchangam markers (muhoortham, Purnima, Amavasya, chandrashtamam) on dates.
+ */
 @Composable
 fun WeddingChecklistScreen() {
     val identityStore: IdentityStore = koinInject()
-    val repo: WeddingRepository = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
     val identity by identityStore.identity.collectAsState()
-    val scope = rememberCoroutineScope()
-
-    var data by remember { mutableStateOf<WeddingOut?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var retryTick by remember { mutableStateOf(0) }
-    var busyTaskId by remember { mutableStateOf<String?>(null) }
-    var mineOnly by remember { mutableStateOf(false) }
-    var openOnly by remember { mutableStateOf(false) }
-    val collapsed = remember { mutableStateOf(setOf<String>()) }
-
-    var engagement by remember { mutableStateOf("") }
-    var marriage by remember { mutableStateOf("") }
-    var honeymoon by remember { mutableStateOf("") }
-    var savingDates by remember { mutableStateOf(false) }
-
-    var newTitle by remember { mutableStateOf("") }
-    var newVisibility by remember { mutableStateOf("all") }
-    var adding by remember { mutableStateOf(false) }
-
     val primaryId = if (identity.role == D2MRole.CHILD) identity.primaryId else identity.childPrimaryId
+    var unresolved by remember { mutableStateOf(false) }
 
-    fun apply(out: WeddingOut) {
-        data = out
-        engagement = out.plan.engagementDate.orEmpty()
-        marriage = out.plan.marriageDate.orEmpty()
-        honeymoon = out.plan.honeymoonDate.orEmpty()
-    }
-
-    LaunchedEffect(identity.role, identity.sponsorId, primaryId, retryTick) {
-        var pid = primaryId
-        if (pid == null && identity.role == D2MRole.PARENT) {
+    // A parent's linked child id may not be cached yet -- resolve it the same way the other shared screens do.
+    LaunchedEffect(identity.role, identity.sponsorId, primaryId) {
+        if (identity.role == D2MRole.PARENT && primaryId == null) {
             val sponsorId = identity.sponsorId ?: return@LaunchedEffect
             runCatching { dashboardRepo.getSponsorChild(sponsorId) }
-                .onSuccess { identityStore.updateChildPrimaryId(it.primaryId); pid = it.primaryId }
-        }
-        if (pid == null) { loading = false; return@LaunchedEffect }
-        loading = true
-        error = null
-        try {
-            apply(repo.get(pid!!))
-        } catch (e: Exception) {
-            error = friendlyError(e, "Couldn't load the wedding checklist.")
-        } finally {
-            loading = false
-        }
-    }
-
-    fun mutate(taskId: String? = null, block: suspend (String) -> Unit) {
-        val pid = primaryId ?: return
-        scope.launch {
-            busyTaskId = taskId
-            try {
-                block(pid)
-                apply(repo.get(pid))
-                error = null
-            } catch (e: Exception) {
-                error = friendlyError(e, "That didn't work. Please try again.")
-            } finally {
-                busyTaskId = null
-            }
+                .onSuccess { identityStore.updateChildPrimaryId(it.primaryId) }
+                .onFailure { unresolved = true }
         }
     }
 
     val flow = if (identity.role == D2MRole.CHILD) D2MFlow.CHILD else D2MFlow.PARENT
     D2MTheme(flow = flow) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item(key = "header") {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PageTitle("Wedding checklist")
-                    Text(
-                        "Everything to do, decide and confirm together for the big day.",
-                        style = MaterialTheme.typography.bodyMedium, color = mutedText(),
-                    )
-                }
-            }
-
-            val d = data
-            if (error != null) item(key = "error") {
-                D2MErrorBanner(message = error!!, onRetry = { retryTick++ }, inline = d != null)
-            }
-            if (loading && d == null) item(key = "loading") { Text("Loading…", color = mutedText()) }
-            if (d == null) return@LazyColumn
-
-            item(key = "dates") {
-                D2MCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Key dates", style = MaterialTheme.typography.titleMedium, color = d2m.ink)
-                        Text(
-                            "Due dates for every task follow these. Use YYYY-MM-DD.",
-                            style = MaterialTheme.typography.bodySmall, color = mutedText(),
-                        )
-                        D2MTextField("Engagement", engagement, { engagement = it }, placeholder = "2027-03-01")
-                        D2MTextField("Marriage", marriage, { marriage = it }, placeholder = "2027-09-12")
-                        D2MTextField("Honeymoon", honeymoon, { honeymoon = it }, placeholder = "2027-09-20")
-                        val valid = listOf(engagement, marriage, honeymoon).all { it.isBlank() || ISO_DATE.matches(it) }
-                        D2MButton(
-                            text = if (savingDates) "Saving…" else "Save dates",
-                            enabled = valid && !savingDates,
-                            onClick = {
-                                savingDates = true
-                                mutate {
-                                    repo.setDates(it, WeddingDatesIn(
-                                        engagementDate = engagement.ifBlank { null },
-                                        marriageDate = marriage.ifBlank { null },
-                                        honeymoonDate = honeymoon.ifBlank { null },
-                                    ))
-                                }
-                                savingDates = false
-                            },
-                        )
-                    }
-                }
-            }
-
-            item(key = "progress") {
-                val p = d.progress
-                D2MCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("${p.done} of ${p.total} done", style = MaterialTheme.typography.titleMedium, color = d2m.ink)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            D2MBadge("${p.myOpen} for you", D2MBadgeTone.INFO)
-                            if (p.overdue > 0) D2MBadge("${p.overdue} overdue", D2MBadgeTone.DANGER)
-                            if (p.waitingOnOthers > 0) D2MBadge("${p.waitingOnOthers} waiting on others", D2MBadgeTone.WARNING)
-                        }
-                        D2MCheckboxRow("Only tasks I'm part of", mineOnly, { mineOnly = it })
-                        D2MCheckboxRow("Hide completed", openOnly, { openOnly = it })
-                    }
-                }
-            }
-
-            item(key = "add") {
-                D2MCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Add your own task", style = MaterialTheme.typography.titleMedium, color = d2m.ink)
-                        D2MTextField("Task", newTitle, { newTitle = it })
-                        D2MSelectField(
-                            label = "Visible to", value = newVisibility,
-                            options = VISIBILITY_LABEL.keys.toList(), onValueChange = { newVisibility = it },
-                            optionLabel = { VISIBILITY_LABEL[it] ?: it },
-                        )
-                        D2MButton(
-                            text = if (adding) "Adding…" else "Add task",
-                            enabled = newTitle.isNotBlank() && !adding,
-                            onClick = {
-                                adding = true
-                                val title = newTitle.trim()
-                                mutate { repo.createTask(it, WeddingTaskCreateIn(title = title, visibility = newVisibility)) }
-                                newTitle = ""
-                                adding = false
-                            },
-                        )
-                    }
-                }
-            }
-
-            val visible = d.tasks.filter { (!mineOnly || it.iAmParticipant) && (!openOnly || it.status != "done") }
-            if (visible.isEmpty()) item(key = "empty") {
-                D2MEmptyState(title = "Nothing to show", subtitle = "Try clearing the filters.")
-            }
-            d.phases.forEach { phase ->
-                val rows = visible.filter { it.phase == phase.key }
-                if (rows.isEmpty()) return@forEach
-                val isCollapsed = phase.key in collapsed.value
-                item(key = "phase-${phase.key}") {
-                    D2MButton(
-                        text = "${phase.label} (${rows.count { it.status == "done" }}/${rows.size}) ${if (isCollapsed) "▸" else "▾"}",
-                        variant = D2MButtonVariant.GHOST, size = D2MButtonSize.SM,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            collapsed.value = if (isCollapsed) collapsed.value - phase.key else collapsed.value + phase.key
-                        },
-                    )
-                }
-                if (!isCollapsed) rows.forEach { task ->
-                    item(key = "task-${task.id}") {
-                        TaskCard(
-                            task = task,
-                            busy = busyTaskId == task.id,
-                            onToggle = { mutate(task.id) { pid -> repo.setConfirmed(pid, task.id, !task.iConfirmed) } },
-                            onDelete = { mutate(task.id) { pid -> repo.deleteTask(pid, task.id) } },
-                        )
-                    }
-                }
-            }
+        when {
+            primaryId != null -> WeddingWorkspace(primaryId)
+            unresolved -> Box(Modifier.fillMaxSize().padding(24.dp)) { D2MEmptyState("Not available yet", "The checklist opens once your child's profile is linked.") }
+            else -> Box(Modifier.fillMaxSize().padding(24.dp)) { MetaText("Loading…") }
         }
     }
 }
 
 @Composable
-private fun TaskCard(task: WeddingTaskOut, busy: Boolean, onToggle: () -> Unit, onDelete: () -> Unit) {
-    D2MCard {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (task.iAmParticipant) {
-                D2MCheckboxRow(label = task.title, checked = task.iConfirmed, onCheckedChange = { onToggle() }, enabled = !busy)
-            } else {
-                Text(task.title, style = MaterialTheme.typography.bodyMedium, color = d2m.textPrimary)
+private fun WeddingWorkspace(primaryId: String) {
+    val repo: WeddingRepository = koinInject()
+    val scope = rememberCoroutineScope()
+    val c = remember(primaryId) { WeddingController(repo, primaryId, scope) }
+    LaunchedEffect(c) { c.load() }
+
+    var view by rememberSaveable { mutableStateOf("list") }
+    var listGroup by rememberSaveable { mutableStateOf("phase") }
+    var boardGroup by rememberSaveable { mutableStateOf("due") }
+    var filters by remember { mutableStateOf(Filters()) }
+    var selectedId by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf<Pair<String, String?>?>(null) } // (phase, due)
+    var dayOpen by remember { mutableStateOf<String?>(null) }
+    var filtersOpen by remember { mutableStateOf(false) }
+    var datesOpen by remember { mutableStateOf(false) }
+
+    val d = c.data
+    if (d == null) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+            c.error?.let { D2MErrorBanner(message = it, onRetry = { c.load() }) } ?: MetaText(if (c.loading) "Loading…" else "")
+        }
+        return
+    }
+
+    val env = remember(d.plan.myRole, d.plan.names, c.pm) { WeddingEnv(labeler(d.plan), c.pm, today()) }
+    CompositionLocalProvider(LocalWedding provides env) {
+        val filtered = d.tasks.filter { passes(it, filters, env.today) }
+        val groupBy = if (view == "board") boardGroup else listGroup
+        val pct = if (d.progress.total == 0) 0 else d.progress.done * 100 / d.progress.total
+        val toWedding = d.plan.marriageDate?.let { daysBetween(env.today, it.toDate()) }
+        val selected = selectedId?.let { id -> d.tasks.firstOrNull { it.id == id } }
+
+        Column(Modifier.fillMaxSize()) {
+            // ---- controls ----
+            Column(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    D2MSegmented(
+                        listOf("List", "Board", "Calendar"), listOf("list", "board", "calendar").indexOf(view),
+                        { view = listOf("list", "board", "calendar")[it] }, Modifier.weight(1f),
+                    )
+                    D2MButton(
+                        "Filters" + if (filters.activeCount > 0) " (${filters.activeCount})" else "", { filtersOpen = true },
+                        variant = if (filters.activeCount > 0) D2MButtonVariant.ACCENT_OUTLINE else D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM,
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SearchBox(filters.q, { filters = filters.copy(q = it) }, Modifier.weight(1f))
+                    if (view != "calendar") GroupMenu(groupBy) { if (view == "board") boardGroup = it else listGroup = it }
+                    D2MButton("+ New", { selectedId = null; creating = "planning" to null }, size = D2MButtonSize.SM)
+                }
+                // Summary: progress, countdown, and tappable quick filters.
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("$pct% done", style = MaterialTheme.typography.titleSmall, color = d2m.ink)
+                        Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(99.dp)).background(d2m.surfaceSunken)) {
+                            Box(Modifier.fillMaxWidth(pct / 100f).height(6.dp).background(d2m.accent))
+                        }
+                        Text(
+                            when { toWedding == null -> "Set key dates"; toWedding >= 0 -> "$toWedding days to the wedding"; else -> "${-toWedding} days since the wedding" },
+                            style = MaterialTheme.typography.labelMedium, color = d2m.meta,
+                            modifier = Modifier.clickable { datesOpen = true },
+                        )
+                    }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuickChip("Overdue ${d.progress.overdue}", "overdue" in filters.quick, danger = d.progress.overdue > 0) { filters = filters.toggleQuick("overdue") }
+                        QuickChip("This week ${d.tasks.count { bucketOf(it, env.today) == "week" }}", "week" in filters.quick) { filters = filters.toggleQuick("week") }
+                        QuickChip("Mine ${d.progress.myOpen}", "mine" in filters.quick) { filters = filters.toggleQuick("mine") }
+                        QuickChip("Key dates", false) { datesOpen = true }
+                    }
+                    Text("${filtered.size} of ${d.tasks.size} tasks", style = MaterialTheme.typography.labelSmall, color = d2m.faint)
+                }
+                c.error?.let { D2MErrorBanner(message = it, onRetry = { c.load() }, inline = true) }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                D2MBadge(SCOPE_LABEL[task.scope] ?: task.scope)
-                if (task.status == "done") D2MBadge("Done", D2MBadgeTone.SUCCESS)
-                else if (task.overdue) D2MBadge("Overdue", D2MBadgeTone.DANGER)
-                task.dueDate?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = mutedText()) }
-            }
-            if (task.participants.size > 1 || !task.iAmParticipant) {
-                Text(
-                    "With: " + task.participants.joinToString { ROLE_LABEL[it] ?: it } +
-                        if (task.status != "done" && task.waitingOn.isNotEmpty() && task.confirmedBy.isNotEmpty())
-                            " · waiting on " + task.waitingOn.joinToString { ROLE_LABEL[it] ?: it } else "",
-                    style = MaterialTheme.typography.bodySmall, color = mutedText(),
-                )
-            }
-            if (!task.notes.isNullOrBlank()) {
-                Text(task.notes, style = MaterialTheme.typography.bodySmall, color = mutedText())
-            }
-            if (task.canDelete) {
-                D2MButton("Remove", onClick = onDelete, variant = D2MButtonVariant.GHOST, size = D2MButtonSize.SM, enabled = !busy)
+
+            // ---- content ----
+            Box(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
+                when {
+                    filtered.isEmpty() && view != "calendar" ->
+                        D2MEmptyState("No tasks match", "Try different filters.", action = { D2MButton("Clear filters", { filters = Filters() }, variant = D2MButtonVariant.OUTLINE) })
+                    view == "list" -> WeddingListView(
+                        buildGroups(filtered, d.phases, groupBy, env.label, env.today), c.busy,
+                        onOpen = { creating = null; selectedId = it }, onToggle = c::toggle,
+                        onAddInGroup = { selectedId = null; creating = it to null },
+                    )
+                    view == "board" -> WeddingBoardView(
+                        buildGroups(filtered, d.phases, groupBy, env.label, env.today), c.busy,
+                        onOpen = { creating = null; selectedId = it }, onToggle = c::toggle,
+                    )
+                    else -> WeddingCalendarView(filtered, d.plan, dayOpen, onOpenDay = { selectedId = null; creating = null; dayOpen = it })
+                }
             }
         }
+
+        // ---- sheets (one at a time; closing a task returns to its day) ----
+        val dayTasks = dayOpen?.let { day -> filtered.filter { it.dueDate == day } }.orEmpty()
+        when {
+            creating != null -> NewTaskSheet(
+                d.phases, d.plan.myRole, creating!!.first, creating!!.second, c.busy,
+                onCreate = { body -> c.create(body) { id -> creating = null; selectedId = id } },
+                onDismiss = { creating = null },
+            )
+            selected != null -> TaskSheet(c, selected, d.phases, onDismiss = { selectedId = null })
+            dayOpen != null -> DaySheet(
+                dayOpen!!, dayTasks,
+                listOf(d.plan.engagementDate to "Engagement", d.plan.marriageDate to "Marriage", d.plan.honeymoonDate to "Honeymoon").firstOrNull { it.first == dayOpen }?.second,
+                c.busy, onOpen = { selectedId = it }, onToggle = c::toggle,
+                onAdd = { creating = "planning" to it }, onDismiss = { dayOpen = null },
+            )
+        }
+        if (filtersOpen) WeddingFilterSheet(filters, { filters = it }, d.phases, d.tasks, filtered.size, onDismiss = { filtersOpen = false })
+        if (datesOpen) KeyDatesDialog(
+            d.plan.engagementDate, d.plan.marriageDate, d.plan.honeymoonDate, d.plan.tradition, c.busy,
+            onSave = { e, m, h, t -> c.saveDates(e, m, h, t) { datesOpen = false } }, onDismiss = { datesOpen = false },
+        )
     }
+}
+
+private fun Filters.toggleQuick(k: String) = copy(quick = if (k in quick) quick - k else quick + k)
+
+@Composable
+private fun SearchBox(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.border(BorderStroke(1.dp, d2m.borderStrong), RoundedCornerShape(4.dp)).background(d2m.field, RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("⌕", color = d2m.faint)
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text("Search tasks…", style = MaterialTheme.typography.bodyMedium, color = d2m.faint)
+            BasicTextField(value, onChange, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium.copy(color = d2m.textPrimary), cursorBrush = SolidColor(d2m.accent), modifier = Modifier.fillMaxWidth())
+        }
+        if (value.isNotEmpty()) Text("✕", color = d2m.meta, modifier = Modifier.clickable { onChange("") })
+    }
+}
+
+@Composable
+private fun GroupMenu(current: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        D2MButton("Group: ${GROUP_OPTIONS.first { it.first == current }.second} ▾", { open = true }, variant = D2MButtonVariant.OUTLINE, size = D2MButtonSize.SM)
+        DropdownMenu(open, { open = false }) {
+            GROUP_OPTIONS.forEach { (k, l) -> DropdownMenuItem(text = { Text(l) }, onClick = { open = false; onPick(k) }) }
+        }
+    }
+}
+
+@Composable
+private fun QuickChip(text: String, selected: Boolean, danger: Boolean = false, onClick: () -> Unit) {
+    val pal = LocalD2MStatusPalette.current
+    val fg = when { selected -> d2m.accent; danger -> pal.danger.fg; else -> d2m.textPrimary }
+    Text(
+        text, style = MaterialTheme.typography.labelLarge, color = fg,
+        modifier = Modifier.clip(RoundedCornerShape(99.dp))
+            .background(if (selected) d2m.accentSoft else MaterialTheme.colorScheme.surface)
+            .border(BorderStroke(1.dp, if (selected) d2m.accent else d2m.border), RoundedCornerShape(99.dp))
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
