@@ -303,7 +303,7 @@ fun App() {
     // Union confirmed -> Discover/Browse are hidden (not removed) and the wedding checklist takes their tab.
     val dashboardRepo: DashboardRepository = koinInject()
     val weddingMode by WeddingMode.active.collectAsState()
-    val settings: com.russhwolf.settings.Settings = koinInject()
+    val settings = remember { com.d2m.app.data.session.createSettings() }
     LaunchedEffect(identity.role, identity.sponsorId, identity.primaryId, identity.childPrimaryId, currentRoute) {
         val role = identity.role ?: run { WeddingMode.active.value = false; return@LaunchedEffect }
         // Last known answer first, so the home and tabs open in the right mode (no flash of the match-finding layout).
