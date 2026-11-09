@@ -272,10 +272,13 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LabelText(s.assigned)
-                task.participants.forEach { r ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        PersonPill(r, size = 28.dp)
-                        if (r == task.createdByRole) Text(s.creatorSuffix.trimStart(' ', '·'), style = MaterialTheme.typography.labelMedium, color = d2m.faint)
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    task.participants.forEach { r ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            PersonPill(r, size = 28.dp)
+                            if (r == task.createdByRole) Text(s.creatorSuffix.trimStart(' ', '·'), style = MaterialTheme.typography.labelMedium, color = d2m.faint)
+                        }
                     }
                 }
             }
