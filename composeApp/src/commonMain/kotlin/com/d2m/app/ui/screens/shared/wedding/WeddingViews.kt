@@ -200,7 +200,9 @@ fun WeddingCalendarView(
     val gridStart = first.plus(DatePeriod(days = -startOffset))
     val byDay = remember(tasks) { tasks.filter { it.dueDate != null }.groupBy { it.dueDate!! } }
     val s = env.s
-    val milestones = mapOf(plan.engagementDate to s.engagementShort, plan.marriageDate to s.weddingShort, plan.honeymoonDate to s.honeymoonShort)
+    // A Brahmin wedding runs about two and a half days: the day before and after the muhurtham day are the Marriage too.
+    val marriageBlock = plan.marriageDate?.toDate()?.let { m -> listOf(m.plus(DatePeriod(days = -1)).toString() to s.weddingShort, m.plus(DatePeriod(days = 1)).toString() to s.weddingShort) }.orEmpty().toMap()
+    val milestones: Map<String?, String> = marriageBlock + mapOf(plan.engagementDate to s.engagementShort, plan.marriageDate to s.weddingShort, plan.honeymoonDate to s.honeymoonShort)
     val inMonth = tasks.count { it.dueDate?.startsWith("${year}-${month.toString().padStart(2, '0')}") == true }
     val undated = tasks.count { it.dueDate == null }
 
