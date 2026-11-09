@@ -273,7 +273,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
 
             HorizontalDivider(color = d2m.borderSoft)
             if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (task.kind != "event") Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LabelText(s.assigned)
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -577,7 +577,7 @@ fun NewTaskSheet(
                 }
                 D2MTextField(s.whatNeedsDoing, title, { if (it.length <= 200) title = it })
 
-                FormSection(s.assignTo, hint = s.ownersHint) {
+                if (kind != "event") FormSection(s.assignTo, hint = s.ownersHint) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         ROLES.forEach { r ->
                             PersonPill(r, size = 28.dp, selected = r in participants, onClick = { participants = if (r in participants) participants - r else participants + r })
