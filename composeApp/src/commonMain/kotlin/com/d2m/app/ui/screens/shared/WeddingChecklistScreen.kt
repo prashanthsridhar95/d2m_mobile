@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.plus
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -119,6 +121,9 @@ private fun WeddingWorkspace(primaryId: String) {
         return
     }
 
+    LaunchedEffect(d.plan.marriageDate) {
+        c.pm.quiet = d.plan.marriageDate?.toDate()?.let { m -> setOf(m.plus(DatePeriod(days = -1)).toString(), m.toString(), m.plus(DatePeriod(days = 1)).toString()) }.orEmpty()
+    }
     val env = remember(d.plan.myRole, d.plan.names, d.plan.photos, c.pm, s) { WeddingEnv(labeler(d.plan, s), c.pm, today(), s, whoFor(d.plan, s) { c.repo.mediaUrl(it) }) }
     CompositionLocalProvider(LocalWedding provides env) {
       BoxWithConstraints(Modifier.fillMaxSize()) {

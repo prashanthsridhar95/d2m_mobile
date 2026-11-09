@@ -207,9 +207,15 @@ class PanchangamStore(
     var available by mutableStateOf(true)
         private set
 
+    /** The wedding itself (muhurtham day and the day either side) is a given: no muhoortham / Amavasya / Purnima / chandrashtamam markers there. */
+    var quiet by mutableStateOf<Set<String>>(emptySet())
+
+    fun isQuiet(date: String?): Boolean = date != null && date in quiet
+
     fun get(date: String?): WeddingPanchangamDay? {
         @Suppress("UNUSED_VARIABLE") val subscribe = version
-        return if (date == null) null else days[date]
+        val d = if (date == null) null else days[date]
+        return if (d != null && date in quiet) d.copy(isAmavasya = false, isPurnima = false, isMuhoortham = false, chandrashtamam = emptyList()) else d
     }
 
     fun ensure(dates: Collection<String?>) {

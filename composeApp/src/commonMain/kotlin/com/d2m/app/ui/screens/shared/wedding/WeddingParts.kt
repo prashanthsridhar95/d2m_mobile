@@ -179,7 +179,7 @@ fun PmNote(date: String?, modifier: Modifier = Modifier) {
 @Composable
 fun PmCard(date: String?, modifier: Modifier = Modifier) {
     val env = LocalWedding.current
-    if (date == null || !env.pm.available) return
+    if (date == null || !env.pm.available || env.pm.isQuiet(date)) return
     val s = env.s
     val d = env.pm.get(date)
     val p = LocalD2MStatusPalette.current
