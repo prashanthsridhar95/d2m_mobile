@@ -74,10 +74,10 @@ fun TaskRow(task: WeddingTaskOut, busy: Boolean, onOpen: () -> Unit, onToggle: (
                 textDecoration = if (task.status == "done") TextDecoration.LineThrough else null,
                 maxLines = 3, overflow = TextOverflow.Ellipsis,
             )
+            TaskTags(task)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                 TypeTag(task)
                 Avatars(task)
-                Counts(task)
                 DueChip(task)
             }
         }
@@ -157,8 +157,9 @@ fun WeddingBoardView(
                                     textDecoration = if (t.status == "done") TextDecoration.LineThrough else null,
                                 )
                             }
+                            TaskTags(t)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                                TypeTag(t); Avatars(t, named = false); Counts(t); DueChip(t)
+                                TypeTag(t); Avatars(t, named = false); DueChip(t)
                             }
                         }
                     }

@@ -109,6 +109,9 @@ interface WeddingStrings {
     fun assignedOnly(names: String): String
     fun signedOffBy(names: String): String
     fun withParty(party: String): String
+    val consult: String
+    fun commentsPill(n: Int): String
+    fun filesPill(n: Int): String
     val assigned: String
     val creatorSuffix: String
     val signedOff: String
@@ -285,6 +288,9 @@ object WeddingStringsEn : WeddingStrings {
     override fun assignedOnly(names: String) = "Assigned to $names — only they can mark it done"
     override fun signedOffBy(names: String) = "Signed off by $names"
     override fun withParty(party: String) = "with $party"
+    override val consult = "Consult"
+    override fun commentsPill(n: Int) = if (n == 1) "1 comment" else "$n comments"
+    override fun filesPill(n: Int) = if (n == 1) "1 file" else "$n files"
     override val assigned = "Assigned"
     override val creatorSuffix = " · creator"
     override val signedOff = "signed off"
@@ -461,6 +467,9 @@ object WeddingStringsHi : WeddingStrings {
     override fun assignedOnly(names: String) = "$names को सौंपा गया — केवल वही इसे पूर्ण कर सकते हैं"
     override fun signedOffBy(names: String) = "$names ने पूर्ण किया"
     override fun withParty(party: String) = "$party के साथ"
+    override val consult = "परामर्श"
+    override fun commentsPill(n: Int) = "$n टिप्पणी"
+    override fun filesPill(n: Int) = "$n फ़ाइल"
     override val assigned = "सौंपा गया"
     override val creatorSuffix = " · निर्माता"
     override val signedOff = "पूर्ण किया"
@@ -637,6 +646,9 @@ object WeddingStringsTa : WeddingStrings {
     override fun assignedOnly(names: String) = "$names க்கு ஒதுக்கப்பட்டது — அவர்கள் மட்டுமே முடிந்ததாகக் குறிக்கலாம்"
     override fun signedOffBy(names: String) = "$names முடித்தார்"
     override fun withParty(party: String) = "$party உடன்"
+    override val consult = "ஆலோசனை"
+    override fun commentsPill(n: Int) = "$n கருத்து"
+    override fun filesPill(n: Int) = "$n கோப்பு"
     override val assigned = "ஒதுக்கப்பட்டவர்"
     override val creatorSuffix = " · உருவாக்கியவர்"
     override val signedOff = "முடித்தார்"

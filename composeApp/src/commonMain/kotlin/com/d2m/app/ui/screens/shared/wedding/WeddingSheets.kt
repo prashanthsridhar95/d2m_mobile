@@ -214,7 +214,7 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
             HorizontalDivider(color = d2m.borderSoft)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TypeTag(task)
-                task.externalParty?.let { D2MBadge(s.withParty(it), D2MBadgeTone.INFO) }
+                task.externalParty?.let { ConsultChip(it) }
             }
             if (task.traditions.isNotEmpty()) MetaText(s.tradition + ": " + task.traditions.joinToString(" / ") { s.traditionNames[it] ?: it })
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

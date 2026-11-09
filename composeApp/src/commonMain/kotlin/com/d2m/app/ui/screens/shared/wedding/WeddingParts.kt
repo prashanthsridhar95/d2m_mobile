@@ -112,14 +112,41 @@ fun TypeTag(task: WeddingTaskOut) {
     D2MBadge(LocalWedding.current.s.scope(task.scope), tone)
 }
 
+private fun String.capitalised() = replaceFirstChar { it.uppercase() }
+
 @Composable
-fun Counts(task: WeddingTaskOut) {
-    if (task.commentCount == 0 && task.attachmentCount == 0) return
-    val parts = buildList {
-        if (task.commentCount > 0) add("💬 ${task.commentCount}")
-        if (task.attachmentCount > 0) add("📎 ${task.attachmentCount}")
+private fun TagPill(text: String, bg: Color, fg: Color, border: Color? = null, lead: String? = null) {
+    Row(
+        Modifier.clip(RoundedCornerShape(99.dp)).background(bg).then(if (border != null) Modifier.border(1.dp, border, RoundedCornerShape(99.dp)) else Modifier)
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (lead != null) {
+            Text(lead, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = fg.copy(alpha = 0.75f))
+            Box(Modifier.size(width = 1.dp, height = 10.dp).background(fg.copy(alpha = 0.3f)))
+        }
+        Text(text, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1)
     }
-    Text(parts.joinToString("  "), style = MaterialTheme.typography.labelSmall, color = d2m.meta)
+}
+
+/** Who the task needs outside the families ("Consult | Priest"). */
+@Composable
+fun ConsultChip(party: String) {
+    val p = LocalD2MStatusPalette.current
+    TagPill(party.capitalised(), p.info.bg, p.info.fg, lead = LocalWedding.current.s.consult)
+}
+
+/** Consult chip plus comment / attachment counts as proper tags (nothing when there is nothing to show). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TaskTags(task: WeddingTaskOut, modifier: Modifier = Modifier) {
+    if (task.externalParty == null && task.commentCount == 0 && task.attachmentCount == 0) return
+    val s = LocalWedding.current.s
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        task.externalParty?.let { ConsultChip(it) }
+        if (task.commentCount > 0) TagPill("💬 " + s.commentsPill(task.commentCount), d2m.accentSoft, d2m.accent)
+        if (task.attachmentCount > 0) TagPill("📎 " + s.filesPill(task.attachmentCount), d2m.surfaceSunken, d2m.textPrimary, border = d2m.border)
+    }
 }
 
 /** "In 5 days" / "3d overdue" plus the day's panchangam markers. */

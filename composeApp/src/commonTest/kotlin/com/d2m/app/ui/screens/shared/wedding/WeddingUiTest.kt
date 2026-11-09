@@ -40,13 +40,13 @@ class WeddingUiTest {
     )
     private val phases = listOf(WeddingPhaseOut("planning", "Planning"), WeddingPhaseOut("foundations", "Foundations"))
 
-    private fun task(id: String, title: String, due: String?, participants: List<String> = listOf("groom"), status: String = "todo", overdue: Boolean = false, phase: String = "planning", scope: String = "individual") =
+    private fun task(id: String, title: String, due: String?, participants: List<String> = listOf("groom"), status: String = "todo", overdue: Boolean = false, phase: String = "planning", scope: String = "individual", party: String? = null) =
         WeddingTaskOut(id = id, title = title, phase = phase, scope = scope, participants = participants, dueDate = due, status = status,
-            overdue = overdue, iAmParticipant = "groom" in participants, confirmedBy = if (status == "done") listOf("groom") else emptyList(), iConfirmed = status == "done", commentCount = if (id == "1") 2 else 0)
+            overdue = overdue, externalParty = party, iAmParticipant = "groom" in participants, confirmedBy = if (status == "done") listOf("groom") else emptyList(), iConfirmed = status == "done", commentCount = if (id == "1") 2 else 0)
 
     private val tasks = listOf(
         task("1", "Book the venue", "2026-11-12"),
-        task("2", "Choose attire together", "2026-11-12", listOf("bride", "groom"), scope = "couple"),
+        task("2", "Choose attire together", "2026-11-12", listOf("bride", "groom"), scope = "couple", party = "astrologer"),
         task("3", "Fix the muhurtham", "2026-11-05", overdue = true, phase = "foundations"),
         task("4", "Order invitations", null),
         task("5", "Finalise caterer", "2026-11-20", status = "done"),
@@ -85,6 +85,14 @@ class WeddingUiTest {
         onNodeWithText("Book the venue").performClick()
         assertEquals("1", opened)
         onNodeWithText("Foundations").performClick() // collapses its group
+    }
+
+    @Test fun consultAndCountTagsAreProperChips() = runComposeUiTest {
+        val e = env()
+        render(e) { WeddingListView(buildGroups(tasks, phases, "phase", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInGroup = {}) }
+        onNodeWithText("Consult").assertIsDisplayed()
+        onNodeWithText("Astrologer").assertIsDisplayed() // capitalised from the server's lower-case "astrologer"
+        onNodeWithText("💬 2 comments").assertIsDisplayed()
     }
 
     @Test fun boardShowsOneLanePerBucket() = runComposeUiTest {
