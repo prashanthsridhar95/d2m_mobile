@@ -69,6 +69,7 @@ import com.d2m.app.data.network.ApiError
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.domain.repository.ConsentRepository
+import com.d2m.app.ui.navigation.WeddingMode
 import com.d2m.app.domain.repository.DashboardRepository
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.domain.repository.SuggestionsRepository
@@ -125,6 +126,7 @@ fun ParentHomeScreen(
     val suggestionsRepo: SuggestionsRepository = koinInject()
     val apiClient: ApiClient = koinInject()
     val identity by identityStore.identity.collectAsState()
+    val weddingActive by WeddingMode.active.collectAsState()
 
     var dashboard by remember { mutableStateOf<SponsorDashboardOut?>(null) }
     var shortlist by remember { mutableStateOf<List<SuggestionOut>>(emptyList()) }
@@ -313,7 +315,8 @@ fun ParentHomeScreen(
                                 }
                             }
                         }
-                        if (sponsorId != null) {
+                        // Once the union is confirmed the serious-exploration / request-access card no longer applies.
+                        if (sponsorId != null && !weddingActive) {
                             item(key = "serious-row", contentType = "disclosure") {
                                 ConsentProspectCard(
                                     sponsorId = sponsorId,
