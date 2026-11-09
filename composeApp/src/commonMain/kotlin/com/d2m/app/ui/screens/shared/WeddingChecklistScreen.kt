@@ -207,10 +207,10 @@ private fun WeddingWorkspace(primaryId: String) {
             )
             selected != null -> TaskSheet(c, selected, d.phases, onDismiss = { selectedId = null })
             dayOpen != null -> DaySheet(
-                dayOpen!!, dayTasks,
+                dayOpen!!, dayTasks, d.tasks,
                 listOf(d.plan.engagementDate to s.engagement, d.plan.marriageDate to s.marriage, d.plan.honeymoonDate to s.honeymoon).firstOrNull { it.first == dayOpen }?.second,
                 c.busy, onOpen = { selectedId = it }, onToggle = c::toggle,
-                onAdd = { creating = NewPreset(due = it) }, onDismiss = { dayOpen = null },
+                onAdd = { creating = NewPreset(due = it) }, onSchedule = { t -> c.setDue(t, dayOpen) }, onDismiss = { dayOpen = null },
             )
         }
         if (filtersOpen && !wide) WeddingFilterSheet(filters, { filters = it }, d.phases, d.tasks, filtered.size, onDismiss = { filtersOpen = false })

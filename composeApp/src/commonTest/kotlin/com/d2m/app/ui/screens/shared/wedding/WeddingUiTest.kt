@@ -121,7 +121,7 @@ class WeddingUiTest {
         render(e) { WeddingListView(buildGroups(tasks, phases, "phase", e.label, today, e.s), busy = false, onOpen = {}, onToggle = {}, onAddInGroup = {}) }
         assertTrue(onAllNodesWithText("Consult").fetchSemanticsNodes().isEmpty(), "the involves chip is just the name now")
         onNodeWithText("Astrologer").assertIsDisplayed() // capitalised from the server's lower-case "astrologer"
-        onNodeWithText("💬 2 comments").assertIsDisplayed()
+        onNodeWithText("💬 2").assertIsDisplayed()
     }
 
     @Test fun loadingSkeletonRendersAndIsAnnounced() = runComposeUiTest {

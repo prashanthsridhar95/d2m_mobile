@@ -210,6 +210,7 @@ fun MatchesScreen(
     // this -- this is that wiring.
     var unionStatus by remember { mutableStateOf<UnionStatusOut?>(null) }
     var unionBusy by remember { mutableStateOf(false) }
+    var galleryConfirmOpen by remember { mutableStateOf(false) }
     var unionError by remember { mutableStateOf<String?>(null) }
     // "We met" call gate (web: chat-next-step strip + met-info dialog).
     var metDialogOpen by remember { mutableStateOf(false) }
@@ -700,6 +701,11 @@ fun MatchesScreen(
                             },
                             showConfirmUnion = t.status == "exclusive" && !myUnionConfirmed,
                             onConfirmUnion = { confirmUnion() },
+                            unionConfirmed = t.status == "exclusive" && unionStatus?.status == "confirmed",
+                            galleryConsent = myGalleryConsent,
+                            // Opting in explains what is shared first; withdrawing is one tap.
+                            onToggleGallery = { if (myGalleryConsent) toggleGalleryOptIn(false) else galleryConfirmOpen = true },
+                            onOpenGallery = onOpenGallery,
                         )
                     },
                 )
@@ -772,31 +778,14 @@ fun MatchesScreen(
                     }
                 }
 
-                if (t.status == "exclusive" && unionStatus?.status == "confirmed") {
-                    FlatStrip {
-                        Column {
-                            Text(strings.unionConfirmedTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                strings.unionConfirmedBody,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = mutedText(0.55f),
-                                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
-                            )
-                            D2MCheckboxRow(
-                                label = strings.optInSuccessGallery,
-                                checked = myGalleryConsent,
-                                enabled = !unionBusy,
-                                onCheckedChange = { toggleGalleryOptIn(it) },
-                            )
-                            D2MButton(
-                                text = strings.viewSuccessGallery,
-                                variant = D2MButtonVariant.OUTLINE,
-                                size = D2MButtonSize.SM,
-                                modifier = Modifier.padding(top = 10.dp),
-                                onClick = onOpenGallery,
-                            )
-                        }
-                    }
+                if (galleryConfirmOpen) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { galleryConfirmOpen = false },
+                        title = { Text(strings.shareInSuccessGallery) },
+                        text = { Text(strings.unionConfirmedBody) },
+                        confirmButton = { androidx.compose.material3.TextButton(onClick = { galleryConfirmOpen = false; toggleGalleryOptIn(true) }) { Text(strings.shareInSuccessGallery) } },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { galleryConfirmOpen = false }) { Text(LocalStrings.current.common.cancel) } },
+                    )
                 }
                 ChatPane(
                     peerId = t.otherParticipantId,
@@ -1075,6 +1064,11 @@ private fun MoreOptionsMenu(
     onDeclineSeriousRequest: () -> Unit,
     showConfirmUnion: Boolean = false,
     onConfirmUnion: () -> Unit = {},
+    /** Once the union is confirmed: the Success Gallery opt-in lives here (it used to be a banner pinned above the chat). */
+    unionConfirmed: Boolean = false,
+    galleryConsent: Boolean = false,
+    onToggleGallery: () -> Unit = {},
+    onOpenGallery: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val strings = LocalStrings.current.matches
@@ -1097,6 +1091,13 @@ private fun MoreOptionsMenu(
             }
             if (showConfirmUnion) {
                 DropdownMenuItem(text = { Text(strings.confirmUnion) }, onClick = { menuOpen = false; onConfirmUnion() })
+            }
+            if (unionConfirmed) {
+                DropdownMenuItem(
+                    text = { Text(if (galleryConsent) strings.withdrawFromSuccessGallery else strings.shareInSuccessGallery) },
+                    onClick = { menuOpen = false; onToggleGallery() },
+                )
+                DropdownMenuItem(text = { Text(strings.viewSuccessGallery) }, onClick = { menuOpen = false; onOpenGallery() })
             }
             DropdownMenuItem(text = { Text(strings.unmatch) }, onClick = { menuOpen = false; onUnmatch() })
         }

@@ -391,11 +391,19 @@ fun TaskSheet(c: WeddingController, task: WeddingTaskOut, phases: List<WeddingPh
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DaySheet(
-    date: String, tasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
-    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onDismiss: () -> Unit,
+    date: String, tasks: List<WeddingTaskOut>, allTasks: List<WeddingTaskOut>, milestone: String?, busy: Boolean,
+    onOpen: (String) -> Unit, onToggle: (WeddingTaskOut) -> Unit, onAdd: (String) -> Unit, onSchedule: (WeddingTaskOut) -> Unit, onDismiss: () -> Unit,
 ) {
     val s = LocalWedding.current.s
     val d = date.toDate()
+    var picking by remember(date) { mutableStateOf(false) }
+    var query by remember(date) { mutableStateOf("") }
+    // Anything not finished and not already on this day: undated first, then soonest.
+    val candidates = remember(allTasks, date, query) {
+        val q = query.trim().lowercase()
+        allTasks.filter { it.status != "done" && it.dueDate != date && (q.isEmpty() || it.title.lowercase().contains(q)) }
+            .sortedWith(compareBy({ it.dueDate != null }, { it.dueDate ?: "" }, { it.title })).take(40)
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = MaterialTheme.colorScheme.surface, contentColor = d2m.textPrimary,
@@ -430,7 +438,30 @@ fun DaySheet(
                     TaskRow(t, busy, onOpen = { onOpen(t.id) }, onToggle = { onToggle(t) })
                 }
             }
-            D2MButton(s.addOnThisDay, { onAdd(date) }, modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth())
+            if (picking) {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LabelText(s.chooseFromList, Modifier.weight(1f))
+                        LinkText(s.closeAction, onClick = { picking = false; query = "" })
+                    }
+                    D2MTextField("", query, { query = it }, placeholder = s.searchYourTodos)
+                    if (candidates.isEmpty()) MetaText(s.nothingMatches)
+                    candidates.forEach { t ->
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).border(BorderStroke(1.dp, d2m.border), RoundedCornerShape(6.dp))
+                                .clickable(enabled = !busy) { onSchedule(t); picking = false; query = "" }.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text(t.title, style = MaterialTheme.typography.bodyMedium, color = d2m.textPrimary)
+                            Text((t.dueDate?.let { s.nowDueOn(it.toDate().medium(s)) } ?: s.noDateYet) + " — " + s.moveToThisDay, style = MaterialTheme.typography.labelSmall, color = d2m.meta)
+                        }
+                    }
+                }
+            }
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                D2MButton(s.addOnThisDay, { onAdd(date) }, modifier = Modifier.fillMaxWidth())
+                if (!picking) D2MButton(s.chooseFromList, { picking = true }, variant = D2MButtonVariant.OUTLINE, modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }

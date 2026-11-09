@@ -148,6 +148,13 @@ interface WeddingStrings {
     val pmAmavasya1: String
     val pmChandra1: String
     val todosOnThisDay: String
+    val chooseFromList: String
+    val searchYourTodos: String
+    fun nowDueOn(date: String): String
+    val noDateYet: String
+    val moveToThisDay: String
+    val nothingMatches: String
+    val closeAction: String
     fun doneOfTotal(done: Int, total: Int): String
     val creatorSuffix: String
     val signedOff: String
@@ -365,6 +372,13 @@ object WeddingStringsEn : WeddingStrings {
     override val pmAmavasya1 = "New moon — usually avoided for ceremonies."
     override val pmChandra1 = "The Moon is in the 8th sign from their birth rashi."
     override val todosOnThisDay = "To-dos on this day"
+    override val chooseFromList = "Choose from your list"
+    override val searchYourTodos = "Search your to-dos…"
+    override fun nowDueOn(date: String) = "Now due $date"
+    override val noDateYet = "No date yet"
+    override val moveToThisDay = "move it to this day"
+    override val nothingMatches = "Nothing matches."
+    override val closeAction = "Close"
     override fun doneOfTotal(done: Int, total: Int) = "$done of $total done"
     override val creatorSuffix = " · creator"
     override val signedOff = "signed off"
@@ -414,7 +428,7 @@ object WeddingStringsEn : WeddingStrings {
     override val couldntRemoveFile = "Couldn't remove the file."
     override val nothingDue = "Nothing is due this day"
     override fun tasksSummary(n: Int, done: Int) = "$n to-do${if (n == 1) "" else "s"} · $done done"
-    override val addOnThisDay = "+ Add a to-do on this day"
+    override val addOnThisDay = "+ Add a new to-do"
     override val newTaskTitle = "New to-do"
     override val whatNeedsDoing = "What needs to be done?"
     override val assignTo = "Owners"
@@ -582,6 +596,13 @@ object WeddingStringsHi : WeddingStrings {
     override val pmAmavasya1 = "अमावस्या — समारोहों के लिए आमतौर पर वर्जित।"
     override val pmChandra1 = "चंद्रमा उनकी जन्म राशि से आठवें स्थान पर है।"
     override val todosOnThisDay = "इस दिन के काम"
+    override val chooseFromList = "अपनी सूची से चुनें"
+    override val searchYourTodos = "अपने काम खोजें…"
+    override fun nowDueOn(date: String) = "अभी $date को देय"
+    override val noDateYet = "अभी कोई तिथि नहीं"
+    override val moveToThisDay = "इसे इस दिन ले आएँ"
+    override val nothingMatches = "कुछ नहीं मिला।"
+    override val closeAction = "बंद करें"
     override fun doneOfTotal(done: Int, total: Int) = "$total में से $done पूर्ण"
     override val creatorSuffix = " · निर्माता"
     override val signedOff = "पूर्ण किया"
@@ -799,6 +820,13 @@ object WeddingStringsTa : WeddingStrings {
     override val pmAmavasya1 = "அமாவாசை — விழாக்களுக்குப் பொதுவாகத் தவிர்க்கப்படும்."
     override val pmChandra1 = "சந்திரன் அவர்களின் ஜன்ம ராசியிலிருந்து 8-ஆம் ராசியில் உள்ளது."
     override val todosOnThisDay = "இந்த நாளின் வேலைகள்"
+    override val chooseFromList = "உங்கள் பட்டியலிலிருந்து தேர்ந்தெடு"
+    override val searchYourTodos = "உங்கள் வேலைகளைத் தேடுக…"
+    override fun nowDueOn(date: String) = "தற்போது $date அன்று"
+    override val noDateYet = "இன்னும் தேதி இல்லை"
+    override val moveToThisDay = "இந்த நாளுக்கு மாற்று"
+    override val nothingMatches = "பொருந்துவது எதுவுமில்லை."
+    override val closeAction = "மூடு"
     override fun doneOfTotal(done: Int, total: Int) = "$total இல் $done முடிந்தது"
     override val creatorSuffix = " · உருவாக்கியவர்"
     override val signedOff = "முடித்தார்"

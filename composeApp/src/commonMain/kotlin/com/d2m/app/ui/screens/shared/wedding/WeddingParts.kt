@@ -95,8 +95,8 @@ fun TaskTags(task: WeddingTaskOut, modifier: Modifier = Modifier) {
     val s = LocalWedding.current.s
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         task.externalParty?.let { ConsultChip(it) }
-        if (task.commentCount > 0) TagPill("💬 " + s.commentsPill(task.commentCount), d2m.accentSoft, d2m.accent)
-        if (task.attachmentCount > 0) TagPill("📎 " + s.filesPill(task.attachmentCount), d2m.surfaceSunken, d2m.textPrimary, border = d2m.border)
+        if (task.commentCount > 0) TagPill("💬 ${task.commentCount}", d2m.accentSoft, d2m.accent)
+        if (task.attachmentCount > 0) TagPill("📎 ${task.attachmentCount}", d2m.surfaceSunken, d2m.textPrimary, border = d2m.border)
     }
 }
 
