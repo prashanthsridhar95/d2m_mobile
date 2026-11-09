@@ -72,6 +72,7 @@ import com.d2m.app.ui.components.bounceClickable
 import com.d2m.app.ui.components.rememberHaptics
 import com.d2m.app.ui.navigation.UnreadBadges
 import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.navigation.WeddingMode
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -275,17 +276,20 @@ fun ChildHomeScreen(
     val openThreads = remember(threads) { threads.filter { it.status != "closed" } }
     val activeThread = remember(openThreads) { openThreads.find { it.status == "exclusive" } ?: openThreads.firstOrNull() }
     val matchedIds = remember(openThreads) { openThreads.map { it.otherParticipantId }.toSet() }
-    val receivedFiltered = remember(received, matchedIds) { received.filter { it.candidateId !in matchedIds } }
-    val sentFiltered = remember(sent, matchedIds) { sent.filter { it.candidateId !in matchedIds } }
-    val pendingConsentList = remember(consentRequests) { consentRequests.filter { it.status == "pending" } }
+    // Once a union is confirmed there is nothing left to receive, send or ask for: those rows (and the picks) are dropped.
+    val weddingMode by WeddingMode.active.collectAsState()
+    val receivedFiltered = remember(received, matchedIds, weddingMode) { if (weddingMode) emptyList() else received.filter { it.candidateId !in matchedIds } }
+    val sentFiltered = remember(sent, matchedIds, weddingMode) { if (weddingMode) emptyList() else sent.filter { it.candidateId !in matchedIds } }
+    val pendingConsentList = remember(consentRequests, weddingMode) { if (weddingMode) emptyList() else consentRequests.filter { it.status == "pending" } }
     val pendingOnMe = remember(threads, primaryId) {
         threads.count { it.pendingSeriousModeRequestId != null && it.pendingSeriousModeRequestedBy != primaryId }
     }
-    val showPicks = !discoverDisabled && suggestions.isNotEmpty()
+    val showPicks = !weddingMode && !discoverDisabled && suggestions.isNotEmpty()
 
     val firstName = profile?.name?.split(" ")?.firstOrNull()?.takeIf { it.isNotBlank() } ?: strings.greetingFallbackName
     val subtitle = when {
         pendingOnMe > 0 -> strings.subtitlePendingDecision
+        weddingMode -> strings.subtitleWedding
         receivedFiltered.isNotEmpty() -> strings.subtitleNewRequest(receivedFiltered.size)
         pendingConsentList.isNotEmpty() -> strings.subtitleConsentPending
         showPicks -> strings.subtitleNewPicks
@@ -519,7 +523,7 @@ private fun PrimaryCta(
                     Column {
                         Text(activeThread.otherParticipantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            if (isExclusive) strings.heroGettingSerious else strings.heroMatched,
+                            if (isExclusive && WeddingMode.active.collectAsState().value) strings.heroGettingMarried else if (isExclusive) strings.heroGettingSerious else strings.heroMatched,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.9f),
                             modifier = Modifier.padding(top = 2.dp),

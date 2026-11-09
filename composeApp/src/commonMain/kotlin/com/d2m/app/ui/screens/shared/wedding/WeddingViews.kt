@@ -319,7 +319,7 @@ private fun CalendarLegend() {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { content(); Text(label, style = MaterialTheme.typography.labelSmall, color = d2m.meta) }
         item({ Text("★", color = p.success.fg, fontSize = 11.sp) }, s.pmMuhoortham)
         item({ Box(Modifier.size(9.dp).clip(CircleShape).background(p.warning.fg)) }, s.pmPurnima)
-        item({ Box(Modifier.size(9.dp).clip(CircleShape).background(d2m.meta)) }, s.pmAmavasya)
+        item({ Box(Modifier.size(10.dp).clip(CircleShape).background(d2m.ink).border(1.5.dp, d2m.meta, CircleShape)) }, s.pmAmavasya)
         item({ Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(p.danger.bg).border(1.dp, p.danger.fg, RoundedCornerShape(3.dp))) }, s.pmChandrashtamam)
     }
 }

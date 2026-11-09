@@ -145,7 +145,7 @@ fun PmBadges(date: String?, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         if (d.isMuhoortham) Text("★", color = p.success.fg, fontSize = 11.sp)
         if (d.isPurnima) Box(Modifier.size(9.dp).clip(CircleShape).background(p.warning.fg))
-        if (d.isAmavasya) Box(Modifier.size(9.dp).clip(CircleShape).background(d2m.meta).border(1.dp, d2m.borderStrong, CircleShape))
+        if (d.isAmavasya) Box(Modifier.size(10.dp).clip(CircleShape).background(d2m.ink).border(1.5.dp, d2m.meta, CircleShape))
         if (d.chandrashtamam.isNotEmpty()) {
             Text("Ch", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = p.danger.fg,
                 modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(p.danger.bg).border(0.5.dp, p.danger.fg, RoundedCornerShape(3.dp)).padding(horizontal = 3.dp, vertical = 1.dp))

@@ -55,6 +55,7 @@ interface MatchesStrings {
     val unmatch: String
     val statusMatched: String
     val statusSeriousExploration: String
+    val statusGettingMarried: String
     val statusSunsetting: String
     val statusClosed: String
     val youPrefix: String
@@ -126,6 +127,7 @@ object MatchesStringsEn : MatchesStrings {
     override val unmatch = "Unmatch"
     override val statusMatched = "Matched"
     override val statusSeriousExploration = "Serious exploration"
+    override val statusGettingMarried = "Getting married soon"
     override val statusSunsetting = "Sunsetting"
     override val statusClosed = "Closed"
     override val youPrefix = "You: "
@@ -197,6 +199,7 @@ object MatchesStringsHi : MatchesStrings {
     override val unmatch = "अनमैच करें"
     override val statusMatched = "मैच हुआ"
     override val statusSeriousExploration = "सीरियस एक्सप्लोरेशन"
+    override val statusGettingMarried = "जल्द विवाह"
     override val statusSunsetting = "समाप्त हो रहा है"
     override val statusClosed = "बंद"
     override val youPrefix = "आप: "
@@ -268,6 +271,7 @@ object MatchesStringsTa : MatchesStrings {
     override val unmatch = "பொருத்தத்தை நீக்கு"
     override val statusMatched = "பொருந்தியது"
     override val statusSeriousExploration = "சீரியஸ் ஆய்வு"
+    override val statusGettingMarried = "விரைவில் திருமணம்"
     override val statusSunsetting = "முடிவடைகிறது"
     override val statusClosed = "மூடப்பட்டது"
     override val youPrefix = "நீங்கள்: "

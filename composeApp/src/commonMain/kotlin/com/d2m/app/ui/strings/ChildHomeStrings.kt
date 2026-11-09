@@ -32,6 +32,8 @@ interface ChildHomeStrings {
     val completeProfile: String
     val openChat: String
     val heroGettingSerious: String
+    val heroGettingMarried: String
+    val subtitleWedding: String
     val heroMatched: String
     val emptyHeroTitle: String
     val emptyHeroSubtitle: String
@@ -77,6 +79,8 @@ object ChildHomeStringsEn : ChildHomeStrings {
     override val completeProfile = "Complete profile"
     override val openChat = "Open chat"
     override val heroGettingSerious = "You two are getting serious 💛"
+    override val heroGettingMarried = "You two are getting married soon 💍"
+    override val subtitleWedding = "Your wedding checklist is ready — see what's next 💍"
     override val heroMatched = "You matched – say hi 💬"
     override val emptyHeroTitle = "Your person's out there"
     override val emptyHeroSubtitle = "No matches yet – let's find someone worth a hello."
@@ -122,6 +126,8 @@ object ChildHomeStringsHi : ChildHomeStrings {
     override val completeProfile = "प्रोफ़ाइल पूरी करें"
     override val openChat = "चैट खोलें"
     override val heroGettingSerious = "आप दोनों की बात अब गंभीर हो रही है 💛"
+    override val heroGettingMarried = "आप दोनों का विवाह जल्द ही है 💍"
+    override val subtitleWedding = "आपकी विवाह चेकलिस्ट तैयार है — देखें आगे क्या है 💍"
     override val heroMatched = "आपका मैच हो गया – हाय कहें 💬"
     override val emptyHeroTitle = "आपका हमसफ़र कहीं है"
     override val emptyHeroSubtitle = "अभी कोई मैच नहीं – चलिए किसी खास से मुलाक़ात ढूंढते हैं।"
@@ -167,6 +173,8 @@ object ChildHomeStringsTa : ChildHomeStrings {
     override val completeProfile = "சுயவிவரத்தை முடிக்கவும்"
     override val openChat = "சாட் திற"
     override val heroGettingSerious = "நீங்கள் இருவரும் தீவிரமாகிறீர்கள் 💛"
+    override val heroGettingMarried = "உங்கள் இருவருக்கும் விரைவில் திருமணம் 💍"
+    override val subtitleWedding = "உங்கள் திருமணப் பட்டியல் தயார் — அடுத்து என்ன என்று பாருங்கள் 💍"
     override val heroMatched = "உங்களுக்கு மேட்ச் கிடைத்தது – ஹாய் சொல்லுங்கள் 💬"
     override val emptyHeroTitle = "உங்கள் துணை எங்கோ இருக்கிறார்"
     override val emptyHeroSubtitle = "இன்னும் மேட்ச் இல்லை – ஒரு ஹலோவுக்கு தகுதியான ஒருவரைத் தேடுவோம்."

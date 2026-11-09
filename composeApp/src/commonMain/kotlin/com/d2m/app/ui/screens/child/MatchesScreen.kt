@@ -94,6 +94,7 @@ import com.d2m.app.ui.components.D2MTabs
 import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.strings.LocalStrings
 import com.d2m.app.ui.strings.MatchesStrings
+import com.d2m.app.ui.navigation.WeddingMode
 import com.d2m.app.ui.theme.D2MFlow
 import com.d2m.app.ui.theme.D2MRadius
 import com.d2m.app.ui.theme.D2MTheme
@@ -488,7 +489,10 @@ fun MatchesScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
                     PageTitle(strings.pageTitle)
-                    D2MTabs(
+                    // After a union there is no Received / Sent: just the conversation(s).
+                    val weddingMode by WeddingMode.active.collectAsState()
+                    if (weddingMode && matchesTab != 0) matchesTab = 0
+                    if (!weddingMode) D2MTabs(
                         titles = listOf(strings.tabMatches, strings.tabReceived, strings.tabSent),
                         selectedIndex = matchesTab,
                         onSelect = { if (it != matchesTab) { haptics.light(); matchesTab = it } },
@@ -851,7 +855,7 @@ private fun ThreadRow(thread: ThreadOut, unread: Int, onClick: () -> Unit) {
         }
     }
     val previewWithPrefix = if (lastMessage?.isMine == true && previewText.isNotBlank()) strings.youPrefix + previewText else previewText
-    val subtitleBase = if (peerTyping) strings.typing else previewWithPrefix.ifBlank { if (lastMessage == null && thread.status == "active") strings.sayHi else threadStatusLabel(thread.status, strings) }
+    val subtitleBase = if (peerTyping) strings.typing else previewWithPrefix.ifBlank { if (lastMessage == null && thread.status == "active") strings.sayHi else threadStatusLabel(thread.status, strings, WeddingMode.active.collectAsState().value) }
     val subtitle = if (!peerTyping && thread.pendingSeriousModeRequestId != null) strings.seriousModePendingSuffix(subtitleBase) else subtitleBase
     val hasUnread = unread > 0
     val timeLabel = remember(lastMessage?.sentAt) { lastMessage?.let { fmtThreadListTime(it.sentAt, strings.yesterday) } }
@@ -992,7 +996,7 @@ private fun ConversationHeader(
                 val subtitle = when {
                     peerTyping -> strings.typing
                     peerOnline -> strings.online
-                    else -> threadStatusLabel(thread.status, strings)
+                    else -> threadStatusLabel(thread.status, strings, WeddingMode.active.collectAsState().value)
                 }
                 Text(subtitle, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
@@ -1086,7 +1090,8 @@ private fun MoreOptionsMenu(
             if (thread.status == "active") {
                 DropdownMenuItem(text = { Text(strings.goSerious) }, onClick = { menuOpen = false; onGoSerious() })
             }
-            if (thread.status == "exclusive") {
+            // Revoke is gone once the union is confirmed.
+            if (thread.status == "exclusive" && !unionConfirmed) {
                 DropdownMenuItem(text = { Text(strings.revokeSeriousMode) }, onClick = { menuOpen = false; onRevoke() })
             }
             if (showConfirmUnion) {
@@ -1114,9 +1119,9 @@ private fun PresenceDot(online: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-private fun threadStatusLabel(status: String, strings: MatchesStrings): String = when (status) {
+private fun threadStatusLabel(status: String, strings: MatchesStrings, wedding: Boolean = false): String = when (status) {
     "active" -> strings.statusMatched
-    "exclusive" -> strings.statusSeriousExploration
+    "exclusive" -> if (wedding) strings.statusGettingMarried else strings.statusSeriousExploration
     "sunsetting" -> strings.statusSunsetting
     "closed" -> strings.statusClosed
     else -> status

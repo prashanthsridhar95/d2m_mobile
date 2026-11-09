@@ -227,7 +227,8 @@ fun D2MBottomBar(
                 val selected = currentRoute == tab.route
                 BottomBarItem(
                     tab = tab,
-                    label = tab.localizedLabel(common),
+                    // After a union the child's Matches tab is simply their conversations.
+                    label = if (tab == D2MTab.ChildMatches && WeddingMode.active.collectAsState().value) common.tabMessages else tab.localizedLabel(common),
                     selected = selected,
                     badge = badges[tab] ?: 0,
                     onClick = {
