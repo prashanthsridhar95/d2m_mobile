@@ -8,6 +8,9 @@ import androidx.compose.ui.interop.UIKitView
 import com.d2m.app.messaging.IceServer
 import com.d2m.app.messaging.protocol.IceCandidateData
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.ptr
+import platform.AVFAudio.setActive
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,17 +101,87 @@ object IosWebRtcEngine : WebRtcEngine {
     private var factory: RTCPeerConnectionFactory? = null
     private val pcObservers = mutableMapOf<RTCPeerConnection, IosPcObserver>()
     private val cameraCapturers = mutableMapOf<RTCVideoTrack, RTCCameraVideoCapturer>()
+    private var callKitAudioActive = false
+    private var manualAudioActive = false
+    private var currentMicTrack: Any? = null
+
+    // CallKit activates the session with whatever category the app left it in, which by default is SoloAmbient
+    // (playback only, no microphone input). It has to be switched to a call category.
+    private fun configureCallAudioCategory() {
+        val av = platform.AVFAudio.AVAudioSession.sharedInstance()
+        kotlinx.cinterop.memScoped {
+            val err = alloc<kotlinx.cinterop.ObjCObjectVar<NSError?>>()
+            val ok = av.setCategory(
+                platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord,
+                mode = platform.AVFAudio.AVAudioSessionModeVideoChat,
+                options = platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetooth or platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker,
+                error = err.ptr,
+            )
+            if (!ok) println("IosWebRtcEngine: setCategory failed")
+        }
+    }
+
+    // Calls that arrive over the live connection and are answered inside the app (or any call CallKit isn't managing)
+    // never get a CallKit didActivateAudioSession callback, so with manual audio mode WebRTC would stay silent. In that
+    // case the audio session is configured and activated here instead.
+    private fun activateAudioSessionManually() {
+        runCatching {
+            val av = platform.AVFAudio.AVAudioSession.sharedInstance()
+            configureCallAudioCategory()
+            kotlinx.cinterop.memScoped {
+                val err = alloc<kotlinx.cinterop.ObjCObjectVar<NSError?>>()
+                av.setActive(true, error = err.ptr)
+            }
+            val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+            rtcAudioSession.audioSessionDidActivate(av)
+            rtcAudioSession.isAudioEnabled = true
+            manualAudioActive = true
+            println("IosWebRtcEngine: no CallKit audio session; activated manually (category=${av.category}, mode=${av.mode})")
+        }.onFailure {
+            println("IosWebRtcEngine: manual audio activation failed: ${it.message ?: it::class.simpleName}")
+        }
+    }
+
+    private fun deactivateManualAudioSession() {
+        if (!manualAudioActive) return
+        manualAudioActive = false
+        runCatching {
+            val av = platform.AVFAudio.AVAudioSession.sharedInstance()
+            val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+            rtcAudioSession.isAudioEnabled = false
+            rtcAudioSession.audioSessionDidDeactivate(av)
+            kotlinx.cinterop.memScoped {
+                val err = alloc<kotlinx.cinterop.ObjCObjectVar<NSError?>>()
+                av.setActive(false, withOptions = platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation, error = err.ptr)
+            }
+            println("IosWebRtcEngine: manual audio session deactivated")
+        }
+    }
 
     fun setup() {
         WebRtcAudioSessionBridge.onAudioSessionActivated = {
-            // platform.AVFAudio, not platform.AVFoundation -- confirmed
-            // directly against Xcode 26.5's SDK (AVAudioSession.h now lives
-            // in its own AVFAudio.framework; Kotlin/Native's
-            // platform.AVFoundation klib doesn't re-export it).
-            runCatching { cocoapods.webrtc.RTCAudioSession.sharedInstance().audioSessionDidActivate(platform.AVFAudio.AVAudioSession.sharedInstance()) }
+            callKitAudioActive = true
+            runCatching {
+                configureCallAudioCategory()
+                val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+                rtcAudioSession.audioSessionDidActivate(platform.AVFAudio.AVAudioSession.sharedInstance())
+                rtcAudioSession.isAudioEnabled = true
+                val av = platform.AVFAudio.AVAudioSession.sharedInstance()
+                println("IosWebRtcEngine: CallKit audio session activated; WebRTC audio enabled (factoryExists=${factory != null}, manual=${rtcAudioSession.useManualAudio}, category=${av.category}, mode=${av.mode})")
+            }.onFailure {
+                println("IosWebRtcEngine: failed to enable WebRTC audio: ${it.message ?: it::class.simpleName}")
+            }
         }
         WebRtcAudioSessionBridge.onAudioSessionDeactivated = {
-            runCatching { cocoapods.webrtc.RTCAudioSession.sharedInstance().audioSessionDidDeactivate(platform.AVFAudio.AVAudioSession.sharedInstance()) }
+            callKitAudioActive = false
+            runCatching {
+                val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+                rtcAudioSession.isAudioEnabled = false
+                rtcAudioSession.audioSessionDidDeactivate(platform.AVFAudio.AVAudioSession.sharedInstance())
+                println("IosWebRtcEngine: CallKit audio session deactivated; WebRTC audio disabled")
+            }.onFailure {
+                println("IosWebRtcEngine: failed to disable WebRTC audio: ${it.message ?: it::class.simpleName}")
+            }
         }
     }
 
@@ -121,7 +194,8 @@ object IosWebRtcEngine : WebRtcEngine {
         // activates/configures AVAudioSession itself the moment a track is
         // added, which fights with CallKit for the same hardware resource.
         runCatching {
-            cocoapods.webrtc.RTCAudioSession.sharedInstance().useManualAudio = true
+            val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+            rtcAudioSession.useManualAudio = true
         }
         val encoderFactory = RTCDefaultVideoEncoderFactory()
         val decoderFactory = RTCDefaultVideoDecoderFactory()
@@ -162,7 +236,24 @@ object IosWebRtcEngine : WebRtcEngine {
         val f = ensureFactory()
         val constraints = RTCMediaConstraints(mandatoryConstraints = emptyMap<Any?, Any?>(), optionalConstraints = emptyMap<Any?, Any?>())
         val source = f.audioSourceWithConstraints(constraints)
-        return f.audioTrackWithSource(source, trackId = "mic-${platform.Foundation.NSDate().timeIntervalSince1970}")
+        val track = f.audioTrackWithSource(source, trackId = "mic-${platform.Foundation.NSDate().timeIntervalSince1970}")
+        currentMicTrack = track
+        // CallKit may have activated the session before this engine/track existed; re-assert so the audio unit starts.
+        if (callKitAudioActive || manualAudioActive) {
+            runCatching {
+                val rtcAudioSession = cocoapods.webrtc.RTCAudioSession.sharedInstance()
+                rtcAudioSession.isAudioEnabled = false
+                rtcAudioSession.isAudioEnabled = true
+            }
+        }
+        // Give CallKit a moment to activate the session itself (outgoing calls); otherwise take over.
+        engineScope.launch {
+            kotlinx.coroutines.delay(1200)
+            if (currentMicTrack === track && !callKitAudioActive && !manualAudioActive) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) { activateAudioSessionManually() }
+            }
+        }
+        return track
     }
 
     override suspend fun acquireCamera(facing: CameraFacing): Any {
@@ -206,7 +297,10 @@ object IosWebRtcEngine : WebRtcEngine {
                 val capturer = cameraCapturers.remove(track)
                 capturer?.let { runCatching { it.stopCapture() } }
             }
-            is RTCAudioTrack -> Unit // No explicit dispose call on RTCAudioTrack in this API -- released when the factory/source drop their last reference.
+            is RTCAudioTrack -> {
+                if (currentMicTrack === track) currentMicTrack = null
+                deactivateManualAudioSession()
+            }
         }
     }
 

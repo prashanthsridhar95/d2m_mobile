@@ -236,6 +236,8 @@ private fun groupByDay(messages: List<ChatMessage>): List<Pair<String, List<Chat
 fun ChatPane(
     peerId: String,
     peerName: String,
+    mediaAllowed: Boolean = true,
+    onEnableMedia: (suspend () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val identityStore: IdentityStore = koinInject()
@@ -713,7 +715,26 @@ fun ChatPane(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (editingId == null) {
-                    IconButton(onClick = { emojiOpen = false; mediaLauncher() }, enabled = !attaching, modifier = Modifier.size(40.dp)) {
+                    IconButton(
+                        onClick = {
+                            emojiOpen = false
+                            if (mediaAllowed) {
+                                mediaLauncher()
+                            } else if (onEnableMedia != null) {
+                                scope.launch {
+                                    attaching = true
+                                    runCatching { onEnableMedia() }
+                                        .onSuccess { mediaLauncher() }
+                                        .onFailure { snackbarHostState.showSnackbar(it.message ?: "Couldn't enable attachments") }
+                                    attaching = false
+                                }
+                            } else {
+                                scope.launch { snackbarHostState.showSnackbar("Attachments must be enabled by the bride") }
+                            }
+                        },
+                        enabled = !attaching,
+                        modifier = Modifier.size(40.dp),
+                    ) {
                         Icon(Icons.Filled.AttachFile, contentDescription = messagingStrings.attachFile, tint = mutedText(0.45f))
                     }
                 }

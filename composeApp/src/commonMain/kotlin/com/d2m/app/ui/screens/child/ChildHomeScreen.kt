@@ -217,9 +217,7 @@ fun ChildHomeScreen(
 
                 val active = threads.filter { it.status != "closed" }
                     .let { open -> open.find { it.status == "exclusive" } ?: open.firstOrNull() }
-                activeCandidatePhotoUrl = active?.let {
-                    runCatching { suggestionsRepo.getCandidate(pid, it.otherParticipantId).photoUrl }.getOrNull()
-                }
+                activeCandidatePhotoUrl = active?.otherParticipantPhotoUrl
 
                 suggestions = suggestionsDeferred.await()
                 suggestionsLoaded = true

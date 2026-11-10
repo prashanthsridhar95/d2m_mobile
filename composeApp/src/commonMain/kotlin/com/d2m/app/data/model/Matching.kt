@@ -17,6 +17,7 @@ data class ThreadOut(
     val threadId: String,
     val otherParticipantId: String,
     val otherParticipantName: String,
+    val otherParticipantPhotoUrl: String? = null,
     val status: String, // active | exclusive | sunsetting | closed
     val createdAt: String? = null,
     val pendingSeriousModeRequestId: String? = null,
@@ -25,6 +26,8 @@ data class ThreadOut(
     val metConfirmedByMe: Boolean = false,
     val metConfirmedByOther: Boolean = false,
     val callsUnlocked: Boolean = false,
+    val bridePrimaryId: String? = null,
+    val mediaAllowed: Boolean = false,
 )
 
 @Serializable
@@ -37,6 +40,12 @@ data class ConfirmMetOut(
     val metConfirmedByOther: Boolean = false,
     val callsUnlocked: Boolean = false,
 )
+
+@Serializable
+data class MediaPermissionIn(val primaryId: String, val allowed: Boolean)
+
+@Serializable
+data class MediaPermissionOut(val threadId: String, val mediaAllowed: Boolean)
 
 @Serializable
 data class SeriousModeRequestIn(val requestedBy: String)

@@ -794,6 +794,18 @@ fun MatchesScreen(
                 ChatPane(
                     peerId = t.otherParticipantId,
                     peerName = t.otherParticipantName,
+                    mediaAllowed = t.mediaAllowed,
+                    onEnableMedia = if (t.bridePrimaryId == null || t.bridePrimaryId == primaryId) {
+                        {
+                            val pid = requireNotNull(primaryId)
+                            seriousModeRepo.updateMediaPermission(pid, t.threadId, true)
+                            threads = threads.map { thread ->
+                                if (thread.threadId == t.threadId) thread.copy(mediaAllowed = true) else thread
+                            }
+                        }
+                    } else {
+                        null
+                    },
                     // imePadding() scoped right here -- ONLY this weighted
                     // region (message list + composer) reacts to the
                     // keyboard; ConversationHeader above is a plain sibling

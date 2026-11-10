@@ -8,13 +8,17 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class ScreenViewAuditRequestDto(val screen: String)
 
 @Serializable
-data class ScreenViewAuditResponseDto(val watermarkId: String, val serverTime: String)
+data class ScreenViewAuditResponseDto(
+    @SerialName("watermark_id") val watermarkId: String,
+    @SerialName("server_time") val serverTime: String,
+)
 
 /**
  * Client for the forensic-watermark audit trail (POST /audit/screen-view --
@@ -22,12 +26,8 @@ data class ScreenViewAuditResponseDto(val watermarkId: String, val serverTime: S
  * ui/components/WatermarkOverlay.kt, mirroring d2m_web's
  * src/lib/watermark.js.
  *
- * X-D2M-User-Id is app.auth.get_current_user's dev-mode fallback on the
- * backend -- there's no bearer token yet (see ApiClient.kt's own doc
- * comment). Attached per-request here (not via a shared defaultRequest
- * plugin the way PhotoImageLoader.kt does it) since this is the only call
- * site and reusing ApiClient's own client is simpler than standing up a
- * second one just for one endpoint.
+ * The stored WedLock token is required by production. X-D2M-User-Id remains
+ * attached for local backends where the development fallback is enabled.
  */
 class AuditApi(private val apiClient: ApiClient, private val identityStore: IdentityStore) {
     suspend fun recordScreenView(screen: String): ScreenViewAuditResponseDto? {
@@ -37,6 +37,7 @@ class AuditApi(private val apiClient: ApiClient, private val identityStore: Iden
         return try {
             apiClient.client.post(apiClient.url("/audit/screen-view")) {
                 contentType(ContentType.Application.Json)
+                with(apiClient) { applyAuthHeader() }
                 header("X-D2M-User-Id", userId)
                 setBody(ScreenViewAuditRequestDto(screen))
             }.body()

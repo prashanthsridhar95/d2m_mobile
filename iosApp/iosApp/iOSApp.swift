@@ -49,6 +49,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         return true
     }
 
+    func applicationWillTerminate(_ application: UIApplication) {
+        // Best-effort: tell the peer the call is over so their side ends immediately instead of waiting for the
+        // connection-loss timeout. iOS doesn't always deliver this callback when the user swipes the app away.
+        IosPushBridge.shared.endCall()
+        Thread.sleep(forTimeInterval: 0.4)
+    }
+
     /// Regular alert-push token (chat messages + every other VALID_TYPES
     /// event) -- NOT the same token PKPushRegistry issues for VoIP calls,
     /// see push_service.py's routing comment for why these are two

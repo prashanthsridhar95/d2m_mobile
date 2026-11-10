@@ -232,6 +232,10 @@ sealed class ServerToClient {
     data class ThreadUpdated(val from: String) : ServerToClient()
 
     @Serializable
+    @SerialName("thread.resync")
+    object ThreadResync : ServerToClient()
+
+    @Serializable
     @SerialName("error")
     data class Error(val message: String, val code: String? = null, val messageId: String? = null) : ServerToClient()
 
@@ -419,6 +423,8 @@ val messagingProtocolJson = Json {
             subclass(ServerToClient.Typing::class)
             subclass(ServerToClient.PresenceUpdate::class)
             subclass(ServerToClient.SessionReset::class)
+            subclass(ServerToClient.ThreadUpdated::class)
+            subclass(ServerToClient.ThreadResync::class)
             subclass(ServerToClient.Error::class)
             subclass(ServerToClient.AuthOk::class)
             subclass(ServerToClient.Pong::class)

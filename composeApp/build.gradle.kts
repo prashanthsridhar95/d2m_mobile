@@ -336,6 +336,40 @@ kotlin {
     }
 }
 
+// Kotlin's synthetic CocoaPods project still raises transitive pod targets
+// only to iOS 12. Xcode 27 supports iOS 15+ simulator targets, matching the
+// app's deployment target, so regenerate that synthetic project with 15.0.
+tasks.named("podInstallSyntheticIos") {
+    doLast {
+        val syntheticPodfile = layout.buildDirectory
+            .file("cocoapods/synthetic/ios/Podfile")
+            .get()
+            .asFile
+        if (!syntheticPodfile.isFile) return@doLast
+
+        val original = syntheticPodfile.readText()
+        val updated = original
+            .replace(
+                "if deployment_target_major < 12 || (deployment_target_major == 12 && deployment_target_minor < 0) then",
+                "if deployment_target_major < 15 then",
+            )
+            .replace("version = \"#{12}.#{0}\"", "version = \"15.0\"")
+        if (updated == original) return@doLast
+
+        syntheticPodfile.writeText(updated)
+        val podExecutable = Properties().apply {
+            val propertiesFile = rootProject.file("local.properties")
+            if (propertiesFile.isFile) {
+                propertiesFile.inputStream().use { load(it) }
+            }
+        }.getProperty("kotlin.apple.cocoapods.bin") ?: "pod"
+        project.exec {
+            workingDir(syntheticPodfile.parentFile)
+            commandLine(podExecutable, "install", "--no-repo-update")
+        }
+    }
+}
+
 // GIPHY API key for the GIF picker (messaging/ui/GifPicker.kt) -- read from
 // local.properties (gitignored, never committed -- same file Android
 // Studio already generates per-checkout for sdk.dir) rather than hardcoded

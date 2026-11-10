@@ -32,6 +32,9 @@ class SeriousModeApi(private val api: ApiClient) {
     suspend fun confirmMet(threadId: String, primaryId: String): ConfirmMetOut =
         api.post("/threads/$threadId/confirm-met", ConfirmMetIn(primaryId))
 
+    suspend fun updateMediaPermission(threadId: String, primaryId: String, allowed: Boolean): MediaPermissionOut =
+        api.put("/threads/$threadId/media-permission", MediaPermissionIn(primaryId, allowed))
+
     suspend fun getSponsorStatus(primaryId: String): SponsorStatusOut =
         api.get("/primaries/$primaryId/sponsor-status")
 }

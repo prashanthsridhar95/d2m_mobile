@@ -14,7 +14,7 @@ actual fun httpEngine(): HttpClient = HttpClient(Darwin)
 // "http://127.0.0.1:8000" (the iOS simulator shares the host's loopback
 // interface directly, unlike the Android emulator) or the host's real LAN
 // IP for a physical device.
-actual fun resolveDefaultBaseUrl(): String = "http://127.0.0.1:8000"
+actual fun resolveDefaultBaseUrl(): String = "https://api.prashanthsridhar.com"
 
 // WedLock IAM now has its own Cloudflare Tunnel (auth.prashanthsridhar.com),
 // same deployment pattern as d2m_core_engine above -- the web app's own

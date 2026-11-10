@@ -126,6 +126,9 @@ object MessagingConfig {
 private data class UploadMediaResponse(val id: String)
 
 @Serializable
+private data class UploadMediaError(val error: String? = null)
+
+@Serializable
 private data class IceServerDto(val urls: kotlinx.serialization.json.JsonElement, val username: String? = null, val credential: String? = null)
 
 @Serializable
@@ -685,7 +688,14 @@ class MessagingRepository(
                 contentType(ContentType.Application.OctetStream)
                 setBody(bytes)
             }
-            val blobId = messagingProtocolJson.decodeFromString(UploadMediaResponse.serializer(), response.bodyAsText()).id
+            val responseBody = response.bodyAsText()
+            if (response.status.value !in 200..299) {
+                val serverError = runCatching {
+                    messagingProtocolJson.decodeFromString(UploadMediaError.serializer(), responseBody).error
+                }.getOrNull()
+                error(serverError ?: "upload failed with HTTP ${response.status.value}")
+            }
+            val blobId = messagingProtocolJson.decodeFromString(UploadMediaResponse.serializer(), responseBody).id
             val media = MediaMeta(blobId = blobId, key = "", iv = "", mime = mime, name = fileName, size = bytes.size.toLong(), kind = kind, width = width, height = height)
             updateMessage(id) { it.copy(media = media, mediaUrl = mediaUrl(blobId), uploading = false, localBytesPreview = null) }
 
@@ -696,6 +706,21 @@ class MessagingRepository(
         } catch (e: Throwable) {
             println("MessagingRepository.sendMedia: failed to send $id to $peerUsername: ${e.message ?: e::class.simpleName}")
             updateMessage(id) { it.copy(uploading = false, uploadFailed = true, status = MessageStatus.FAILED) }
+            _sendErrors.tryEmit(
+                when {
+                    e.message?.contains("media sharing is not allowed", ignoreCase = true) == true ->
+                        "Attachments must be enabled for this conversation first"
+                    e.message?.contains("payload too large", ignoreCase = true) == true ->
+                        "Attachment is too large (maximum 30 MB)"
+                    e.message?.contains("storage quota exceeded", ignoreCase = true) == true ->
+                        "Attachment storage quota is full"
+                    e.message?.contains("too many uploads", ignoreCase = true) == true ->
+                        "Too many attachment uploads – try again later"
+                    e.message?.contains("internal error", ignoreCase = true) == true ->
+                        "Attachment storage is temporarily unavailable"
+                    else -> "Attachment couldn't be sent – please try again"
+                },
+            )
         }
     }
 
@@ -919,6 +944,7 @@ class MessagingRepository(
                 sessionResetHandler?.invoke(event.from, event.fromDevice)
             }
             is ServerToClient.ThreadUpdated -> _threadUpdatedEvents.tryEmit(event.from)
+            is ServerToClient.ThreadResync -> _threadUpdatedEvents.tryEmit("")
             else -> Unit
         }
     }

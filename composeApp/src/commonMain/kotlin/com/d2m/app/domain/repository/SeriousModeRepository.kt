@@ -44,6 +44,12 @@ class SeriousModeRepository(
         return r
     }
 
+    suspend fun updateMediaPermission(primaryId: String, threadId: String, allowed: Boolean): MediaPermissionOut {
+        val result = api.updateMediaPermission(threadId, primaryId, allowed)
+        cache.invalidateKey("threads:$primaryId")
+        return result
+    }
+
     suspend fun getSponsorStatus(primaryId: String): SponsorStatusOut =
         cache.get("sponsor-status:$primaryId", ttlMillis = 30_000) { api.getSponsorStatus(primaryId) }.value
 }
