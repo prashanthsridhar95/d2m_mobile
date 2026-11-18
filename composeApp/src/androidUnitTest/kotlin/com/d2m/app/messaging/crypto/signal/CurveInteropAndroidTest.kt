@@ -8,6 +8,7 @@ import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 import java.security.SecureRandom
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -142,12 +143,11 @@ class CurveInteropAndroidTest {
             val (priv, pub) = Curve25519.generateKeyPair(randomBytes(32))
             val message = randomBytes(32)
             val sig = Curve25519.xEdDSASign(priv, message, randomBytes(32))
-            sig[random.nextInt(64)] = (sig[random.nextInt(64)].toInt() xor 0x40).toByte()
+            val tamperedByte = random.nextInt(64)
+            sig[tamperedByte] = (sig[tamperedByte].toInt() xor 0x40).toByte()
 
-            assertTrue(
-                Ed25519Math.verify(pub, message, sig) == Curve25519.xEdDSAVerify(pub, message, sig),
-                "the two implementations disagreed on whether a tampered signature is valid",
-            )
+            assertFalse(Ed25519Math.verify(pub, message, sig))
+            assertFalse(Curve25519.xEdDSAVerify(pub, message, sig))
         }
     }
 }

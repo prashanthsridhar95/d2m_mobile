@@ -27,16 +27,6 @@ jobs:
       # this repo already commits gradle-wrapper.properties pinning 8.7.
       - uses: gradle/actions/setup-gradle@v4
 
-      # iOS is deliberately NOT built here -- it needs a macOS runner, a real
-      # Xcode install matching the 26.x this project's Kotlin/Native cinterop
-      # is pinned against (see libs.versions.toml's kotlin="2.4.10" comment),
-      # and CocoaPods' `pod install` against iosApp/Podfile before Xcode can
-      # even open the workspace. None of that is in place yet, so adding an
-      # iOS job now would mean guessing at a slow, flaky macOS pipeline
-      # instead of a real one -- Android CI landing and staying green is the
-      # priority; iOS CI is follow-up work once someone has verified the
-      # exact runner/Xcode/pod combination by hand.
-
       # Same APK a developer gets from `./gradlew :composeApp:assembleDebug`
       # locally -- debug because this job has no release-signing secrets
       # configured (see composeApp/build.gradle.kts's signingConfigs block
@@ -48,8 +38,78 @@ jobs:
 
       # commonTest (ApiCache/ApiClient/SuggestionsRepository unit tests, plus
       # the Compose UI test in ui/components) running on the Android target --
-      # see README.md's "Build status" section for the equivalent
-      # iosSimulatorArm64Test command, which needs a macOS runner and isn't
-      # run here for the same reason iOS isn't built above.
+      # see README.md's "Build status" section for the equivalent iOS
+      # simulator task, which runs in the dedicated job below.
       - name: Run unit tests
         run: ./gradlew :composeApp:testDebugUnitTest
+
+  ios-simulator:
+    # macos-15 is the Apple Silicon runner needed by iosSimulatorArm64.
+    # Xcode 26.3, its iOS 26.2 runtime, JDK 21 and CocoaPods 1.17.0 are
+    # published in the runner image; Kotlin/Native is pinned to 2.4.10.
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify iOS toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          xcodebuild -version
+          test "$(xcodebuild -version | awk 'NR == 1 { print $2 }')" = "26.3"
+          java -version
+          test "$(pod --version)" = "1.17.0"
+          xcrun simctl list runtimes | grep "iOS 26.2"
+
+      # CocoaPods requires a framework directory before it can resolve the
+      # local ComposeApp podspec. This Gradle task creates its dummy framework.
+      - name: Prepare ComposeApp pod
+        run: ./gradlew :composeApp:generateDummyFramework
+
+      - name: Install locked CocoaPods
+        working-directory: iosApp
+        run: pod install --deployment
+
+      - name: Run iOS shared and UI tests
+        run: ./gradlew :composeApp:iosSimulatorArm64Test
+
+      - name: Build iOS app for simulator
+        run: |
+          mkdir -p build
+          set -o pipefail
+          xcodebuild \
+            -workspace iosApp/iosApp.xcworkspace \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee build/ios-app-build.log
+
+      - name: Install and launch app on simulator
+        run: |
+          set -o pipefail
+          SIMULATOR_UDID="$(xcrun simctl list devices available --json | python3 -c 'import json, sys; devices = json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime, entries in devices.items() if runtime.endswith("iOS-26-2") for device in entries if device["name"] == "iPhone 17 Pro"))')"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl install "$SIMULATOR_UDID" build/ios/Build/Products/Debug-iphonesimulator/iosApp.app
+          xcrun simctl launch "$SIMULATOR_UDID" com.d2m.app | tee build/ios-simulator-launch.log
+
+      - name: Upload iOS simulator reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-reports
+          path: |
+            composeApp/build/reports/tests/iosSimulatorArm64Test/
+            composeApp/build/test-results/iosSimulatorArm64Test/
+            build/ios-app-build.log
+            build/ios-simulator-launch.log
+          if-no-files-found: warn
+          retention-days: 14

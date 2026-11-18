@@ -75,6 +75,74 @@ class SuggestionsRepositoryTest {
     }
 
     @Test
+    fun getSuggestions_cacheIsIsolatedBetweenPrimaryAccounts() = runTest {
+        val requestCounts = mutableMapOf<String, Int>()
+        val engine = MockEngine { request ->
+            val path = request.url.encodedPath
+            requestCounts[path] = (requestCounts[path] ?: 0) + 1
+            val response = when (path) {
+                "/primaries/prim-1/suggestions" ->
+                    """[{"candidate_id":"cand-a","candidate_name":"Account A"}]"""
+                "/primaries/prim-2/suggestions" ->
+                    """[{"candidate_id":"cand-b","candidate_name":"Account B"}]"""
+                else -> error("Unexpected request path: $path")
+            }
+            respond(
+                response,
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val apiClient = ApiClient(engine = HttpClient(engine), baseUrl = "https://example.test")
+        val repo = SuggestionsRepository(SuggestionsApi(apiClient), BufferApi(apiClient), ApiCache())
+
+        val accountA = repo.getSuggestions("prim-1")
+        val accountB = repo.getSuggestions("prim-2")
+        val accountAAgain = repo.getSuggestions("prim-1")
+
+        assertEquals(listOf("cand-a"), accountA.map { it.candidateId })
+        assertEquals(listOf("cand-b"), accountB.map { it.candidateId })
+        assertEquals(listOf("cand-a"), accountAAgain.map { it.candidateId })
+        assertEquals(1, requestCounts["/primaries/prim-1/suggestions"])
+        assertEquals(1, requestCounts["/primaries/prim-2/suggestions"])
+    }
+
+    @Test
+    fun getBrowseAll_usesBrowseEndpoint_andIsolatesPrimaryCaches() = runTest {
+        val requestCounts = mutableMapOf<String, Int>()
+        val engine = MockEngine { request ->
+            val path = request.url.encodedPath
+            requestCounts[path] = (requestCounts[path] ?: 0) + 1
+            val response = when (path) {
+                "/primaries/prim-1/browse-all" ->
+                    """[{"candidate_id":"browse-a","candidate_name":"Account A","is_matching":true}]"""
+                "/primaries/prim-2/browse-all" ->
+                    """[{"candidate_id":"browse-b","candidate_name":"Account B","is_matching":false}]"""
+                else -> error("Unexpected request path: $path")
+            }
+            respond(
+                response,
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val apiClient = ApiClient(engine = HttpClient(engine), baseUrl = "https://example.test")
+        val repo = SuggestionsRepository(SuggestionsApi(apiClient), BufferApi(apiClient), ApiCache())
+
+        val accountA = repo.getBrowseAll("prim-1")
+        val accountB = repo.getBrowseAll("prim-2")
+        val accountAAgain = repo.getBrowseAll("prim-1")
+
+        assertEquals(listOf("browse-a"), accountA.map { it.candidateId })
+        assertEquals(true, accountA.single().isMatching)
+        assertEquals(listOf("browse-b"), accountB.map { it.candidateId })
+        assertEquals(false, accountB.single().isMatching)
+        assertEquals(listOf("browse-a"), accountAAgain.map { it.candidateId })
+        assertEquals(1, requestCounts["/primaries/prim-1/browse-all"])
+        assertEquals(1, requestCounts["/primaries/prim-2/browse-all"])
+    }
+
+    @Test
     fun act_invalidatesSuggestionsCache_soNextGetRefetches() = runTest {
         var suggestionsRequests = 0
         var actRequests = 0

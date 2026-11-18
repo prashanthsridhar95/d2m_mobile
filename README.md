@@ -43,6 +43,12 @@ with Xcode 26 and JDK 21:
 ./gradlew :composeApp:iosSimulatorArm64Test    # the same commonTest suite, on iOS
 ```
 
+The `ios-simulator` job in `.github/workflows/ci.yml` runs the iOS shared/UI
+tests on the Apple Silicon `macos-15` runner, then builds, installs and
+launches the app on an iPhone 17 Pro simulator (Xcode 26.3 / iOS 26.2).
+Physical-device-only behavior is not covered by this hosted job; see
+`iosApp/README.md`.
+
 For the iOS app itself, `iosApp/` now contains a real generated Xcode
 project and a resolved CocoaPods workspace -- see `iosApp/README.md`. It has
 been built and launched on an iPhone simulator, and also builds for a real

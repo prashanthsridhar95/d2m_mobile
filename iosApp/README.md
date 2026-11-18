@@ -135,6 +135,12 @@ Signal Protocol crypto, the Archive Keypair crypto, and the CommonCrypto
 bindings behind both (RFC 7748, FIPS 180-4, NIST GCM and PBKDF2 vectors --
 see the root README's "Security" section).
 
+The `ios-simulator` CI job repeats the shared/UI tests and simulator
+build/install/launch on GitHub's Apple Silicon `macos-15` runner, using
+Xcode 26.3 and the iOS 26.2 simulator runtime. It uploads the test reports
+and build/launch logs. A CI workflow definition is not itself a passing run;
+check the job result for the commit being reviewed.
+
 **Not verified, and needs a real device:** `IosCallKitBridge.kt` remains the
 riskiest file here for the reason its own doc comment gives (PushKit/CallKit
 Objective-C delegate-to-Kotlin/Native signature mapping), with
