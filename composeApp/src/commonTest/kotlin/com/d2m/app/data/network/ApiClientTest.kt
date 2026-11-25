@@ -130,6 +130,50 @@ class ApiClientTest {
         assertEquals(false, signalled)
     }
 
+    @Test
+    fun authenticatedRequestAttachesBearerToken() = runTest {
+        var authorization: String? = null
+        val engine = MockEngine { request ->
+            authorization = request.headers[HttpHeaders.Authorization]
+            respond("""{"ok":true}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val store = com.d2m.app.data.session.IdentityStore(com.russhwolf.settings.MapSettings())
+        store.setWedlockTokens("access-one", "refresh-one")
+        val client = ApiClient(HttpClient(engine), "https://example.test", store)
+
+        client.get<Ping>("/me")
+
+        assertEquals("Bearer access-one", authorization)
+    }
+
+    @Test
+    fun unauthorizedRequestRefreshesOnceAndRetriesWithNewBearer() = runTest {
+        val authorizations = mutableListOf<String?>()
+        val engine = MockEngine { request ->
+            authorizations += request.headers[HttpHeaders.Authorization]
+            if (authorizations.size == 1) {
+                respond("""{"detail":"expired"}""", HttpStatusCode.Unauthorized, headersOf(HttpHeaders.ContentType, "application/json"))
+            } else {
+                respond("""{"ok":true}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            }
+        }
+        val store = com.d2m.app.data.session.IdentityStore(com.russhwolf.settings.MapSettings())
+        store.setWedlockTokens("stale-access", "refresh-one")
+        val client = ApiClient(HttpClient(engine), "https://example.test", store)
+        var refreshCalls = 0
+        client.tokenRefresher = { refresh ->
+            refreshCalls++
+            assertEquals("refresh-one", refresh)
+            WedLockTokenPair("fresh-access", "refresh-two")
+        }
+
+        assertEquals(true, client.get<Ping>("/me").ok)
+        assertEquals(1, refreshCalls)
+        assertEquals(listOf("Bearer stale-access", "Bearer fresh-access"), authorizations)
+        assertEquals("fresh-access", store.identity.value.wedlockAccessToken)
+        assertEquals("refresh-two", store.identity.value.wedlockRefreshToken)
+    }
+
     // ---- error copy ------------------------------------------------------------------------------------------------
 
     @Test

@@ -4,6 +4,7 @@ import com.d2m.app.AppForegroundState
 import com.d2m.app.data.local.ChatLocalStore
 import com.d2m.app.data.session.IdentityStore
 import com.d2m.app.messaging.crypto.CryptoProvider
+import com.d2m.app.messaging.crypto.AttachmentCrypto
 import com.d2m.app.messaging.crypto.archive.ArchiveManager
 import com.d2m.app.messaging.crypto.archive.ArchivePrompt
 import com.d2m.app.messaging.protocol.CallSignal
@@ -17,6 +18,7 @@ import com.d2m.app.messaging.protocol.messagingProtocolJson
 import com.d2m.app.messaging.transport.MessagingWsClient
 import com.d2m.app.messaging.transport.WS_CLOSE_DEVICE_REMOVED
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -145,6 +147,7 @@ class MessagingRepository(
     private val identityStore: IdentityStore,
     private val archiveManager: ArchiveManager,
     private val localStore: ChatLocalStore,
+    private val attachmentCrypto: AttachmentCrypto,
 ) {
     init {
         // Wired once here rather than per-restore -- see ArchiveManager.restoreFromArchive's
@@ -666,7 +669,7 @@ class MessagingRepository(
         sendTextInternal(messageId, me, peerUsername, message.text, message.replyTo)
     }
 
-    /** Uploads `bytes` to the messaging server's blob store and sends a media chat message. See this class's doc comment: bytes travel un-encrypted today (stub crypto) -- `MediaMeta.key`/`.iv` are placeholders, not real AES-GCM material, until a real CryptoProvider lands. */
+    /** Encrypts locally, uploads ciphertext only, and carries the AES key/IV inside the Signal-encrypted payload. */
     @OptIn(ExperimentalUuidApi::class)
     suspend fun sendMedia(peerD2mId: String, bytes: ByteArray, fileName: String, mime: String, kind: String, width: Int? = null, height: Int? = null, replyTo: ReplyContext? = null) {
         val me = myUsername ?: return
@@ -681,12 +684,13 @@ class MessagingRepository(
             ),
         )
         try {
+            val encrypted = attachmentCrypto.encrypt(bytes)
             val response = client.post("${MessagingConfig.httpBaseUrl}/media") {
                 // the server gates uploads on the bride-controlled media permission, so it must know both participants
                 parameter("from", me)
                 parameter("to", peerUsername)
                 contentType(ContentType.Application.OctetStream)
-                setBody(bytes)
+                setBody(encrypted.ciphertext)
             }
             val responseBody = response.bodyAsText()
             if (response.status.value !in 200..299) {
@@ -696,7 +700,7 @@ class MessagingRepository(
                 error(serverError ?: "upload failed with HTTP ${response.status.value}")
             }
             val blobId = messagingProtocolJson.decodeFromString(UploadMediaResponse.serializer(), responseBody).id
-            val media = MediaMeta(blobId = blobId, key = "", iv = "", mime = mime, name = fileName, size = bytes.size.toLong(), kind = kind, width = width, height = height)
+            val media = MediaMeta(blobId = blobId, key = encrypted.keyBase64, iv = encrypted.ivBase64, mime = mime, name = fileName, size = bytes.size.toLong(), kind = kind, width = width, height = height)
             updateMessage(id) { it.copy(media = media, mediaUrl = mediaUrl(blobId), uploading = false, localBytesPreview = null) }
 
             val payload = ChatPayload.Media(media, replyTo = replyTo)
@@ -725,6 +729,15 @@ class MessagingRepository(
     }
 
     fun mediaUrl(blobId: String): String = "${MessagingConfig.httpBaseUrl}/media/${blobId}"
+
+    /** Downloads authenticated ciphertext and decrypts it only on this device. */
+    suspend fun downloadMediaBytes(media: MediaMeta): ByteArray {
+        require(media.key.isNotBlank() && media.iv.isNotBlank()) { "missing attachment encryption metadata" }
+        val client = httpClient ?: error("messaging is not connected")
+        val response = client.get(mediaUrl(media.blobId))
+        if (response.status.value !in 200..299) error("attachment download failed with HTTP ${response.status.value}")
+        return attachmentCrypto.decrypt(response.body(), media.key, media.iv)
+    }
 
     @OptIn(ExperimentalUuidApi::class)
     suspend fun editMessage(peerD2mId: String, messageId: String, newText: String) {
