@@ -36,6 +36,7 @@ import com.d2m.app.ui.screens.entry.LoginScreen
 import com.d2m.app.ui.screens.entry.RolePickerScreen
 import com.d2m.app.ui.screens.onboarding.HandoffScreen
 import com.d2m.app.ui.screens.onboarding.OnboardingWizardScreen
+import com.d2m.app.ui.screens.parent.MatchCheckScreen
 import com.d2m.app.ui.screens.parent.ParentBrowseScreen
 import com.d2m.app.ui.screens.parent.ParentHomeScreen
 import com.d2m.app.ui.screens.parent.ParentMessagesScreen
@@ -152,8 +153,11 @@ fun D2MNavGraph(
                 onOpenChildProfileDialog = { navController.navigate(Routes.CHILD_PROFILE_DIALOG) },
                 onOpenMessages = { navController.navigate(Routes.PARENT_MESSAGES) },
                 onOpenChecklist = { navController.navigate(Routes.WEDDING_CHECKLIST) },
+                onOpenMatchCheck = { navController.navigate(Routes.MATCH_CHECK) },
             )
         }
+
+        d2mComposable(Routes.MATCH_CHECK) { MatchCheckScreen() }
 
         d2mComposable(Routes.PARENT_BROWSE) {
             ParentBrowseScreen(onOpenProfile = { candidateId -> navController.navigate(Routes.profileDetail(candidateId)) })

@@ -24,6 +24,7 @@ object Routes {
     const val PARENT_HOME = "parent/home"
     const val PARENT_BROWSE = "parent/browse"
     const val PARENT_MESSAGES = "parent/messages"
+    const val MATCH_CHECK = "parent/match-check"
 
     const val CHILD_HOME = "child/home"
     const val DISCOVERY = "child/discover"

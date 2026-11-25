@@ -379,7 +379,7 @@ fun ScreenHeader(
 val BackBarRoutes: Set<String> = setOf(
     Routes.SETTINGS, Routes.TRUST, Routes.IDENTITY_VERIFICATION, Routes.CHILD_PROFILE_DIALOG,
     Routes.SUCCESS_GALLERY, Routes.ADMIN_GALLERY_MODERATION, Routes.PANCHANGAM_CALENDAR,
-    Routes.SHARE_LINKS, Routes.PARENT_MESSAGES, Routes.NOTIFICATIONS,
+    Routes.SHARE_LINKS, Routes.PARENT_MESSAGES, Routes.NOTIFICATIONS, Routes.MATCH_CHECK,
 )
 
 /** A 56dp bar holding one 48dp back button (arrow mirrors for RTL). Sits on the page ground, no divider, so the screen's own title follows naturally. */

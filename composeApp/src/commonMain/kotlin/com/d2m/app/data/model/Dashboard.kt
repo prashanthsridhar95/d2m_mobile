@@ -55,3 +55,62 @@ data class SponsorDashboardOut(
     val suggestionsSentCount: Int,
     val weddingMode: Boolean = false,
 )
+
+/** Mirrors app/schemas.py's ParentMatchCheckIn -- POST /sponsors/{id}/match-check. Never stored server-side. */
+@Serializable
+data class ParentMatchCheckIn(
+    val name: String?,
+    val dob: String,
+    val tob: String,
+    val birthPlace: String,
+    val birthLat: Double,
+    val birthLon: Double,
+    val birthTzOffsetHours: Double,
+    val maritalStatus: String,
+    val religion: String?,
+    val casteCommunity: String?,
+    val highestEducation: String?,
+    val incomeBand: String?,
+    val professionTier: String?,
+    val tobIsExact: Boolean,
+)
+
+@Serializable
+data class MatchCheckDosha(val name: String, val cancelled: Boolean = false)
+
+@Serializable
+data class MatchCheckAstrology(
+    val score: Double,
+    val tier: String,
+    val confidence: String? = null,
+    val dealbreakers: List<String> = emptyList(),
+    val doshas: List<MatchCheckDosha> = emptyList(),
+    val parts: Map<String, Double>? = null,
+)
+
+@Serializable
+data class MatchCheckHardCheck(val key: String, val label: String, val ok: Boolean)
+
+@Serializable
+data class MatchCheckScores(val community: Double, val childPreferences: Double, val parentPreferences: Double)
+
+@Serializable
+data class MatchCheckPreferences(
+    val hardChecks: List<MatchCheckHardCheck> = emptyList(),
+    val hardRequirementsMet: Boolean,
+    val scores: MatchCheckScores,
+    val notProvided: List<String> = emptyList(),
+)
+
+/** Mirrors ParentMatchCheckOut. */
+@Serializable
+data class ParentMatchCheckOut(
+    val childId: String,
+    val candidateName: String? = null,
+    val candidateAge: Int,
+    val verdict: String,
+    val compositeScore: Double,
+    val astrology: MatchCheckAstrology,
+    val preferences: MatchCheckPreferences,
+    val stored: Boolean = false,
+)

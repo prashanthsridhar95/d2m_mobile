@@ -16,6 +16,10 @@ class DashboardApi(private val api: ApiClient) {
 
     suspend fun getSponsorDashboard(sponsorId: String): SponsorDashboardOut =
         api.get("/sponsors/$sponsorId/dashboard")
+
+    /** Parent "Check a match": stateless -- nothing about the uploaded person is stored. */
+    suspend fun checkMatch(sponsorId: String, body: ParentMatchCheckIn): ParentMatchCheckOut =
+        api.post("/sponsors/$sponsorId/match-check", body)
 }
 
 /** Mirrors app/routers/panchangam.py. */

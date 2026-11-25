@@ -121,6 +121,7 @@ fun ParentHomeScreen(
     onOpenChildProfileDialog: () -> Unit,
     onOpenMessages: () -> Unit,
     onOpenChecklist: () -> Unit = {},
+    onOpenMatchCheck: () -> Unit = {},
 ) {
     val identityStore: IdentityStore = koinInject()
     val dashboardRepo: DashboardRepository = koinInject()
@@ -256,6 +257,9 @@ fun ParentHomeScreen(
                                 strings = strings,
                                 onClick = onOpenChildProfileDialog,
                             )
+                        }
+                        item(key = "match-check", contentType = "action") {
+                            D2MButton("Check a match", onOpenMatchCheck, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
                         }
                         if (refreshError != null) {
                             item(key = "refresh-error", contentType = "state") { D2MErrorBanner(refreshError!!) }

@@ -31,6 +31,10 @@ class DashboardRepository(
         if (forceRefresh) cache.invalidateKey(key)
         return cache.get(key, ttlMillis = 30_000) { api.getSponsorDashboard(sponsorId) }.value
     }
+
+    /** Never cached: the result describes a third party we do not store anything about. */
+    suspend fun checkMatch(sponsorId: String, body: ParentMatchCheckIn): ParentMatchCheckOut =
+        api.checkMatch(sponsorId, body)
 }
 
 class PanchangamRepository(
