@@ -263,7 +263,7 @@ fun ProfileCardContent(
                     )
                     if (!isSelf && card.doshaFlags.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            card.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
+                            card.doshaFlags.forEach { D2MBadge(doshaFlagLabel(it, LocalStrings.current.sharedComponents), D2MBadgeTone.WARNING) }
                         }
                     }
 

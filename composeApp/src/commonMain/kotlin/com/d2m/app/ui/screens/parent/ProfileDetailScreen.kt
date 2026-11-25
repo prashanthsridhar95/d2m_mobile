@@ -423,7 +423,7 @@ fun ProfileDetailScreen(candidateId: String, onBack: () -> Unit, onOpenMessages:
                                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         if (c.doshaFlags.isNotEmpty()) {
                                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                c.doshaFlags.forEach { D2MBadge(it, D2MBadgeTone.WARNING) }
+                                                c.doshaFlags.forEach { D2MBadge(com.d2m.app.ui.components.doshaFlagLabel(it, LocalStrings.current.sharedComponents), D2MBadgeTone.WARNING) }
                                             }
                                         }
                                         if (badges != null) {

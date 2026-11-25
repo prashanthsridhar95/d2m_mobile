@@ -56,6 +56,10 @@ interface SharedComponentsStrings {
     val noLongerAvailable: String
     fun doshaFlagsNoted(count: Int): String
     fun doshaFlags(count: Int): String
+    // labels for the dosha/flag codes the engine can return (see doshaFlagLabel)
+    val flagKpGateFail: String
+    val flagNadiDosha: String
+    val flagMangalMismatch: String
     val confirmYourPassword: String
     val reenterPasswordBody: String
     val passwordLabel: String
@@ -188,6 +192,9 @@ object SharedComponentsStringsEn : SharedComponentsStrings {
     override val noLongerAvailable = "No longer available — they've gone Serious with someone else"
     override fun doshaFlagsNoted(count: Int) = "$count dosha flag${if (count > 1) "s" else ""} noted"
     override fun doshaFlags(count: Int) = "$count dosha flag${if (count > 1) "s" else ""}"
+    override val flagKpGateFail = "Birth chart doesn't indicate marriage"
+    override val flagNadiDosha = "Nadi dosha"
+    override val flagMangalMismatch = "Mangal dosha mismatch"
     override val confirmYourPassword = "Confirm your password"
     override val reenterPasswordBody = "For your security, re-enter your password to continue with this action."
     override val passwordLabel = "Password"
@@ -316,6 +323,9 @@ object SharedComponentsStringsHi : SharedComponentsStrings {
     override val noLongerAvailable = "अब उपलब्ध नहीं है — वे किसी और के साथ Serious Mode में चले गए हैं"
     override fun doshaFlagsNoted(count: Int) = "$count दोष चिह्नित"
     override fun doshaFlags(count: Int) = "$count दोष"
+    override val flagKpGateFail = "जन्म कुंडली में विवाह का संकेत नहीं"
+    override val flagNadiDosha = "नाड़ी दोष"
+    override val flagMangalMismatch = "मंगल दोष असंतुलन"
     override val confirmYourPassword = "अपने पासवर्ड की पुष्टि करें"
     override val reenterPasswordBody = "अपनी सुरक्षा के लिए, इस कार्रवाई को जारी रखने के लिए अपना पासवर्ड फिर से डालें।"
     override val passwordLabel = "पासवर्ड"
@@ -444,6 +454,9 @@ object SharedComponentsStringsTa : SharedComponentsStrings {
     override val noLongerAvailable = "இனி கிடைக்கவில்லை — அவர்கள் வேறு ஒருவருடன் Serious Mode-க்குச் சென்றுவிட்டனர்"
     override fun doshaFlagsNoted(count: Int) = "$count தோஷக் குறிகள் குறிக்கப்பட்டன"
     override fun doshaFlags(count: Int) = "$count தோஷக் குறிகள்"
+    override val flagKpGateFail = "ஜாதகத்தில் திருமண அறிகுறி இல்லை"
+    override val flagNadiDosha = "நாடி தோஷம்"
+    override val flagMangalMismatch = "செவ்வாய் தோஷ ஏற்றத்தாழ்வு"
     override val confirmYourPassword = "உங்கள் கடவுச்சொல்லை உறுதிப்படுத்தவும்"
     override val reenterPasswordBody = "உங்கள் பாதுகாப்பிற்காக, இந்தச் செயலைத் தொடர உங்கள் கடவுச்சொல்லை மீண்டும் உள்ளிடவும்."
     override val passwordLabel = "கடவுச்சொல்"

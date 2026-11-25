@@ -30,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.d2m.app.data.model.LagnaAnswers
+import com.d2m.app.data.model.LagnaDeduceOut
 import com.d2m.app.data.model.SponsorCreateRequest
 import com.d2m.app.domain.repository.IdentityRepository
 import com.d2m.app.ui.components.*
@@ -63,6 +65,9 @@ private data class WizardForm(
     val childSeekingGender: String = "male",
     val childDob: String = "",
     val childTob: String = "",
+    // time of birth unknown -> Nashta Jataka questionnaire; the answers (sensitive) are never put in saved draft state
+    val tobUnknown: Boolean = false,
+    val lagnaAnswers: LagnaAnswers = LagnaAnswers(),
     val childBirthPlace: String = "",
     val childBirthLat: Double = 0.0,
     val childBirthLon: Double = 0.0,
@@ -84,7 +89,7 @@ private data class WizardForm(
  * most sensitive fields never sit in saved instance state -- the user re-enters those two after a process kill.
  */
 private val WizardFormSaver: Saver<WizardForm, String> = Saver(
-    save = { Json.encodeToString(WizardForm.serializer(), it.copy(childDob = "", childTob = "")) },
+    save = { Json.encodeToString(WizardForm.serializer(), it.copy(childDob = "", childTob = "", lagnaAnswers = LagnaAnswers())) },
     restore = { runCatching { Json.decodeFromString(WizardForm.serializer(), it) }.getOrNull() },
 )
 
@@ -99,6 +104,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
     var form by rememberSaveable(stateSaver = WizardFormSaver) { mutableStateOf(WizardForm()) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var lagnaResult by remember { mutableStateOf<LagnaDeduceOut?>(null) }
     val totalSteps = 5
     val strings = LocalStrings.current.onboarding
     val locale = LocalAppLocale.current
@@ -155,7 +161,10 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                     2 -> {
                         SectionHeading(strings.whenWasSheBorn)
                         D2MTextField(strings.dateLabel, form.childDob, { update { copy(childDob = it) } })
-                        D2MTextField(strings.timeLabel, form.childTob, { update { copy(childTob = it) } })
+                        D2MCheckboxRow(strings.tobUnknownLabel, form.tobUnknown, { update { copy(tobUnknown = it, childTob = if (it) "" else childTob) }; lagnaResult = null })
+                        if (!form.tobUnknown) {
+                            D2MTextField(strings.timeLabel, form.childTob, { update { copy(childTob = it) } })
+                        }
                         CityAutocomplete(
                             label = strings.birthPlace,
                             value = form.childBirthPlace,
@@ -165,6 +174,19 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                         )
                         if (form.childBirthLat == 0.0 && form.childBirthLon == 0.0 && form.childBirthPlace.isNotBlank()) {
                             Text(strings.noCoordinatesWarning, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+                        }
+                        if (form.tobUnknown) {
+                            Text(strings.tobUnknownHint, style = MaterialTheme.typography.bodySmall, color = d2m.meta)
+                            if (form.childDob.isBlank() || (form.childBirthLat == 0.0 && form.childBirthLon == 0.0)) {
+                                Text(strings.lagnaNeedDatePlace, style = MaterialTheme.typography.bodySmall, color = mutedText(0.55f))
+                            } else {
+                                LagnaQuestionnaire(
+                                    dob = form.childDob, lat = form.childBirthLat, lon = form.childBirthLon,
+                                    tzOffsetHours = form.childBirthTzOffsetHours,
+                                    answers = form.lagnaAnswers, onAnswers = { a -> update { copy(lagnaAnswers = a) } },
+                                    result = lagnaResult, onResult = { lagnaResult = it },
+                                )
+                            }
                         }
                     }
                     3 -> {
@@ -184,7 +206,9 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                         listOf(
                             strings.name to form.childName,
                             strings.gender to Taxonomy.toLabel(form.childGender, locale),
-                            strings.reviewBorn to "${form.childDob} ${form.childTob}",
+                            strings.reviewBorn to if (form.tobUnknown) {
+                                "${form.childDob} · " + (lagnaResult?.provisionalTob?.let { strings.reviewTobDeduced(it) } ?: strings.reviewTobRough)
+                            } else "${form.childDob} ${form.childTob}",
                             strings.birthPlace to form.childBirthPlace,
                             strings.religion to form.ownReligion,
                             strings.yourCommunity to Taxonomy.toLabel(form.ownCasteCommunity, locale),
@@ -237,7 +261,8 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                                         childGender = form.childGender,
                                         childSeekingGender = form.childSeekingGender,
                                         childDob = form.childDob,
-                                        childTob = form.childTob,
+                                        childTob = if (form.tobUnknown) null else form.childTob,
+                                        lagnaAnswers = if (form.tobUnknown) form.lagnaAnswers else null,
                                         childBirthPlace = form.childBirthPlace,
                                         childBirthLat = form.childBirthLat,
                                         childBirthLon = form.childBirthLon,
@@ -252,6 +277,7 @@ fun OnboardingWizardScreen(onComplete: () -> Unit) {
                                     )
                                     // Success: drop the draft so a second visit starts clean.
                                     form = WizardForm()
+                                    lagnaResult = null
                                     step = 0
                                     onComplete()
                                 } catch (e: Exception) {

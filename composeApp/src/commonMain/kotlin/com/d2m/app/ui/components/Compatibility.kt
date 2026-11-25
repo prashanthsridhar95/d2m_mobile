@@ -117,6 +117,14 @@ fun levelLabel(level: String, strings: SharedComponentsStrings): String = when (
     else -> strings.compatLow
 }
 
+/** Display label for an engine flag code; unknown codes fall back to a readable form of the code. */
+fun doshaFlagLabel(code: String, strings: SharedComponentsStrings): String = when (code) {
+    "kp_gate_fail" -> strings.flagKpGateFail
+    "nadi_dosha" -> strings.flagNadiDosha
+    "mangal_dosha_mismatch" -> strings.flagMangalMismatch
+    else -> code.replace('_', ' ')
+}
+
 private fun toneForLevel(level: String): D2MBadgeTone = when (level) {
     "Exceptional" -> D2MBadgeTone.SUCCESS
     "High" -> D2MBadgeTone.INFO

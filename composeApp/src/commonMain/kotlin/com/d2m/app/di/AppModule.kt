@@ -39,6 +39,7 @@ val appModule = module {
     single { WedLockApi(httpEngine()) }
 
     single { IdentityApi(get()) }
+    single { LagnaApi(get()) }
     // Forensic watermark audit ping (data/network/AuditApi.kt) -- consumed
     // by ui/components/WatermarkOverlay.kt.
     single { AuditApi(get(), get()) }

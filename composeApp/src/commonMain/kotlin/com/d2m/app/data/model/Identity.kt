@@ -44,7 +44,9 @@ data class SponsorCreateRequest(
     val childGender: String,
     val childSeekingGender: String,
     val childDob: String,
-    val childTob: String,
+    // null when the time of birth is unknown: the server then deduces one from lagnaAnswers (Nashta Jataka engine)
+    val childTob: String? = null,
+    val lagnaAnswers: LagnaAnswers? = null,
     val childBirthPlace: String,
     val childBirthLat: Double,
     val childBirthLon: Double,
@@ -137,6 +139,9 @@ data class PrimaryProfileOut(
     // PrimaryBasicDataIn -- these two are deliberately absent from it).
     val dob: String? = null,
     val tob: String? = null,
+    // EXACT | DEDUCED_LOCKED | DEDUCED_PROVISIONAL | ESTIMATED_NO_DATA -- how `tob` was obtained
+    val tobSource: String? = null,
+    val tobConfidence: Double? = null,
     // "Hide name" manual override + founding-member badge (reported
     // directly) -- see app/models/identity.py's Primary.hide_name_override/
     // founding_member on the backend. Defaulted so an older cached response

@@ -44,6 +44,30 @@ interface OnboardingStrings {
     val confirmProfile: String
     val errCouldntSaveProfile: String
 
+    // Unknown time of birth (Nashta Jataka lagna deduction)
+    val tobUnknownLabel: String
+    val tobUnknownHint: String
+    val lagnaNeedDatePlace: String
+    val lagnaIntro: String
+    val lagnaLoadingQuestions: String
+    val lagnaQuestionsFailed: String
+    val lagnaCheckFailed: String
+    val lagnaYes: String
+    val lagnaNo: String
+    val lagnaEventType: String
+    val lagnaEventYear: String
+    val lagnaEventMonth: String
+    val lagnaAddEvent: String
+    val lagnaRemove: String
+    val lagnaCheck: String
+    val lagnaChecking: String
+    val lagnaNoSignal: String
+    val lagnaHelpfulQuestions: String
+    val reviewTobRough: String
+    fun lagnaLocked(lagna: String, percent: Int, tob: String): String
+    fun lagnaProvisional(lagna: String, percent: Int, tob: String): String
+    fun reviewTobDeduced(tob: String): String
+
     // HandoffScreen
     val noInviteTitle: String
     val noInviteBody: String
@@ -124,6 +148,30 @@ object OnboardingStringsEn : OnboardingStrings {
     override val confirmProfile = "Confirm profile"
     override val errCouldntSaveProfile = "Couldn't save this profile."
 
+    // Unknown time of birth (Nashta Jataka lagna deduction)
+    override val tobUnknownLabel = "I don't know the exact time of birth"
+    override val tobUnknownHint = "No problem — a few simple questions about life and family can pin down the rising sign (lagna) and a likely birth time."
+    override val lagnaNeedDatePlace = "Enter the date and place of birth first, then answer a few questions here."
+    override val lagnaIntro = "Answer what you can; skip the rest. Nothing you answer here is saved — only the estimated time and how it was found."
+    override val lagnaLoadingQuestions = "Loading questions…"
+    override val lagnaQuestionsFailed = "Couldn't load the questions. Check your connection and try again, or go back and enter a time."
+    override val lagnaCheckFailed = "Couldn't check that just now. You can continue — we'll estimate again when you save."
+    override val lagnaYes = "Yes"
+    override val lagnaNo = "No"
+    override val lagnaEventType = "Life event"
+    override val lagnaEventYear = "Year"
+    override val lagnaEventMonth = "Month (optional)"
+    override val lagnaAddEvent = "Add event"
+    override val lagnaRemove = "Remove"
+    override val lagnaCheck = "See what this points to"
+    override val lagnaChecking = "Checking…"
+    override val lagnaNoSignal = "Not enough to pin down a birth time yet. We'll save a rough estimate — more answers help."
+    override val lagnaHelpfulQuestions = "Answering these would help most:"
+    override val reviewTobRough = "Not known — rough estimate"
+    override fun lagnaLocked(lagna: String, percent: Int, tob: String) = "Likely rising sign: $lagna ($percent% match), around $tob."
+    override fun lagnaProvisional(lagna: String, percent: Int, tob: String) = "Best estimate so far: $lagna rising ($percent% match), around $tob. More answers will firm it up."
+    override fun reviewTobDeduced(tob: String) = "About $tob (estimated)"
+
     override val noInviteTitle = "No invite to show"
     override val noInviteBody = "Start setup again to generate a new one."
     override fun sentTo(childName: String) = "Sent to $childName."
@@ -202,6 +250,30 @@ object OnboardingStringsHi : OnboardingStrings {
     override val confirmProfile = "प्रोफ़ाइल की पुष्टि करें"
     override val errCouldntSaveProfile = "यह प्रोफ़ाइल सेव नहीं हो सकी।"
 
+    // Unknown time of birth (Nashta Jataka lagna deduction)
+    override val tobUnknownLabel = "मुझे जन्म का सही समय नहीं पता"
+    override val tobUnknownHint = "कोई बात नहीं — जीवन और परिवार से जुड़े कुछ सरल प्रश्न लग्न और संभावित जन्म समय बताने में मदद करते हैं।"
+    override val lagnaNeedDatePlace = "पहले जन्म की तारीख और स्थान भरें, फिर यहाँ कुछ प्रश्नों के उत्तर दें।"
+    override val lagnaIntro = "जितना जानते हों उतना बताएं, बाकी छोड़ दें। यहाँ दिए उत्तर सहेजे नहीं जाते — केवल अनुमानित समय और उसका आधार सहेजा जाता है।"
+    override val lagnaLoadingQuestions = "प्रश्न लोड हो रहे हैं…"
+    override val lagnaQuestionsFailed = "प्रश्न लोड नहीं हो सके। कनेक्शन जांचें और फिर कोशिश करें, या वापस जाकर समय भरें।"
+    override val lagnaCheckFailed = "अभी जांच नहीं हो सकी। आप आगे बढ़ सकते हैं — सहेजते समय फिर अनुमान लगाया जाएगा।"
+    override val lagnaYes = "हां"
+    override val lagnaNo = "नहीं"
+    override val lagnaEventType = "जीवन की घटना"
+    override val lagnaEventYear = "वर्ष"
+    override val lagnaEventMonth = "माह (वैकल्पिक)"
+    override val lagnaAddEvent = "घटना जोड़ें"
+    override val lagnaRemove = "हटाएं"
+    override val lagnaCheck = "देखें यह क्या दर्शाता है"
+    override val lagnaChecking = "जांच हो रही है…"
+    override val lagnaNoSignal = "अभी जन्म समय तय करने के लिए पर्याप्त जानकारी नहीं है। हम मोटा अनुमान सहेज लेंगे — और उत्तर मदद करेंगे।"
+    override val lagnaHelpfulQuestions = "इनके उत्तर सबसे उपयोगी होंगे:"
+    override val reviewTobRough = "ज्ञात नहीं — मोटा अनुमान"
+    override fun lagnaLocked(lagna: String, percent: Int, tob: String) = "संभावित लग्न: $lagna ($percent% मेल), लगभग $tob।"
+    override fun lagnaProvisional(lagna: String, percent: Int, tob: String) = "अब तक का अनुमान: $lagna लग्न ($percent% मेल), लगभग $tob। और उत्तर इसे पक्का करेंगे।"
+    override fun reviewTobDeduced(tob: String) = "लगभग $tob (अनुमानित)"
+
     override val noInviteTitle = "दिखाने के लिए कोई इनवाइट नहीं"
     override val noInviteBody = "नया बनाने के लिए फिर से सेटअप शुरू करें।"
     override fun sentTo(childName: String) = "$childName को भेजा गया।"
@@ -279,6 +351,30 @@ object OnboardingStringsTa : OnboardingStrings {
     override val draftSaved = "வரைவு சேமிக்கப்பட்டது"
     override val confirmProfile = "சுயவிவரத்தை உறுதிப்படுத்தவும்"
     override val errCouldntSaveProfile = "இந்த சுயவிவரத்தைச் சேமிக்க முடியவில்லை."
+
+    // Unknown time of birth (Nashta Jataka lagna deduction)
+    override val tobUnknownLabel = "பிறந்த நேரம் சரியாகத் தெரியாது"
+    override val tobUnknownHint = "பரவாயில்லை — வாழ்க்கை மற்றும் குடும்பம் பற்றிய சில எளிய கேள்விகள் லக்னத்தையும் சாத்தியமான பிறந்த நேரத்தையும் கண்டறிய உதவும்."
+    override val lagnaNeedDatePlace = "முதலில் பிறந்த தேதி, இடத்தை உள்ளிடுங்கள்; பிறகு இங்கே சில கேள்விகளுக்குப் பதிலளியுங்கள்."
+    override val lagnaIntro = "தெரிந்ததை மட்டும் சொல்லுங்கள், மற்றவற்றை விட்டுவிடுங்கள். இங்கே தரும் பதில்கள் சேமிக்கப்படாது — கணிக்கப்பட்ட நேரமும் அது எப்படிக் கிடைத்தது என்பதும் மட்டுமே சேமிக்கப்படும்."
+    override val lagnaLoadingQuestions = "கேள்விகள் ஏற்றப்படுகின்றன…"
+    override val lagnaQuestionsFailed = "கேள்விகளை ஏற்ற முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள், அல்லது திரும்பிச் சென்று நேரத்தை உள்ளிடுங்கள்."
+    override val lagnaCheckFailed = "இப்போது சரிபார்க்க முடியவில்லை. தொடரலாம் — சேமிக்கும்போது மீண்டும் கணிக்கப்படும்."
+    override val lagnaYes = "ஆம்"
+    override val lagnaNo = "இல்லை"
+    override val lagnaEventType = "வாழ்க்கை நிகழ்வு"
+    override val lagnaEventYear = "ஆண்டு"
+    override val lagnaEventMonth = "மாதம் (விருப்பம்)"
+    override val lagnaAddEvent = "நிகழ்வைச் சேர்"
+    override val lagnaRemove = "நீக்கு"
+    override val lagnaCheck = "இது எதைக் காட்டுகிறது என்று பார்"
+    override val lagnaChecking = "சரிபார்க்கிறது…"
+    override val lagnaNoSignal = "பிறந்த நேரத்தை உறுதிசெய்ய இன்னும் போதிய தகவல் இல்லை. தோராயமான மதிப்பீட்டைச் சேமிப்போம் — மேலும் பதில்கள் உதவும்."
+    override val lagnaHelpfulQuestions = "இவற்றுக்குப் பதிலளித்தால் அதிகம் உதவும்:"
+    override val reviewTobRough = "தெரியாது — தோராய மதிப்பீடு"
+    override fun lagnaLocked(lagna: String, percent: Int, tob: String) = "சாத்தியமான லக்னம்: $lagna ($percent% பொருத்தம்), சுமார் $tob."
+    override fun lagnaProvisional(lagna: String, percent: Int, tob: String) = "இதுவரை சிறந்த மதிப்பீடு: $lagna லக்னம் ($percent% பொருத்தம்), சுமார் $tob. மேலும் பதில்கள் இதை உறுதிப்படுத்தும்."
+    override fun reviewTobDeduced(tob: String) = "சுமார் $tob (மதிப்பீடு)"
 
     override val noInviteTitle = "காட்ட அழைப்பு இல்லை"
     override val noInviteBody = "புதியதை உருவாக்க மீண்டும் அமைப்பைத் தொடங்கவும்."
