@@ -1,6 +1,7 @@
 package com.d2m.app.messaging.ui
 
 import com.d2m.app.platform.rememberReduceMotion
+import com.d2m.app.platform.openDocument
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -89,6 +90,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -146,6 +148,8 @@ import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TWO_PI = 6.283185307179586
 
@@ -582,6 +586,7 @@ fun ChatPane(
                                     onDeleteForEveryone = { scope.launch { messagingRepo.deleteForEveryone(peerId, m.id) }; menuForMessageId = null },
                                     onRetry = { scope.launch { messagingRepo.retryFailedMessage(peerId, m.id) } },
                                     onOpenMedia = { viewerTarget = it },
+                                    loadMedia = { messagingRepo.downloadMediaBytes(it) },
                                     onReport = { reportTarget = m; menuForMessageId = null },
                                 )
                             }
@@ -1023,7 +1028,7 @@ private fun VideoBubblePlaceholder(durationSec: Int?, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalEncodingApi::class)
 @Composable
 private fun MessageRow(
     message: ChatMessage,
@@ -1040,9 +1045,11 @@ private fun MessageRow(
     onDeleteForEveryone: () -> Unit,
     onRetry: () -> Unit,
     onOpenMedia: (MediaViewerTarget) -> Unit,
+    loadMedia: suspend (com.d2m.app.messaging.protocol.MediaMeta) -> ByteArray,
     onReport: () -> Unit,
 ) {
     val messagingStrings = LocalStrings.current.messaging
+    val mediaScope = rememberCoroutineScope()
     Column(modifier = modifier.fillMaxWidth()) {
         // BoxWithConstraints (not a fixed dp cap) to match d2m_web's
         // MessageBubble.jsx exactly -- web caps a bubble at `max-width: 72%`
@@ -1302,6 +1309,13 @@ private fun MessageRow(
                                 }
                                 else -> {
                                     if (message.media != null && message.mediaUrl != null) {
+                                        val media = message.media
+                                        val decryptedUrl by produceState<String?>(initialValue = null, media.blobId, media.key, media.iv) {
+                                            value = runCatching {
+                                                val encoded = Base64.Default.encode(loadMedia(media))
+                                                "data:${media.mime};base64,$encoded"
+                                            }.getOrNull()
+                                        }
                                         // "GIF sent/received should be autoplaying in the
                                         // bubble atleast for 2-3 times. When tapped on the
                                         // bubble, it should play again for 2-3 times."
@@ -1315,7 +1329,8 @@ private fun MessageRow(
                                         // already the correct, previously-requested tap
                                         // affordance for this specific media type.
                                         when {
-                                            message.media.mime == "image/gif" -> GifBubbleImage(url = message.mediaUrl, contentDescription = message.media.name)
+                                            decryptedUrl == null -> Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) { LinearProgressIndicator(modifier = Modifier.width(96.dp)) }
+                                            media.mime == "image/gif" -> GifBubbleImage(url = decryptedUrl!!, contentDescription = media.name)
                                             // "always the media bubble size is a defined
                                             // height & width... provide a image & video
                                             // viewer" -- video attachments previously fell
@@ -1326,14 +1341,24 @@ private fun MessageRow(
                                             // this app today), so this is a fixed dark
                                             // placeholder + play affordance -- tapping opens
                                             // the real in-app player full-screen.
-                                            message.media.kind == "video" -> VideoBubblePlaceholder(
-                                                durationSec = message.media.duration,
-                                                onClick = { onOpenMedia(MediaViewerTarget.Video(message.mediaUrl)) },
+                                            media.kind == "video" -> VideoBubblePlaceholder(
+                                                durationSec = media.duration,
+                                                onClick = { onOpenMedia(MediaViewerTarget.Video(decryptedUrl!!)) },
                                             )
+                                            media.kind == "audio" || media.kind == "file" -> Row(
+                                                modifier = Modifier.clickable {
+                                                    mediaScope.launch { openDocument(media.name, media.mime, loadMedia(media)) }
+                                                }.padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                Icon(Icons.Filled.AttachFile, contentDescription = null)
+                                                Text(media.name, style = MaterialTheme.typography.bodyMedium)
+                                            }
                                             else -> ChatImageBubble(
-                                                url = message.mediaUrl,
-                                                contentDescription = message.media.name,
-                                                onClick = { onOpenMedia(MediaViewerTarget.Image(message.mediaUrl, message.media.name)) },
+                                                url = decryptedUrl!!,
+                                                contentDescription = media.name,
+                                                onClick = { onOpenMedia(MediaViewerTarget.Image(decryptedUrl!!, media.name)) },
                                             )
                                         }
                                     }

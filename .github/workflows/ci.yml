@@ -9,6 +9,7 @@ on:
 jobs:
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +43,18 @@ jobs:
       # simulator task, which runs in the dedicated job below.
       - name: Run unit tests
         run: ./gradlew :composeApp:testDebugUnitTest
+
+      - name: Upload Android build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-ci-evidence
+          path: |
+            composeApp/build/outputs/apk/debug/
+            composeApp/build/reports/tests/testDebugUnitTest/
+            composeApp/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
 
   ios-simulator:
     # macos-15 is the Apple Silicon runner needed by iosSimulatorArm64.

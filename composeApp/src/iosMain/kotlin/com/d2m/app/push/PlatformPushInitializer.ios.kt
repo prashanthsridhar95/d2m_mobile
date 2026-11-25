@@ -19,10 +19,9 @@ import platform.UserNotifications.UNUserNotificationCenter
  * Requests notification permission and registers for remote notifications.
  * The actual APNs device token only arrives via
  * UIApplicationDelegate.application(_:didRegisterForRemoteNotificationsWithDeviceToken:)
- * on the Swift/iosApp side (no Kotlin-reachable callback for this without
- * more AppDelegate wiring than fits this pass) -- see iosApp/README.md for
- * the hand-off point: that delegate method needs to call back into
- * PushTokenRegistrar.registerCurrentToken("apns", tokenHex) once implemented.
+ * on the Swift/iosApp side. iOSApp.swift forwards that token to
+ * IosPushBridge.registerPushToken("apns", tokenHex), which persists it through
+ * the authenticated backend registration endpoint.
  */
 actual class PlatformPushInitializer {
     actual fun initialize() {
