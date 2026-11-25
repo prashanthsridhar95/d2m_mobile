@@ -259,7 +259,7 @@ fun ParentHomeScreen(
                             )
                         }
                         item(key = "match-check", contentType = "action") {
-                            D2MButton("Check a match", onOpenMatchCheck, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
+                            D2MButton(LocalStrings.current.matchCheck.entry, onOpenMatchCheck, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
                         }
                         if (refreshError != null) {
                             item(key = "refresh-error", contentType = "state") { D2MErrorBanner(refreshError!!) }

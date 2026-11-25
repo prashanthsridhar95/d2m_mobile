@@ -40,6 +40,7 @@ interface AppStrings {
     val parity: ParityStrings
     val sharedComponents: SharedComponentsStrings
     val wedding: WeddingStrings
+    val matchCheck: MatchCheckStrings
 }
 
 object EnStrings : AppStrings {
@@ -64,6 +65,7 @@ object EnStrings : AppStrings {
     override val parity = ParityStringsEn
     override val sharedComponents = SharedComponentsStringsEn
     override val wedding = WeddingStringsEn
+    override val matchCheck = MatchCheckStringsEn
 }
 
 object HiStrings : AppStrings {
@@ -88,6 +90,7 @@ object HiStrings : AppStrings {
     override val parity = ParityStringsHi
     override val sharedComponents = SharedComponentsStringsHi
     override val wedding = WeddingStringsHi
+    override val matchCheck = MatchCheckStringsHi
 }
 
 object TaStrings : AppStrings {
@@ -112,6 +115,7 @@ object TaStrings : AppStrings {
     override val parity = ParityStringsTa
     override val sharedComponents = SharedComponentsStringsTa
     override val wedding = WeddingStringsTa
+    override val matchCheck = MatchCheckStringsTa
 }
 
 fun stringsFor(locale: AppLocale): AppStrings = when (locale) {

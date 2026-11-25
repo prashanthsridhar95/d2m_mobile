@@ -8,7 +8,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,11 +47,17 @@ import com.d2m.app.ui.components.PageTitle
 import com.d2m.app.ui.components.SectionHeading
 import com.d2m.app.ui.components.Taxonomy
 import com.d2m.app.ui.strings.LocalAppLocale
+import com.d2m.app.ui.strings.LocalStrings
+import com.d2m.app.ui.strings.MatchCheckStrings
 import com.d2m.app.ui.theme.mutedText
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toInstant
 import org.koin.compose.koinInject
@@ -61,16 +75,7 @@ private data class MatchForm(
     val education: String = "", val income: String = "", val profession: String = "",
 )
 
-private val VERDICTS = mapOf(
-    "strong_fit" to "Strong fit", "worth_exploring" to "Worth exploring",
-    "needs_discussion" to "Needs discussion", "not_recommended" to "Not recommended",
-)
-private val TIERS = mapOf(
-    "TIER_1_PRIME_ALIGN" to "Prime alignment", "TIER_2_STRONG_POTENTIAL" to "Strong potential",
-    "TIER_3_TIMING_OR_RECIPROCITY_GATED" to "Promising, timing-dependent",
-    "TIER_4_LOW_ALIGNMENT" to "Low alignment", "DORMANT_BLOCKED" to "Blocked",
-)
-private val PARTS = listOf("kp_core" to "KP core", "structural" to "Structural", "synastry" to "Synastry", "timing" to "Timing")
+private val PART_KEYS = listOf("kp_core", "structural", "synastry", "timing")
 
 /** UTC offset (hours) the zone had at that local birth moment, or null while the inputs are incomplete/invalid. */
 private fun offsetHoursAt(tz: String?, dob: String, tob: String): Double? = runCatching {
@@ -82,6 +87,54 @@ private fun offsetHoursAt(tz: String?, dob: String, tob: String): Double? = runC
 private fun ageOk(dob: String) = Regex("""\d{4}-\d{2}-\d{2}""").matches(dob)
 private fun timeOk(tob: String) = Regex("""\d{2}:\d{2}""").matches(tob)
 
+/** Tap-to-pick date (stored as YYYY-MM-DD). Past dates only. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerField(label: String, value: String, strings: MatchCheckStrings, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    D2MButton("$label: ${value.ifEmpty { strings.selectDate }}", { open = true }, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
+    if (open) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = runCatching { LocalDate.parse(value).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds() }.getOrNull(),
+            yearRange = 1925..Clock.System.now().toString().take(4).toInt(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onPick(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date.toString()) }
+                    open = false
+                }) { Text(strings.ok) }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text(strings.cancel) } },
+        ) { DatePicker(state) }
+    }
+}
+
+/** Tap-to-pick 24h time (stored as HH:MM). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePickerField(label: String, value: String, strings: MatchCheckStrings, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    D2MButton("$label: ${value.ifEmpty { strings.selectTime }}", { open = true }, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
+    if (open) {
+        val state = rememberTimePickerState(
+            initialHour = value.take(2).toIntOrNull() ?: 12, initialMinute = value.drop(3).take(2).toIntOrNull() ?: 0, is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onPick(state.hour.toString().padStart(2, '0') + ":" + state.minute.toString().padStart(2, '0'))
+                    open = false
+                }) { Text(strings.ok) }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text(strings.cancel) } },
+            text = { TimePicker(state) },
+        )
+    }
+}
+
 @Composable
 fun MatchCheckScreen() {
     val identityStore: IdentityStore = koinInject()
@@ -89,6 +142,7 @@ fun MatchCheckScreen() {
     val geocodingApi: GeocodingApi = koinInject()
     val identity by identityStore.identity.collectAsState()
     val locale = LocalAppLocale.current
+    val strings = LocalStrings.current.matchCheck
     val scope = rememberCoroutineScope()
 
     var form by remember { mutableStateOf(MatchForm()) }
@@ -126,37 +180,34 @@ fun MatchCheckScreen() {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        PageTitle("Check a match")
+        PageTitle(strings.title)
         error?.let { D2MErrorBanner(it, inline = true) }
         val r = result
         if (r != null) {
-            MatchResult(r, onEdit = { result = null }, onAgain = { result = null; form = MatchForm() })
+            MatchResult(r, strings, onEdit = { result = null }, onAgain = { result = null; form = MatchForm() })
         } else {
-            Text(
-                "Have someone's birth details? See how they fit with your child, using the same astrology and your saved preferences. We don't save these details.",
-                style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f),
-            )
-            D2MTextField("Name", form.name, { form = form.copy(name = it) }, optional = true)
-            D2MTextField("Date of birth (YYYY-MM-DD)", form.dob, { form = form.copy(dob = it) })
-            D2MTextField("Time of birth (HH:MM, 24h)", form.tob, { form = form.copy(tob = it) })
-            D2MCheckboxRow("I'm not sure of the exact time", form.tobApprox, { form = form.copy(tobApprox = it) })
+            Text(strings.intro, style = MaterialTheme.typography.bodyMedium, color = mutedText(0.55f))
+            D2MTextField(strings.name, form.name, { form = form.copy(name = it) }, optional = true)
+            DatePickerField(strings.dob, form.dob, strings) { form = form.copy(dob = it) }
+            TimePickerField(strings.tob, form.tob, strings) { form = form.copy(tob = it) }
+            D2MCheckboxRow(strings.tobApprox, form.tobApprox, { form = form.copy(tobApprox = it) })
             CityAutocomplete(
-                label = "Place of birth", value = form.place, geocodingApi = geocodingApi,
+                label = strings.place, value = form.place, geocodingApi = geocodingApi,
                 onSelect = { c -> form = form.copy(place = c.label, lat = c.lat, lon = c.lon, tz = c.timezone) },
                 onRawTextChange = { t -> form = form.copy(place = t, lat = null, lon = null, tz = null) },
             )
             if (form.place.isNotBlank() && form.tz == null) {
-                Text("Pick a suggestion so coordinates and timezone fill in.", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+                Text(strings.pickCity, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
-            D2MOptionGroup("Marital status", Taxonomy.MARITAL_STATUSES, form.marital, { form = form.copy(marital = it) },
+            D2MOptionGroup(strings.marital, Taxonomy.MARITAL_STATUSES, form.marital, { form = form.copy(marital = it) },
                 optionLabel = { Taxonomy.toLabel(it, locale) })
-            OptionalPick("Religion", Taxonomy.RELIGIONS, form.religion, { form = form.copy(religion = it) })
-            OptionalPick("Community", Taxonomy.COMMUNITIES, form.community, { form = form.copy(community = it) })
-            OptionalPick("Education", Taxonomy.EDUCATION_LEVELS, form.education, { form = form.copy(education = it) })
-            OptionalPick("Income band", Taxonomy.INCOME_BANDS, form.income, { form = form.copy(income = it) })
-            OptionalPick("Profession", Taxonomy.PROFESSION_TIERS, form.profession, { form = form.copy(profession = it) })
-            Text("Anything you skip is treated as neutral, not as a mismatch.", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
-            D2MButton(if (busy) "Checking…" else "Check compatibility", ::submit, Modifier.fillMaxWidth(), enabled = ready && !busy)
+            OptionalPick(strings.religion, Taxonomy.RELIGIONS, form.religion, { form = form.copy(religion = it) })
+            OptionalPick(strings.community, Taxonomy.COMMUNITIES, form.community, { form = form.copy(community = it) })
+            OptionalPick(strings.education, Taxonomy.EDUCATION_LEVELS, form.education, { form = form.copy(education = it) })
+            OptionalPick(strings.income, Taxonomy.INCOME_BANDS, form.income, { form = form.copy(income = it) })
+            OptionalPick(strings.profession, Taxonomy.PROFESSION_TIERS, form.profession, { form = form.copy(profession = it) })
+            Text(strings.neutral, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+            D2MButton(if (busy) strings.checking else strings.submit, ::submit, Modifier.fillMaxWidth(), enabled = ready && !busy)
         }
     }
 }
@@ -179,48 +230,48 @@ private fun ScoreBar(label: String, value: Double, max: Double = 100.0) {
 }
 
 @Composable
-private fun MatchResult(r: ParentMatchCheckOut, onEdit: () -> Unit, onAgain: () -> Unit) {
+private fun MatchResult(r: ParentMatchCheckOut, strings: MatchCheckStrings, onEdit: () -> Unit, onAgain: () -> Unit) {
     val a = r.astrology
     val p = r.preferences
     D2MCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("${r.candidateName ?: "Prospective match"}, ${r.candidateAge}", style = MaterialTheme.typography.bodyLarge)
-            SectionHeading(VERDICTS[r.verdict] ?: r.verdict)
+            Text("${r.candidateName ?: strings.candidate}, ${r.candidateAge}", style = MaterialTheme.typography.bodyLarge)
+            SectionHeading(strings.verdict(r.verdict))
             Text("${r.compositeScore.roundToInt()} / 100", style = MaterialTheme.typography.titleMedium)
         }
     }
     D2MCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Your preferences", style = MaterialTheme.typography.titleMedium)
+            Text(strings.yourPrefs, style = MaterialTheme.typography.titleMedium)
             if (!p.hardRequirementsMet) {
-                Text("This profile doesn't meet ${p.hardChecks.count { !it.ok }} of your requirements.", color = MaterialTheme.colorScheme.error)
+                Text(strings.prefsUnmet(p.hardChecks.count { !it.ok }), color = MaterialTheme.colorScheme.error)
             }
             p.hardChecks.forEach { Text("${if (it.ok) "✓" else "✗"}  ${it.label}", style = MaterialTheme.typography.bodyMedium) }
-            ScoreBar("Community", p.scores.community)
-            ScoreBar("Child's preferences", p.scores.childPreferences)
-            ScoreBar("Your soft preferences", p.scores.parentPreferences)
+            ScoreBar(strings.communityBar, p.scores.community)
+            ScoreBar(strings.childPrefs, p.scores.childPreferences)
+            ScoreBar(strings.parentPrefs, p.scores.parentPreferences)
             if (p.notProvided.isNotEmpty()) {
-                Text("Add religion / community to sharpen this result.", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+                Text(strings.notProvided, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
         }
     }
     D2MCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Astrology", style = MaterialTheme.typography.titleMedium)
-            Text("${TIERS[a.tier] ?: a.tier} · ${a.score.roundToInt()} / 100", style = MaterialTheme.typography.bodyLarge)
-            a.parts?.let { parts -> PARTS.forEach { (k, label) -> parts[k]?.let { ScoreBar(label, it, 1.0) } } }
+            Text(strings.astrology, style = MaterialTheme.typography.titleMedium)
+            Text("${strings.tier(a.tier)} · ${a.score.roundToInt()} / 100", style = MaterialTheme.typography.bodyLarge)
+            a.parts?.let { parts -> PART_KEYS.forEach { k -> parts[k]?.let { ScoreBar(strings.part(k), it, 1.0) } } }
             if (a.dealbreakers.isNotEmpty()) {
-                Text("Dealbreakers: " + a.dealbreakers.joinToString(", ") { it.replace('_', ' ') }, color = MaterialTheme.colorScheme.error)
+                Text(strings.dealbreakers + ": " + a.dealbreakers.joinToString(", ") { it.replace('_', ' ') }, color = MaterialTheme.colorScheme.error)
             }
             if (a.doshas.isNotEmpty()) {
-                Text(a.doshas.joinToString(" · ") { it.name.replace('_', ' ') + if (it.cancelled) " (cancelled)" else "" }, style = MaterialTheme.typography.bodyMedium)
+                Text(a.doshas.joinToString(" · ") { it.name.replace('_', ' ') + if (it.cancelled) " (${strings.cancelled})" else "" }, style = MaterialTheme.typography.bodyMedium)
             }
             if (a.confidence == "verify_birth_time") {
-                Text("Confirm the exact birth time for a firmer result.", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+                Text(strings.verifyTime, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
             }
         }
     }
-    Text("Not saved. These details are discarded when you leave this page.", style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
-    D2MButton("Edit details", onEdit, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
-    D2MButton("Check another", onAgain, Modifier.fillMaxWidth())
+    Text(strings.notSaved, style = MaterialTheme.typography.labelSmall, color = mutedText(0.55f))
+    D2MButton(strings.edit, onEdit, Modifier.fillMaxWidth(), variant = D2MButtonVariant.OUTLINE)
+    D2MButton(strings.again, onAgain, Modifier.fillMaxWidth())
 }
