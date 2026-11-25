@@ -24,6 +24,7 @@ import com.d2m.app.data.model.LagnaDeduceRequest
 import com.d2m.app.data.model.LagnaLifeEvent
 import com.d2m.app.data.model.LagnaQuestion
 import com.d2m.app.data.network.LagnaApi
+import com.d2m.app.data.network.LagnaService
 import com.d2m.app.data.network.friendlyError
 import com.d2m.app.ui.components.AstroNames
 import com.d2m.app.ui.components.D2MButton
@@ -103,8 +104,8 @@ internal fun LagnaQuestionnaire(
     result: LagnaDeduceOut?,
     onResult: (LagnaDeduceOut?) -> Unit,
     modifier: Modifier = Modifier,
+    api: LagnaService = koinInject<LagnaApi>(),
 ) {
-    val api: LagnaApi = koinInject()
     val strings = LocalStrings.current.onboarding
     val locale = LocalAppLocale.current
     val scope = rememberCoroutineScope()
